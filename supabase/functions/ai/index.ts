@@ -20,7 +20,56 @@ import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 
 const env = (k: string, d = "") => Deno.env.get(k) ?? d;
 
-const ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY");
+// ---- Secrets: forgiving lookup plus diagnostics (names only, never values) ----
+const allEnv = (): Record<string, string> => {
+  try {
+    return Deno.env.toObject();
+  } catch {
+    return {};
+  }
+};
+const cleanSecret = (v: string) => v.trim().replace(/^["']+|["']+$/g, "").trim();
+const KEY_NAMES = ["ANTHROPIC_API_KEY", "ANTHROPIC_KEY", "CLAUDE_API_KEY", "CLAUDE_KEY"];
+
+function resolveAnthropicKey(): { key: string; from: string | null } {
+  const vars = allEnv();
+  // Exact or near-exact names (any case, stray spaces).
+  for (const [name, value] of Object.entries(vars)) {
+    if (KEY_NAMES.includes(name.trim().toUpperCase()) && cleanSecret(value)) {
+      return { key: cleanSecret(value), from: name };
+    }
+  }
+  // Any secret whose value is a standard Anthropic API key.
+  for (const [name, value] of Object.entries(vars)) {
+    if (/^sk-ant-api/.test(cleanSecret(value))) return { key: cleanSecret(value), from: name };
+  }
+  return { key: "", from: null };
+}
+
+// Custom secret names visible to this function, quoted so stray spaces show.
+function visibleSecretNames(): string {
+  const system = /^(SUPABASE_|SB_|DENO_|EDGE_|PATH$|HOME$|HOSTNAME$|LANG$|PWD$|TZ$|TERM$|SHLVL$|_$)/;
+  const names = Object.keys(allEnv())
+    .filter((n) => !system.test(n))
+    .map((n) => (/^\s*sk-/.test(n) ? "(a secret NAME that looks like a key: name and value swapped?)" : JSON.stringify(n)));
+  return names.length ? names.join(", ") : "none";
+}
+
+const { key: ANTHROPIC_API_KEY, from: KEY_SOURCE } = resolveAnthropicKey();
+
+function keyProblem(): string | null {
+  if (!ANTHROPIC_API_KEY) {
+    return `AI not set up: no ANTHROPIC_API_KEY found. Custom secrets this function can see: ${visibleSecretNames()}. ` +
+      "Add it under Supabase → Edge Functions → Secrets (not GitHub, not Vault), named exactly ANTHROPIC_API_KEY.";
+  }
+  if (ANTHROPIC_API_KEY.startsWith("sk-ant-admin")) {
+    return "The ANTHROPIC_API_KEY secret holds an Admin key. Create a normal API key (starts sk-ant-api…) in console.anthropic.com → API keys.";
+  }
+  if (!ANTHROPIC_API_KEY.startsWith("sk-ant-")) {
+    return `The secret ${JSON.stringify(KEY_SOURCE)} doesn't look like an Anthropic API key (it should start with sk-ant-api…). Re-copy it from console.anthropic.com.`;
+  }
+  return null;
+}
 // Haiku 5.5: $0.10 / $0.50 per million input/output tokens (prompts up to 100K).
 // Thinking is adaptive and always available; effort controls how much it thinks.
 const COACH_MODEL = env("COACH_MODEL", "claude-haiku-5-5");
@@ -29,15 +78,22 @@ const COACH_EFFORT = env("COACH_EFFORT", "medium");
 const ESTIMATE_EFFORT = env("ESTIMATE_EFFORT", "medium");
 const DAILY_LIMIT = Number(env("AI_DAILY_LIMIT", "60"));
 const TZ = env("APP_TIMEZONE", "America/Jamaica");
-const ALLOWED = env("ALLOWED_EMAILS")
-  .split(",")
-  .map((s) => s.trim().toLowerCase())
+const ALLOWED = (env("ALLOWED_EMAILS") || env("ALLOWED_EMAIL"))
+  .split(/[\s,;]+/)
+  .map((s) => cleanSecret(s).toLowerCase())
   .filter(Boolean);
+
+// One line per cold start so problems show up in the function logs.
+console.log(
+  `[ai] key: ${ANTHROPIC_API_KEY ? `found in ${JSON.stringify(KEY_SOURCE)}` : "MISSING"}; ` +
+    `allowlist: ${ALLOWED.length} email(s); models: ${env("COACH_MODEL", "claude-haiku-5-5")}/${env("ESTIMATE_MODEL", "claude-haiku-5-5")}; ` +
+    `custom secrets: ${visibleSecretNames()}`,
+);
 
 const admin = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY || "not-set" });
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -69,9 +125,16 @@ function fallbackParams(model: string): Record<string, unknown> {
 
 function friendlyError(e: unknown): string {
   if (e instanceof Anthropic.RateLimitError) return "The AI is busy right now. Try again in a minute.";
-  if (e instanceof Anthropic.AuthenticationError) return "The server's Anthropic API key is missing or invalid.";
+  if (e instanceof Anthropic.AuthenticationError) {
+    return "Anthropic rejected the API key (revoked or mistyped). Create a new key at console.anthropic.com and update the ANTHROPIC_API_KEY secret.";
+  }
   if (e instanceof Anthropic.PermissionDeniedError) return "The Anthropic API key isn't allowed to use this model.";
-  if (e instanceof Anthropic.BadRequestError) return `AI request rejected: ${e.message}`;
+  if (e instanceof Anthropic.BadRequestError) {
+    if (/credit balance/i.test(e.message)) {
+      return "Your Anthropic account has no credit. Add some at console.anthropic.com → Billing (US$5 lasts a long time on Haiku).";
+    }
+    return `AI request rejected: ${e.message}`;
+  }
   if (e instanceof Anthropic.APIError) return `AI service error (${e.status ?? "network"}). Try again.`;
   return e instanceof Error ? e.message : "Unexpected error";
 }
@@ -101,6 +164,7 @@ How to coach:
 - Explain weight noise when relevant: the trend matters, not one weigh-in. Salt (saltfish, soups, seasoning), carbs, alcohol, poor sleep and hard shifts all cause water swings.
 - Know Jamaican food well. Suggest realistic swaps and portions for local dishes (for example boiled instead of fried dumpling, steamed fish, a fist of rice and peas plus extra vegetables, callaloo or cabbage on the side, water or unsweetened drinks instead of sweet juice or soda). Assume cookshop and home-cooked food, and mention local options when you suggest meals.
 - Respect anything in profile.coach_notes, such as shift patterns, training, injuries or food preferences.
+- app_data may include workouts: treadmill sessions (minutes, speed, incline) and at-home workouts (type, intensity, exercises). Use them. Encourage resistance training 2–3 times a week to keep muscle while losing fat, and treadmill or incline walking for steps and heart health. Suggest small progressions (one more round, a few more reps, +1% incline, +5 minutes) and allow recovery after long or night shifts. Burned-calorie figures are estimates, so don't tell the user to eat them all back.
 
 Safety:
 - You are not a doctor. Never suggest intakes below 1200 kcal (women) or 1500 kcal (men), or losing more than 1% of body weight per week.
@@ -281,10 +345,19 @@ Deno.serve(async (req) => {
   const user = auth?.user;
   if (authErr || !user) return json({ error: "Your session expired. Sign in again." }, 401);
 
-  if (!ANTHROPIC_API_KEY) return json({ error: "AI not set up: add the ANTHROPIC_API_KEY secret in Supabase." }, 503);
-  if (!ALLOWED.length) return json({ error: "AI is locked: add your email to the ALLOWED_EMAILS secret in Supabase." }, 403);
+  const problem = keyProblem();
+  if (problem) {
+    console.warn(`[ai] ${problem}`);
+    return json({ error: problem }, 503);
+  }
+  if (!ALLOWED.length) {
+    return json({
+      error: `AI is locked: add your email to the ALLOWED_EMAILS secret in Supabase. Custom secrets this function can see: ${visibleSecretNames()}.`,
+    }, 403);
+  }
   if (!ALLOWED.includes((user.email ?? "").toLowerCase())) {
-    return json({ error: "This account isn't on the AI allowlist." }, 403);
+    console.warn(`[ai] signed-in email not on allowlist (${ALLOWED.length} entries)`);
+    return json({ error: "This account's email isn't in the ALLOWED_EMAILS secret. Check it matches your sign-in email exactly." }, 403);
   }
 
   let body: Record<string, unknown>;
