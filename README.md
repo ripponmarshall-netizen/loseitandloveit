@@ -42,8 +42,8 @@ Dashboard → **Edge Functions → Secrets**, add:
 |---|---|
 | `ANTHROPIC_API_KEY` | your key from console.anthropic.com |
 | `ALLOWED_EMAILS` | the email you signed up with (comma-separate more) |
-| `COACH_MODEL` *(optional)* | default `claude-opus-5-5` |
-| `ESTIMATE_MODEL` *(optional)* | default `claude-opus-5-5` |
+| `COACH_MODEL` *(optional)* | default `claude-haiku-5-5` |
+| `ESTIMATE_MODEL` *(optional)* | default `claude-haiku-5-5` |
 | `AI_DAILY_LIMIT` *(optional)* | default `60` requests/user/day |
 
 The AI stays **locked** until `ALLOWED_EMAILS` is set. This is deliberate: anyone who finds the URL could otherwise spend your API credit.
@@ -56,9 +56,10 @@ Open the Pages URL in Safari → Share → **Add to Home Screen**.
 
 ## Cost and model notes
 
-- Both AI features default to **Claude Opus 5.5** ($4 in / $20 out per million tokens). A coach reply is roughly 3–6k input and 0.5–2k output tokens, about **US$0.02–0.06 per message**. Food estimates are smaller.
-- To spend far less, set `COACH_MODEL` / `ESTIMATE_MODEL` to `claude-haiku-5-5` ($0.10/$0.50). Expect weaker coaching nuance; that's your call. **Settings → AI usage today** shows the tokens you've used.
-- The system prompt and conversation history use prompt caching. Refusals fall back server-side (`fallbacks: "default"`) on Opus/Sonnet models.
+- Both AI features use **Claude Haiku 5.5**: $0.10 in / $0.50 out per million tokens for prompts up to 100K tokens (every request here is far below that). A coach reply is roughly 3–6k input and 0.5–2k output tokens, about **US$0.001 per message**. A photo estimate is a fraction of a cent. Check current pricing before budgeting on it.
+- Both run at `medium` effort. If coaching feels shallow, try `COACH_EFFORT=high` first, then a bigger model (`claude-sonnet-5-5` or `claude-opus-5-5`, set via `COACH_MODEL`).
+- Haiku 5.5 has no server-side refusal fallback. If a safety classifier declines, the app shows "try asking another way". Fallback (`fallbacks: "default"`) switches on automatically if you move to an Opus or Sonnet model.
+- The system prompt and conversation history use prompt caching. **Settings → AI usage today** shows the tokens you've used.
 
 ## Develop
 

@@ -78,6 +78,8 @@ export default function Coach() {
       if (reply.trim()) {
         const savedReply = await store.addCoachMessage({ role: 'assistant', content: reply })
         setMessages((m) => [...(m || []), savedReply])
+      } else {
+        toast('No reply came back. Try asking again.', 'error')
       }
     } catch (e) {
       if (e.name !== 'AbortError') toast(e.message, 'error')
