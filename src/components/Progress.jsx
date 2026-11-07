@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, projectGoalDate, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
+import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
 import { Segmented } from './ui.jsx'
@@ -9,12 +9,17 @@ export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
   const [range, setRange] = useState('90')
   const [daily, setDaily] = useState({})
+  const [workouts, setWorkouts] = useState([])
 
   useEffect(() => {
     store
       .listEntries(addDays(today, -89), today)
       .then((rows) => setDaily(dailyTotals(rows)))
       .catch((e) => toast(e.message, 'error'))
+    store
+      .listWorkouts(addDays(today, -27), today)
+      .then(setWorkouts)
+      .catch(() => setWorkouts([]))
   }, [store, today, dataVersion, toast])
 
   const last = series[series.length - 1]
@@ -76,6 +81,8 @@ export default function Progress() {
         <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target.</p>
       </section>
 
+      <ExerciseSummary workouts={workouts} today={today} units={units} />
+
       <section className="card">
         <h2>Your real maintenance</h2>
         {adaptive ? (
@@ -110,6 +117,28 @@ export default function Progress() {
         <WeightList weights={weights} />
       </section>
     </div>
+  )
+}
+
+function ExerciseSummary({ workouts, today, units }) {
+  const week = workoutSummary(workouts.filter((w) => w.log_date > addDays(today, -7)))
+  const month = workoutSummary(workouts)
+  const km = (v) => (units === 'imperial' ? `${(Math.round(kmhToMph(v) * 10) / 10).toFixed(1)} mi` : `${v.toFixed(1)} km`)
+  return (
+    <section className="card">
+      <h2>Exercise, last 7 days</h2>
+      <div className="stats" style={{ marginBottom: 8 }}>
+        <Stat label="Sessions" value={week.sessions} />
+        <Stat label="Minutes" value={week.minutes} />
+        <Stat label="Burned" value={week.kcal} sub="net kcal" />
+        <Stat label="Strength" value={`${week.strength}/2+`} sub="sessions" />
+        <Stat label="Treadmill" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
+        <Stat label="28 days" value={month.sessions} sub={`${month.minutes} min`} />
+      </div>
+      <p className="tiny muted" style={{ margin: 0 }}>
+        Aim for 2–3 strength sessions a week to keep muscle while you lose fat, plus walking or treadmill for steps.
+      </p>
+    </section>
   )
 }
 

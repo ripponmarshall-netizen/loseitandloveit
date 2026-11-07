@@ -275,3 +275,67 @@ export function inputToKg(value, units) {
   if (!n) return null
   return units === 'imperial' ? lbToKg(n) : n
 }
+
+// ---------- Exercise ----------
+//
+// All burn figures are NET calories: energy above what you'd burn resting
+// anyway. Your maintenance estimate already counts resting burn, so gross
+// numbers (what treadmills usually show) would double count.
+
+export const kmhToMph = (kmh) => kmh / 1.609344
+export const mphToKmh = (mph) => mph * 1.609344
+
+// Treadmill: ACSM metabolic equations (walking and running, with grade).
+// VO2 in ml/kg/min; ~5 kcal per litre of oxygen.
+export function treadmillKcal({ weightKg, minutes, speedKmh, inclinePct = 0, mode }) {
+  if (!weightKg || !minutes || !speedKmh) return 0
+  const m = (speedKmh * 1000) / 60 // metres per minute
+  const g = Math.max(0, Number(inclinePct) || 0) / 100 // declines treated as flat
+  const run = mode ? mode === 'run' : speedKmh >= 8
+  const vo2 = run ? 0.2 * m + 0.9 * m * g + 3.5 : 0.1 * m + 1.8 * m * g + 3.5
+  return Math.round((((vo2 - 3.5) * weightKg) / 1000) * 5 * minutes)
+}
+
+// Home workouts: approximate MET values from the Compendium of Physical Activities.
+export const HOME_ACTIVITIES = {
+  bodyweight: { label: 'Bodyweight circuit', hint: 'Push-ups, squats, lunges, planks', met: { light: 2.8, moderate: 3.8, hard: 8.0 } },
+  weights: { label: 'Dumbbells / weights', hint: 'Sets of 8–15 reps', met: { light: 3.5, moderate: 5.0, hard: 6.0 } },
+  hiit: { label: 'HIIT / cardio circuit', hint: 'Burpees, jumping jacks, mountain climbers', met: { light: 4.3, moderate: 6.0, hard: 8.0 } },
+  skipping: { label: 'Skipping rope', hint: 'Jump rope', met: { light: 8.8, moderate: 11.8, hard: 12.3 } },
+  mobility: { label: 'Yoga / stretching', hint: 'Mobility, stretching, yoga', met: { light: 2.3, moderate: 2.5, hard: 4.0 } },
+}
+
+export function homeWorkoutKcal({ weightKg, minutes, activity, intensity = 'moderate' }) {
+  if (!weightKg || !minutes) return 0
+  const met = HOME_ACTIVITIES[activity]?.met[intensity] ?? 4
+  return Math.round(((met - 1) * weightKg * minutes) / 60)
+}
+
+export function estimateWorkoutKcal(w, weightKg) {
+  return w.kind === 'treadmill'
+    ? treadmillKcal({ weightKg, minutes: w.duration_min, speedKmh: w.speed_kmh, inclinePct: w.incline_pct, mode: w.mode })
+    : homeWorkoutKcal({ weightKg, minutes: w.duration_min, activity: w.activity, intensity: w.intensity })
+}
+
+// How much of today's exercise to add to the food target (0, 25, 50 or 100 %).
+export function exerciseAllowance(burned, eatbackPct = 0) {
+  return Math.round((Number(burned) || 0) * (Number(eatbackPct) || 0) / 100)
+}
+
+const STRENGTH = new Set(['bodyweight', 'weights', 'hiit'])
+
+export function workoutSummary(workouts) {
+  const s = { sessions: 0, minutes: 0, kcal: 0, strength: 0, treadmill: 0, treadmillKm: 0 }
+  for (const w of workouts) {
+    s.sessions += 1
+    s.minutes += Number(w.duration_min) || 0
+    s.kcal += Number(w.calories_burned) || 0
+    if (w.kind === 'treadmill') {
+      s.treadmill += 1
+      s.treadmillKm += Number(w.distance_km) || ((Number(w.speed_kmh) || 0) * (Number(w.duration_min) || 0)) / 60
+    } else if (STRENGTH.has(w.activity)) s.strength += 1
+  }
+  s.minutes = Math.round(s.minutes)
+  s.treadmillKm = Math.round(s.treadmillKm * 10) / 10
+  return s
+}

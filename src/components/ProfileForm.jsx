@@ -33,6 +33,7 @@ function toForm(p) {
     coach_notes: p.coach_notes || '',
     calorie_target_override: p.calorie_target_override ? String(p.calorie_target_override) : '',
     protein_target_override: p.protein_target_override ? String(p.protein_target_override) : '',
+    exercise_eatback_pct: String(p.exercise_eatback_pct ?? 0),
   }
 }
 
@@ -53,6 +54,7 @@ function fromForm(f) {
     coach_notes: f.coach_notes.trim() || null,
     calorie_target_override: f.calorie_target_override ? Number(f.calorie_target_override) : null,
     protein_target_override: f.protein_target_override ? Number(f.protein_target_override) : null,
+    exercise_eatback_pct: Number(f.exercise_eatback_pct) || 0,
   }
 }
 
@@ -172,6 +174,18 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
               </option>
             ))}
           </select>
+        </label>
+        <label className="field">
+          <span>Eat back exercise calories</span>
+          <select className="input" value={f.exercise_eatback_pct} onChange={set('exercise_eatback_pct')}>
+            <option value="0">No: my activity level already includes training</option>
+            <option value="25">25% of what I burn</option>
+            <option value="50">50% of what I burn</option>
+            <option value="100">100% of what I burn</option>
+          </select>
+          <small className="muted tiny">
+            Logged workouts can raise that day's food target. Burn estimates run high, so 0–50% is safer for fat loss.
+          </small>
         </label>
         <label className="field">
           <span>My day starts at</span>

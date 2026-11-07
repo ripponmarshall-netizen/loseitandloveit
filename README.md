@@ -12,8 +12,9 @@ A phone-first calorie tracker PWA with a Claude-powered coach. It has Jamaican f
 | Add food | Search 58 built-in Jamaican staples and basics, your saved foods and recent items. **AI estimate** from a text description and/or a photo. Quick add. |
 | Targets | Mifflin-St Jeor BMR × activity, minus the deficit for your chosen pace. Safety floor (1200/1500 kcal) and a cap of 1% body weight per week. Protein, carbs and fat targets. Manual overrides. |
 | Weight | Weigh-ins, a smoothed trend line (gap-aware EMA), weekly rate, goal ETA |
+| Exercise | **Treadmill** (minutes, speed, incline, walk/run) and **at-home workouts** (bodyweight, dumbbells, HIIT, skipping, mobility) with exercise lists and presets. Net burn from the ACSM treadmill equations or MET values. Optional "eat back" of 0/25/50/100% to the food target. Weekly summary on Progress. |
 | Adaptive maintenance | Works out your *real* TDEE from logged intake vs trend change (needs about 2–3 weeks of data). One tap to re-base your target on it. |
-| Coach | Streaming chat with Claude. Each message carries a compact snapshot: targets, the last 14 days, today's log, trend, adaptive TDEE and your coach notes. |
+| Coach | Streaming chat with Claude. Each message carries a compact snapshot: targets, the last 14 days, today's log, workouts, trend, adaptive TDEE and your coach notes. |
 | Shift work | "My day starts at" setting (default 4 am), so a 2 am meal after a night shift counts toward the previous day |
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
 | PWA | Installable on iPhone, offline app shell, light and dark mode |
@@ -23,7 +24,9 @@ A phone-first calorie tracker PWA with a Claude-powered coach. It has Jamaican f
 The Supabase project `loseitandloveit` already exists, and its URL and publishable key are in `src/config.js`. The publishable key is designed to be public: Row Level Security protects the data.
 
 ### 1. Database (2 min)
-Supabase Dashboard → **SQL Editor** → New query → paste all of [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) → **Run**. It's safe to re-run.
+Supabase Dashboard → **SQL Editor** → New query → paste each file in order and **Run** it. Each one is safe to re-run.
+1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql): core tables
+2. [`supabase/migrations/0002_workouts.sql`](supabase/migrations/0002_workouts.sql): workouts and the exercise eat-back setting
 
 ### 2. Auth (2 min)
 Dashboard → **Authentication → URL Configuration**:
@@ -53,6 +56,17 @@ Repo → **Settings → Pages → Source: GitHub Actions**. Every push to `main`
 
 ### 5. Install
 Open the Pages URL in Safari → Share → **Add to Home Screen**.
+
+## If the coach doesn't answer
+
+The app shows the function's error message. Check Supabase → Edge Functions → `ai` → Logs; each cold start logs a line like `[ai] key: found in "ANTHROPIC_API_KEY"; allowlist: 1 email(s); custom secrets: …` (names only, never values).
+
+| Message | Fix |
+|---|---|
+| *AI not set up: no ANTHROPIC_API_KEY found* | Add the secret under **Edge Functions → Secrets** (not GitHub secrets, not Vault), named `ANTHROPIC_API_KEY`. The message lists the names it can see. |
+| *AI is locked* / *email isn't in the ALLOWED_EMAILS secret* | Set `ALLOWED_EMAILS` to exactly the email you sign in with. |
+| *Anthropic rejected the API key* | The key was revoked or mistyped. Make a new one at console.anthropic.com. |
+| *Your Anthropic account has no credit* | Add credit at console.anthropic.com → Billing. |
 
 ## Cost and model notes
 
@@ -97,7 +111,7 @@ tests/calc.test.js
 1. **Offline logging.** The app shell works offline, but saving needs a connection. Next: an outbox queue in `db.js`.
 2. **Food database.** Built-ins are approximate. Next: verify the top 20 foods against labels and recipes, and add Open Food Facts barcode lookup (check Jamaican product coverage first).
 3. **Weekly check-in.** A scheduled coach summary every Sunday (Supabase cron → Edge Function).
-4. **Water, steps and exercise logging.** Feed them into adaptive TDEE.
+4. **Water and steps.** Exercise is logged; water and steps aren't yet.
 5. **Tests.** Add Playwright smoke tests to CI.
 
 Built-in nutrition values and AI estimates are estimates, not medical advice.
