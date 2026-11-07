@@ -1,11 +1,13 @@
 import { addDays, lastNDates } from './dates.js'
-import { ageFromBirthYear, adaptiveTdee, dailyTotals, entryTotals, projectGoalDate, weeklyRate } from './calc.js'
+import { ageFromBirthYear, adaptiveTdee, dailyTotals, entryTotals, projectGoalDate, weeklyRate, workoutSummary } from './calc.js'
 
 // The compact snapshot of the user's data sent with each coach message.
 // Keep it small: it is re-sent every turn and billed as input tokens.
 export async function buildCoachContext({ store, profile, series, targets, today }) {
   const entries = await store.listEntries(addDays(today, -27), today)
   const daily = dailyTotals(entries)
+  // Workouts are optional: if the table isn't there yet, coach without them.
+  const workouts = await store.listWorkouts(addDays(today, -13), today).catch(() => [])
   const last = series[series.length - 1]
   const rate = weeklyRate(series)
   const now = new Date()
@@ -25,6 +27,7 @@ export async function buildCoachContext({ store, profile, series, targets, today
       preferred_units: profile.units === 'imperial' ? 'lb, ft/in' : 'kg, cm',
       day_starts_at_hour: profile.day_start_hour,
       coach_notes: profile.coach_notes || undefined,
+      exercise_eatback_pct: profile.exercise_eatback_pct ?? 0,
     },
     targets: targets && {
       calories: targets.calories,
@@ -48,6 +51,18 @@ export async function buildCoachContext({ store, profile, series, targets, today
       kcal: daily[d]?.calories ?? 0,
       protein_g: daily[d]?.protein ?? 0,
       items_logged: daily[d]?.count ?? 0,
+    })),
+    workouts_last_7_days: workoutSummary(workouts.filter((w) => w.log_date > addDays(today, -7))),
+    workouts_last_14_days: workouts.map((w) => ({
+      date: w.log_date,
+      type: w.kind === 'treadmill' ? `treadmill ${w.mode || ''}`.trim() : w.activity,
+      name: w.name,
+      minutes: Number(w.duration_min),
+      speed_kmh: w.speed_kmh != null ? Number(w.speed_kmh) : undefined,
+      incline_pct: w.incline_pct != null ? Number(w.incline_pct) : undefined,
+      intensity: w.intensity || undefined,
+      exercises: w.exercises?.length ? w.exercises.map((x) => `${x.name}${x.sets ? ` ${x.sets}x${x.reps}` : ''}`).join('; ') : undefined,
+      net_kcal: w.calories_burned,
     })),
     today_log: entries
       .filter((e) => e.log_date === today)

@@ -9,8 +9,45 @@ const ENTRY_FIELDS = 'id,log_date,meal,name,serving,servings,calories,protein_g,
 const PROFILE_FIELDS = [
   'display_name', 'sex', 'birth_year', 'height_cm', 'start_weight_kg', 'goal_weight_kg',
   'activity_level', 'weekly_rate_kg', 'units', 'day_start_hour',
-  'calorie_target_override', 'protein_target_override', 'coach_notes',
+  'calorie_target_override', 'protein_target_override', 'coach_notes', 'exercise_eatback_pct',
 ]
+const WORKOUT_FIELDS =
+  'id,log_date,kind,name,duration_min,speed_kmh,incline_pct,distance_km,mode,activity,intensity,exercises,calories_burned,calories_source,notes,created_at'
+
+const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v))
+
+function cleanWorkout(w) {
+  const treadmill = w.kind === 'treadmill'
+  return {
+    log_date: w.log_date,
+    kind: treadmill ? 'treadmill' : 'home',
+    name: String(w.name || (treadmill ? 'Treadmill' : 'Home workout')).slice(0, 120),
+    duration_min: Number(w.duration_min) || 1,
+    speed_kmh: treadmill ? num(w.speed_kmh) : null,
+    incline_pct: treadmill ? num(w.incline_pct) ?? 0 : null,
+    distance_km: treadmill ? num(w.distance_km) : null,
+    mode: treadmill ? (w.mode === 'run' ? 'run' : 'walk') : null,
+    activity: treadmill ? null : w.activity || 'bodyweight',
+    intensity: treadmill ? null : w.intensity || 'moderate',
+    exercises: treadmill
+      ? []
+      : (w.exercises || [])
+          .filter((x) => x && String(x.name || '').trim())
+          .slice(0, 30)
+          .map((x) => ({ name: String(x.name).slice(0, 80), sets: num(x.sets), reps: String(x.reps ?? '').slice(0, 20) })),
+    calories_burned: Math.max(0, Math.min(5000, Math.round(Number(w.calories_burned) || 0))),
+    calories_source: w.calories_source === 'manual' ? 'manual' : 'estimate',
+    notes: w.notes ? String(w.notes).slice(0, 1000) : null,
+  }
+}
+
+// Friendlier message when the workouts migration hasn't been run yet.
+function workoutError(error) {
+  if (/workouts|exercise_eatback_pct/.test(error.message) && /(does not exist|could not find|schema cache)/i.test(error.message)) {
+    return new Error('Workouts need a database update: run supabase/migrations/0002_workouts.sql in the Supabase SQL Editor.')
+  }
+  return new Error(error.message)
+}
 
 function pickProfile(p) {
   const out = {}
@@ -84,9 +121,14 @@ export function createCloudStore(userId) {
       return throwIf(await sb.from('profiles').select('*').eq('id', userId).maybeSingle())
     },
     async saveProfile(p) {
-      return throwIf(
-        await sb.from('profiles').upsert({ id: userId, ...pickProfile(p) }).select('*').single(),
-      )
+      const row = { id: userId, ...pickProfile(p) }
+      let res = await sb.from('profiles').upsert(row).select('*').single()
+      if (res.error && /exercise_eatback_pct/.test(res.error.message)) {
+        // Migration 0002 not applied yet: save everything else.
+        delete row.exercise_eatback_pct
+        res = await sb.from('profiles').upsert(row).select('*').single()
+      }
+      return throwIf(res)
     },
 
     async listEntries(from, to) {
@@ -144,6 +186,28 @@ export function createCloudStore(userId) {
       throwIf(await sb.from('weights').delete().eq('id', id))
     },
 
+    async listWorkouts(from, to) {
+      const { data, error } = await sb.from('workouts').select(WORKOUT_FIELDS)
+        .gte('log_date', from).lte('log_date', to).order('created_at', { ascending: true })
+      if (error) throw workoutError(error)
+      return data
+    },
+    async addWorkout(w) {
+      const { data, error } = await sb.from('workouts').insert({ ...cleanWorkout(w), user_id: userId })
+        .select(WORKOUT_FIELDS).single()
+      if (error) throw workoutError(error)
+      return data
+    },
+    async updateWorkout(id, w) {
+      const { log_date, ...patch } = cleanWorkout(w)
+      const { data, error } = await sb.from('workouts').update(patch).eq('id', id).select(WORKOUT_FIELDS).single()
+      if (error) throw workoutError(error)
+      return data
+    },
+    async deleteWorkout(id) {
+      throwIf(await sb.from('workouts').delete().eq('id', id))
+    },
+
     async listCoachMessages(limit = 60) {
       const rows = throwIf(
         await sb.from('coach_messages').select('id,role,content,created_at')
@@ -168,14 +232,15 @@ export function createCloudStore(userId) {
     },
 
     async exportAll() {
-      const [profile, entries, foods, weights, coach] = await Promise.all([
+      const [profile, entries, foods, weights, coach, workouts] = await Promise.all([
         this.getProfile(),
         throwIf(await sb.from('food_entries').select(ENTRY_FIELDS).order('log_date')),
         this.listFoods(),
         this.listWeights(),
         throwIf(await sb.from('coach_messages').select('role,content,created_at').order('created_at')),
+        this.listWorkouts('1900-01-01', '2999-12-31').catch(() => []),
       ])
-      return { app: 'loseitandloveit', version: 1, exported_at: new Date().toISOString(), profile, entries, foods, weights, coach_messages: coach }
+      return { app: 'loseitandloveit', version: 1, exported_at: new Date().toISOString(), profile, entries, foods, weights, workouts, coach_messages: coach }
     },
     async importAll(data) {
       if (data.profile) await this.saveProfile(data.profile)
@@ -183,6 +248,7 @@ export function createCloudStore(userId) {
       for (const c of chunks(data.entries || [], 200)) await this.addEntries(c)
       for (const f of data.foods || []) await this.saveFood({ ...f, id: undefined })
       for (const w of data.weights || []) await this.upsertWeight(w)
+      for (const w of data.workouts || []) await this.addWorkout(w)
     },
   }
 }
@@ -200,11 +266,12 @@ function loadLocal() {
   } catch {
     /* storage blocked or corrupt: start empty */
   }
-  return { profile: null, entries: [], foods: [], weights: [], coach_messages: [] }
+  return { profile: null, entries: [], foods: [], weights: [], workouts: [], coach_messages: [] }
 }
 
 export function createLocalStore() {
   let db = loadLocal()
+  db.workouts ||= [] // stores saved before workouts existed
   const save = () => {
     try {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(db))
@@ -291,6 +358,30 @@ export function createLocalStore() {
       save()
     },
 
+    async listWorkouts(from, to) {
+      return db.workouts
+        .filter((w) => w.log_date >= from && w.log_date <= to)
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
+    },
+    async addWorkout(w) {
+      const row = { ...cleanWorkout(w), id: uid(), created_at: now() }
+      db.workouts.push(row)
+      save()
+      return row
+    },
+    async updateWorkout(id, w) {
+      const row = db.workouts.find((x) => x.id === id)
+      if (!row) throw new Error('Workout not found')
+      const { log_date, ...patch } = cleanWorkout(w)
+      Object.assign(row, patch)
+      save()
+      return row
+    },
+    async deleteWorkout(id) {
+      db.workouts = db.workouts.filter((x) => x.id !== id)
+      save()
+    },
+
     async listCoachMessages(limit = 60) {
       return db.coach_messages.slice(-limit)
     },
@@ -317,10 +408,11 @@ export function createLocalStore() {
       await this.addEntries(data.entries || [])
       for (const f of data.foods || []) await this.saveFood({ ...f, id: undefined })
       for (const w of data.weights || []) await this.upsertWeight(w)
+      for (const w of data.workouts || []) await this.addWorkout(w)
     },
 
     wipe() {
-      db = { profile: null, entries: [], foods: [], weights: [], coach_messages: [] }
+      db = { profile: null, entries: [], foods: [], weights: [], workouts: [], coach_messages: [] }
       try {
         localStorage.removeItem(LOCAL_KEY)
       } catch {

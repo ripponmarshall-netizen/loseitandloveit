@@ -132,3 +132,48 @@ test('unit conversions round-trip', () => {
   assert.ok(Math.abs(ftInToCm(5, 10) - 177.8) < 0.01)
   assert.ok(Math.abs(kgToLb(100) - 220.46) < 0.01)
 })
+
+import {
+  treadmillKcal,
+  homeWorkoutKcal,
+  estimateWorkoutKcal,
+  exerciseAllowance,
+  workoutSummary,
+  kmhToMph,
+  mphToKmh,
+} from '../src/lib/calc.js'
+
+test('treadmill burn uses ACSM walking/running equations (net kcal)', () => {
+  // 100 kg, 5 km/h flat, 30 min: net VO2 = 0.1*83.33 = 8.33 -> 8.33*0.1*5*30 = 125
+  assert.equal(treadmillKcal({ weightKg: 100, minutes: 30, speedKmh: 5, inclinePct: 0 }), 125)
+  // Same walk at 10% incline adds 1.8*83.33*0.1 = 15 -> net 23.33 -> 350
+  assert.equal(treadmillKcal({ weightKg: 100, minutes: 30, speedKmh: 5, inclinePct: 10 }), 350)
+  // Running 10 km/h flat, 30 min: net 0.2*166.67 = 33.33 -> 500 (~1 kcal/kg/km)
+  assert.equal(treadmillKcal({ weightKg: 100, minutes: 30, speedKmh: 10 }), 500)
+  // Auto mode: >= 8 km/h counts as running unless told otherwise
+  assert.ok(treadmillKcal({ weightKg: 80, minutes: 20, speedKmh: 8.5, mode: 'walk' }) < treadmillKcal({ weightKg: 80, minutes: 20, speedKmh: 8.5 }))
+  // Declines are treated as flat, missing inputs give 0
+  assert.equal(treadmillKcal({ weightKg: 100, minutes: 30, speedKmh: 5, inclinePct: -3 }), 125)
+  assert.equal(treadmillKcal({ weightKg: 100, minutes: 0, speedKmh: 5 }), 0)
+})
+
+test('home workout burn uses net METs', () => {
+  // Hard bodyweight circuit MET 8 -> (8-1)*100kg*20/60 = 233
+  assert.equal(homeWorkoutKcal({ weightKg: 100, minutes: 20, activity: 'bodyweight', intensity: 'hard' }), 233)
+  // Light mobility MET 2.3 -> 1.3*90*10/60 = 19.5 (19.4999… in floating point) -> 19
+  assert.equal(homeWorkoutKcal({ weightKg: 90, minutes: 10, activity: 'mobility', intensity: 'light' }), 19)
+  assert.equal(estimateWorkoutKcal({ kind: 'home', duration_min: 20, activity: 'bodyweight', intensity: 'hard' }, 100), 233)
+  assert.equal(estimateWorkoutKcal({ kind: 'treadmill', duration_min: 30, speed_kmh: 5, incline_pct: 0 }, 100), 125)
+})
+
+test('exercise allowance and weekly summary', () => {
+  assert.equal(exerciseAllowance(300, 0), 0)
+  assert.equal(exerciseAllowance(300, 50), 150)
+  const s = workoutSummary([
+    { kind: 'treadmill', duration_min: 30, speed_kmh: 5, calories_burned: 125 },
+    { kind: 'home', activity: 'weights', duration_min: 25, calories_burned: 150 },
+    { kind: 'home', activity: 'mobility', duration_min: 10, calories_burned: 20 },
+  ])
+  assert.deepEqual(s, { sessions: 3, minutes: 65, kcal: 295, strength: 1, treadmill: 1, treadmillKm: 2.5 })
+  assert.ok(Math.abs(kmhToMph(mphToKmh(3)) - 3) < 1e-9)
+})

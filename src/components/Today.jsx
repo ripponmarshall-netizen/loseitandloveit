@@ -1,15 +1,36 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
-import { entryTotals, inputToKg, sumEntries, weightUnit } from '../lib/calc.js'
+import { entryTotals, exerciseAllowance, inputToKg, sumEntries, weightUnit } from '../lib/calc.js'
 import { addDays, formatDayLabel } from '../lib/dates.js'
 import { MacroBar, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
+import { ExerciseCard, WorkoutSheet } from './Workouts.jsx'
 
 
 export default function Today() {
   const { store, date, setDate, today, targets, weights, dataVersion, bumpData, openAdd, toast, profile } = useApp()
   const [entries, setEntries] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [workouts, setWorkouts] = useState([])
+  const [workoutError, setWorkoutError] = useState(null)
+  const [workoutSheet, setWorkoutSheet] = useState(null) // { workout } or {} for new
+
+  useEffect(() => {
+    let cancelled = false
+    setWorkoutError(null)
+    store
+      .listWorkouts(date, date)
+      .then((rows) => !cancelled && setWorkouts(rows))
+      .catch((e) => {
+        if (!cancelled) {
+          setWorkouts([])
+          setWorkoutError(e.message)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [store, date, dataVersion])
 
   useEffect(() => {
     let cancelled = false
@@ -29,7 +50,9 @@ export default function Today() {
   }, [store, date, dataVersion, toast])
 
   const totals = sumEntries(entries || [])
-  const target = targets?.calories || 0
+  const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
+  const allowance = exerciseAllowance(burned, profile.exercise_eatback_pct)
+  const target = (targets?.calories || 0) + allowance
   const left = target - totals.calories
   const weighedToday = weights.some((w) => w.log_date === date)
 
@@ -68,10 +91,16 @@ export default function Today() {
               <span className="muted">Eaten</span>
               <strong className="num">{totals.calories.toLocaleString('en-GB')}</strong>
             </div>
-            <div className="row between small" style={{ marginBottom: 10 }}>
-              <span className="muted">Target</span>
+            <div className="row between small" style={{ marginBottom: burned ? 0 : 10 }}>
+              <span className="muted">Target{allowance > 0 ? ` (+${allowance} exercise)` : ''}</span>
               <strong className="num">{target.toLocaleString('en-GB')}</strong>
             </div>
+            {burned > 0 && (
+              <div className="row between small" style={{ marginBottom: 10 }}>
+                <span className="muted">Burned</span>
+                <strong className="num">{burned.toLocaleString('en-GB')}</strong>
+              </div>
+            )}
             <MacroBar label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
             <MacroBar label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
             <MacroBar label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
@@ -123,6 +152,14 @@ export default function Today() {
         })
       )}
 
+      <ExerciseCard
+        workouts={workouts}
+        error={workoutError}
+        allowance={allowance}
+        onAdd={() => setWorkoutSheet({})}
+        onEdit={(w) => setWorkoutSheet({ workout: w })}
+      />
+
       {entries && entries.length === 0 && (
         <p className="center">
           <button className="btn ghost sm" onClick={copyYesterday}>Copy the day before</button>
@@ -130,6 +167,7 @@ export default function Today() {
       )}
 
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
+      {workoutSheet && <WorkoutSheet date={date} workout={workoutSheet.workout} onClose={() => setWorkoutSheet(null)} />}
     </div>
   )
 }
