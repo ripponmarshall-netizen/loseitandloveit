@@ -19,7 +19,13 @@ function niceTicks(min, max, count = 4) {
 export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
   const pts = series.filter((p) => p.date >= fromDate && p.date <= toDate)
   if (pts.length < 2) {
-    return <p className="small muted">Log at least two weigh-ins to see your trend. Morning, after the toilet, before food works best.</p>
+    return (
+      <p className="small muted">
+        {series.length >= 2
+          ? 'Fewer than two weigh-ins in this range. Pick a longer range to see your trend.'
+          : 'Log at least two weigh-ins to see your trend. Morning, after the toilet, before food works best.'}
+      </p>
+    )
   }
   const conv = (kg) => weightValue(kg, units)
   const vals = pts.flatMap((p) => [conv(p.weight), conv(p.trend)])

@@ -18,6 +18,7 @@ export default function Today() {
   const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, toast, profile, setTab } = useApp()
   const day = useDay(date)
   const [editing, setEditing] = useState(null)
+  const [copying, setCopying] = useState(false)
   const entries = day?.entries ?? null
   const workouts = day?.workouts || []
   const daily = day?.daily || null
@@ -51,6 +52,8 @@ export default function Today() {
     : null
 
   async function copyYesterday() {
+    if (copying) return
+    setCopying(true)
     try {
       const prev = await store.listEntries(addDays(date, -1), addDays(date, -1))
       if (!prev.length) return toast('Nothing logged the day before.')
@@ -59,6 +62,8 @@ export default function Today() {
       toast(`Copied ${prev.length} item${prev.length > 1 ? 's' : ''}`)
     } catch (e) {
       toast(e.message, 'error')
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -230,7 +235,7 @@ export default function Today() {
 
       {entries && entries.length === 0 && (
         <p className="center" style={{ marginTop: 22 }}>
-          <button className="btn sm gray" onClick={copyYesterday}>Copy the day before</button>
+          <button className="btn sm gray" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
         </p>
       )}
 

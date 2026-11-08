@@ -63,7 +63,7 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 14 }}>
         <Stat label="Trend" color="var(--blue)" value={last ? displayWeight(last.trend, units) : '—'} />
         <Stat label="Since start" color="var(--green)" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" color="var(--teal)" value={last ? signed(goalKg - last.trend) : '—'} />
+        <Stat label="To goal" color="var(--teal)" value={last && goalKg ? signed(goalKg - last.trend) : '—'} />
         <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} />
         <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatShortDate(eta) : '—'} />
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek && targets ? `of ${targets.calories} kcal` : 'no full days'} />
@@ -220,6 +220,7 @@ function LogWeight() {
   async function save(e) {
     e.preventDefault()
     const kg = inputToKg(val, units)
+    if (!date || date > today) return toast('Pick a date up to today', 'error')
     if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
     setBusy(true)
     try {

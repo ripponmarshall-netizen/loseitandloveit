@@ -125,32 +125,50 @@ function pickProfile(p) {
   return out
 }
 
+// Non-negative number (the database rejects negatives with a cryptic error).
+const pos = (v) => Math.max(0, Number(v) || 0)
+// Servings must be > 0 and <= 50 (table check constraint).
+const servingsOf = (v) => Math.min(50, Math.max(0.01, Number(v ?? 1) || 1))
+const MEAL_SET = new Set(['breakfast', 'lunch', 'dinner', 'snack'])
+const SOURCE_SET = new Set(['manual', 'library', 'recent', 'ai', 'quick'])
+
 function cleanEntry(e) {
   return {
     log_date: e.log_date,
-    meal: e.meal,
+    meal: MEAL_SET.has(e.meal) ? e.meal : 'snack',
     name: String(e.name || 'Food').slice(0, 200),
     serving: e.serving || null,
-    servings: Number(e.servings ?? 1),
-    calories: Number(e.calories || 0),
-    protein_g: Number(e.protein_g || 0),
-    carbs_g: Number(e.carbs_g || 0),
-    fat_g: Number(e.fat_g || 0),
-    source: e.source || 'manual',
+    servings: servingsOf(e.servings),
+    calories: pos(e.calories),
+    protein_g: pos(e.protein_g),
+    carbs_g: pos(e.carbs_g),
+    fat_g: pos(e.fat_g),
+    source: SOURCE_SET.has(e.source) ? e.source : 'manual',
     food_id: e.food_id && !String(e.food_id).startsWith('builtin:') ? e.food_id : null,
   }
+}
+
+// Only the editable fields of an entry, cleaned the same way as a new one.
+function cleanEntryPatch(p) {
+  const out = {}
+  if ('name' in p) out.name = String(p.name || 'Food').slice(0, 200)
+  if ('meal' in p && MEAL_SET.has(p.meal)) out.meal = p.meal
+  if ('servings' in p) out.servings = servingsOf(p.servings)
+  for (const k of ['calories', 'protein_g', 'carbs_g', 'fat_g']) if (k in p) out[k] = pos(p[k])
+  return out
 }
 
 function cleanFood(f) {
   return {
     name: String(f.name || 'Food').slice(0, 200),
     serving: f.serving || null,
-    calories: Number(f.calories || 0),
-    protein_g: Number(f.protein_g || 0),
-    carbs_g: Number(f.carbs_g || 0),
-    fat_g: Number(f.fat_g || 0),
+    calories: pos(f.calories),
+    protein_g: pos(f.protein_g),
+    carbs_g: pos(f.carbs_g),
+    fat_g: pos(f.fat_g),
   }
 }
+
 
 function dedupeRecent(entries, limit) {
   const seen = new Set()
@@ -243,7 +261,7 @@ export function createCloudStore(userId) {
     },
     async updateEntry(id, patch) {
       return throwIf(
-        await sb.from('food_entries').update(patch).eq('id', id).select(ENTRY_FIELDS).single(),
+        await sb.from('food_entries').update(cleanEntryPatch(patch)).eq('id', id).select(ENTRY_FIELDS).single(),
       )
     },
     async deleteEntry(id) {
@@ -481,7 +499,7 @@ export function createLocalStore() {
     async updateEntry(id, patch) {
       const e = db.entries.find((x) => x.id === id)
       if (!e) throw new Error('Entry not found')
-      Object.assign(e, patch)
+      Object.assign(e, cleanEntryPatch(patch))
       save()
       return e
     },

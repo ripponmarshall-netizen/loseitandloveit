@@ -23,10 +23,10 @@ export const DAY_START_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((h) => [String(
 
 export function UnitsField({ form }) {
   return (
-    <label className="field">
+    <div className="field">
       <span>Units</span>
       <Segmented label="Units" value={form.f.units} onChange={form.switchUnits} options={[['imperial', 'lb · ft/in'], ['metric', 'kg · cm']]} />
-    </label>
+    </div>
   )
 }
 
@@ -40,10 +40,10 @@ export function AboutFields({ form, withName = true }) {
           <input className="input" value={f.display_name} onChange={set('display_name')} autoComplete="given-name" />
         </label>
       )}
-      <label className="field">
+      <div className="field">
         <span>Sex (for the calorie formula)</span>
         <Segmented label="Sex" value={f.sex} onChange={set('sex')} options={[['male', 'Male'], ['female', 'Female']]} />
-      </label>
+      </div>
       <label className="field">
         <span>Birth year</span>
         <input className="input" inputMode="numeric" placeholder="1990" value={f.birth_year} onChange={set('birth_year')} />
@@ -92,11 +92,11 @@ export function GoalFields({ form, advanced = false }) {
         <span>Goal weight ({wUnit})</span>
         <input className="input" inputMode="decimal" value={f.goal_weight} onChange={set('goal_weight')} />
       </label>
-      <label className="field">
+      <div className="field">
         <span>Pace</span>
         <Segmented label="Pace" value={f.weekly_rate_kg} onChange={set('weekly_rate_kg')} options={PACES[f.units].map(([kg, l]) => [kg, l.replace(' a week', '')])} />
         <small className="tiny muted">Per week. Slower is easier to stick to and keeps more muscle.</small>
-      </label>
+      </div>
       <label className="field">
         <span>Activity level</span>
         <select className="input" value={f.activity_level} onChange={set('activity_level')}>

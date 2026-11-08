@@ -242,8 +242,8 @@ export function Switch({ checked, onChange, label, color }) {
   )
 }
 
-export function Stepper({ value, onChange, step = 0.5, min = 0.25 }) {
-  const set = (v) => onChange(Math.max(min, Math.round(v * 100) / 100))
+export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 50 }) {
+  const set = (v) => onChange(Math.min(max, Math.max(min, Math.round(v * 100) / 100)))
   return (
     <div className="stepper">
       <button type="button" aria-label="Less" onClick={() => set(Number(value) - step)}>−</button>

@@ -86,8 +86,16 @@ export default function Coach({ active = true }) {
     setBusy(true)
     setStatus('Mimi is thinking…')
     const prior = (messages || []).slice(-20).map(({ role, content }) => ({ role, content }))
+    let saved
     try {
-      const saved = await store.addCoachMessage({ role: 'user', content: question })
+      saved = await store.addCoachMessage({ role: 'user', content: question })
+    } catch (e) {
+      setInput(question) // nothing was sent: give the text back
+      toast(e.message, 'error')
+      setBusy(false)
+      return
+    }
+    try {
       setMessages((m) => [...(m || []), saved])
       setStreaming('')
       const [context, mine] = await Promise.all([

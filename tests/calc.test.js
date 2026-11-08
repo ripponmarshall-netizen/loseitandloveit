@@ -9,6 +9,7 @@ import {
   trendSeries,
   weeklyRate,
   adaptiveTdee,
+  inputToKg,
   projectGoalDate,
   cmToFtIn,
   ftInToCm,
@@ -176,6 +177,26 @@ test('exercise allowance and weekly summary', () => {
   ])
   assert.deepEqual(s, { sessions: 3, minutes: 65, kcal: 295, strength: 1, treadmill: 1, treadmillKm: 2.5 })
   assert.ok(Math.abs(kmhToMph(mphToKmh(3)) - 3) < 1e-9)
+})
+
+test('weight input accepts a comma decimal and blanks', () => {
+  assert.equal(inputToKg('80,5', 'metric'), 80.5)
+  assert.ok(Math.abs(inputToKg(' 200 ', 'imperial') - 90.718) < 0.01)
+  assert.equal(inputToKg('', 'metric'), null)
+  assert.equal(inputToKg('abc', 'metric'), null)
+})
+
+test('adaptive TDEE ignores a weigh-in from long before the window', () => {
+  const end = '2026-10-31'
+  const start = addDays(end, -20)
+  const daily = {}
+  for (let i = 0; i < 21; i++) daily[addDays(start, i)] = { calories: 2200 }
+  // One old weigh-in 60 days back at a much higher weight, then steady weights in the window.
+  const weights = [{ log_date: addDays(end, -80), weight_kg: 110 }]
+  for (let i = 0; i < 21; i += 2) weights.push({ log_date: addDays(start, i), weight_kg: 90 })
+  const res = adaptiveTdee({ daily, series: trendSeries(weights), endDate: end })
+  assert.ok(res, 'should still estimate')
+  assert.ok(res.spanDays <= 21, `span ${res.spanDays} should stay inside the window`)
 })
 
 test('adaptive target uses the planned deficit, so re-applying it does not drift', async () => {

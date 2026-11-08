@@ -80,11 +80,11 @@ export default function Onboarding() {
       )}
       {s.id === 'life' && (
         <>
-          <label className="field">
+          <div className="field">
             <span>Are you taking a GLP-1 medicine?</span>
             <Segmented label="GLP-1" value={glp1.on} onChange={(on) => setGlp1((g) => ({ ...g, on }))} options={[[false, 'No'], [true, 'Yes']]} />
             <small className="tiny muted">Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda… You can add it later in Settings.</small>
-          </label>
+          </div>
           {glp1.on && (
             <div className="grid2">
               <label className="field">

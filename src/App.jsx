@@ -335,7 +335,11 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <main className={`app${store && profile ? '' : ' bare'}`}>{body}</main>
       {toastMsg && (
-        <div key={toastMsg.id} className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
+        <div
+          key={toastMsg.id}
+          className={`toast${toastMsg.kind === 'error' ? ' error' : ''}`}
+          role={toastMsg.kind === 'error' ? 'alert' : 'status'}
+        >
           {toastMsg.msg}
         </div>
       )}

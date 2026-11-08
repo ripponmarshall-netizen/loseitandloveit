@@ -42,6 +42,7 @@ export async function streamCoach({ message, history, context, refs, sources, on
   const dec = new TextDecoder()
   let buf = ''
   let text = ''
+  let finished = false
   for (;;) {
     const { value, done } = await reader.read()
     if (done) break
@@ -62,9 +63,14 @@ export async function streamCoach({ message, history, context, refs, sources, on
         onStatus?.(ev.v)
       } else if (ev.t === 'error') {
         throw new Error(ev.message)
+      } else if (ev.t === 'done') {
+        finished = true
       }
     }
   }
+  // The connection dropped before the server said it was done (weak signal,
+  // app backgrounded). Don't save half an answer as if it were complete.
+  if (!finished) throw new Error('The reply was cut off (connection dropped). Ask again.')
   return text
 }
 

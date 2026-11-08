@@ -280,9 +280,9 @@ button.list-row:active, label.list-row:active, a.list-row:active, .list-row.tap:
 .link:active { opacity: 0.5; }
 
 /* ---------- Forms ---------- */
-label.field { display: block; margin-bottom: 14px; }
-label.field > span { display: block; font-size: 13px; color: var(--text-2); margin: 0 4px 6px; font-weight: 500; }
-label.field > small { display: block; margin: 6px 4px 0; }
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; font-size: 13px; color: var(--text-2); margin: 0 4px 6px; font-weight: 500; }
+.field > small { display: block; margin: 6px 4px 0; }
 .input {
   width: 100%; min-height: 46px; padding: 11px 14px;
   border: 0; border-radius: var(--r-sm); outline: none;
@@ -597,6 +597,8 @@ hr { border: 0; border-top: 0.5px solid var(--sep); margin: 14px 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .pg * { animation: none !important; }
+  /* Keep loading visible: a frozen spinner reads as a hung app. */
+  .spinner { animation: spin 1.6s linear infinite !important; }
 }
 
 /* Card titles are a step smaller than page titles */
