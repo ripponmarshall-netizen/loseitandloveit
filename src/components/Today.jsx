@@ -14,6 +14,16 @@ export default function Today() {
   const [workouts, setWorkouts] = useState([])
   const [workoutError, setWorkoutError] = useState(null)
   const [workoutSheet, setWorkoutSheet] = useState(null) // { workout } or {} for new
+  const [copying, setCopying] = useState(false)
+  // Which day the lists on screen belong to. Only show the spinner (and clear
+  // the old lists) when the day changes, not on every refresh after an edit.
+  const viewKey = `${store.mode}|${date}`
+  const [shownFor, setShownFor] = useState(viewKey)
+  if (shownFor !== viewKey) {
+    setShownFor(viewKey)
+    setEntries(null)
+    setWorkouts([])
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -34,7 +44,6 @@ export default function Today() {
 
   useEffect(() => {
     let cancelled = false
-    setEntries(null)
     store
       .listEntries(date, date)
       .then((rows) => !cancelled && setEntries(rows))
@@ -57,6 +66,8 @@ export default function Today() {
   const weighedToday = weights.some((w) => w.log_date === date)
 
   async function copyYesterday() {
+    if (copying) return
+    setCopying(true)
     try {
       const prev = await store.listEntries(addDays(date, -1), addDays(date, -1))
       if (!prev.length) return toast('Nothing logged the day before.')
@@ -65,6 +76,8 @@ export default function Today() {
       toast(`Copied ${prev.length} item${prev.length > 1 ? 's' : ''}`)
     } catch (e) {
       toast(e.message, 'error')
+    } finally {
+      setCopying(false)
     }
   }
 
@@ -162,7 +175,7 @@ export default function Today() {
 
       {entries && entries.length === 0 && (
         <p className="center">
-          <button className="btn ghost sm" onClick={copyYesterday}>Copy the day before</button>
+          <button className="btn ghost sm" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
         </p>
       )}
 

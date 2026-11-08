@@ -216,7 +216,13 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
   )
   if (logged.length < 10) return null
 
-  const startPt = trendOn(series, addDays(startDate, 4)) // allow a few days' slack
+  // Trend at the start of the window (a few days' slack either side). A weigh-in
+  // from long before the window would compare intake and weight change over
+  // different periods, so fall back to the first weigh-in inside the window.
+  let startPt = trendOn(series, addDays(startDate, 4))
+  if (!startPt || startPt.date < addDays(startDate, -7)) {
+    startPt = series.find((p) => p.date >= startDate && p.date <= endDate) || null
+  }
   const endPt = trendOn(series, endDate)
   if (!startPt || !endPt) return null
   const span = daysBetween(startPt.date, endPt.date)
@@ -237,6 +243,18 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
     spanDays: span,
     confidence,
   }
+}
+
+/**
+ * Calorie target built on measured maintenance, keeping the planned pace.
+ * Uses the planned weekly loss rather than (formula TDEE − current target),
+ * so adopting it twice gives the same number instead of ratcheting down.
+ */
+export function adaptiveCalorieTarget(adaptiveKcal, plannedWeeklyLossKg, sex) {
+  if (!adaptiveKcal) return null
+  const deficit = (Math.max(0, Number(plannedWeeklyLossKg) || 0) * KCAL_PER_KG) / 7
+  const floor = CALORIE_FLOOR[sex] ?? CALORIE_FLOOR.female
+  return Math.max(floor, Math.round((adaptiveKcal - deficit) / 10) * 10)
 }
 
 // ---------- Units ----------
@@ -271,7 +289,7 @@ export function weightUnit(units) {
 }
 
 export function inputToKg(value, units) {
-  const n = Number(value)
+  const n = Number(String(value ?? '').trim().replace(',', '.'))
   if (!n) return null
   return units === 'imperial' ? lbToKg(n) : n
 }

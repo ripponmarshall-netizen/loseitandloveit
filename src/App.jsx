@@ -89,7 +89,7 @@ export default function App() {
 
   const toast = useCallback((msg, kind = 'info') => {
     clearTimeout(toastTimer.current)
-    setToastMsg({ msg, kind })
+    setToastMsg({ msg, kind, id: Date.now() })
     toastTimer.current = setTimeout(() => setToastMsg(null), kind === 'error' ? 5000 : 2500)
   }, [])
 
@@ -224,7 +224,11 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <main className="app">{body}</main>
       {toastMsg && (
-        <div className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
+        <div
+          key={toastMsg.id}
+          className={`toast${toastMsg.kind === 'error' ? ' error' : ''}${tab === 'coach' && profile ? ' raised' : ''}`}
+          role={toastMsg.kind === 'error' ? 'alert' : 'status'}
+        >
           {toastMsg.msg}
         </div>
       )}

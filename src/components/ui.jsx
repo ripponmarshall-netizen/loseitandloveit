@@ -27,9 +27,9 @@ export function Sheet({ title, onClose, children }) {
 
 export function Segmented({ value, options, onChange }) {
   return (
-    <div className="segmented" role="tablist">
+    <div className="segmented" role="radiogroup">
       {options.map(([v, label]) => (
-        <button key={v} type="button" role="tab" aria-selected={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
+        <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
           {label}
         </button>
       ))}
@@ -37,8 +37,8 @@ export function Segmented({ value, options, onChange }) {
   )
 }
 
-export function Stepper({ value, onChange, step = 0.5, min = 0.25 }) {
-  const set = (v) => onChange(Math.max(min, Math.round(v * 100) / 100))
+export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 50 }) {
+  const set = (v) => onChange(Math.min(max, Math.max(min, Math.round(v * 100) / 100)))
   return (
     <div className="stepper">
       <button type="button" aria-label="Less" onClick={() => set(Number(value) - step)}>−</button>

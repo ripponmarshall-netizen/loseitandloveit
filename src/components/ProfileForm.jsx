@@ -91,6 +91,22 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
       setErr('This app is for adults (18+). Please talk to a doctor about weight goals for teens.')
       return
     }
+    // Same ranges as the database checks, so you get a clear message instead of a save error.
+    const wRange = f.units === 'imperial' ? '66–770 lb' : '30–350 kg'
+    const problem =
+      v.birth_year < thisYear - 110 ? 'Check your birth year.'
+        : v.height_cm < 100 || v.height_cm > 250 ? `Check your height (${f.units === 'imperial' ? "3'4\"–8'2\"" : '100–250 cm'}).`
+          : v.start_weight_kg < 30 || v.start_weight_kg > 350 ? `Check your current weight (${wRange}).`
+            : v.goal_weight_kg < 30 || v.goal_weight_kg > 350 ? `Check your goal weight (${wRange}).`
+              : v.calorie_target_override != null && (v.calorie_target_override < 800 || v.calorie_target_override > 6000)
+                ? 'Calorie override must be 800–6000 kcal (or leave it blank for auto).'
+                : v.protein_target_override != null && (v.protein_target_override < 20 || v.protein_target_override > 400)
+                  ? 'Protein override must be 20–400 g (or leave it blank for auto).'
+                  : null
+    if (problem) {
+      setErr(problem)
+      return
+    }
     setBusy(true)
     try {
       await onSubmit(v)
@@ -108,10 +124,10 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           <span>Name (optional)</span>
           <input className="input" value={f.display_name} onChange={set('display_name')} autoComplete="given-name" />
         </label>
-        <label className="field">
+        <div className="field">
           <span>Units</span>
           <Segmented value={f.units} onChange={switchUnits} options={[['imperial', 'lb · ft/in'], ['metric', 'kg · cm']]} />
-        </label>
+        </div>
         <div className="grid2">
           <label className="field">
             <span>Sex (for the BMR formula)</span>
@@ -232,7 +248,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
             Maintenance ≈ {preview.tdee} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
           </p>
           {preview.warnings.map((w) => (
-            <p key={w} className="small" style={{ color: '#b45309' }}>
+            <p key={w} className="small warn-text">
               {w}
             </p>
           ))}

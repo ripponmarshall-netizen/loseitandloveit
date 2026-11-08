@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
+import { adaptiveCalorieTarget, adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
 import { Segmented } from './ui.jsx'
@@ -12,14 +12,18 @@ export default function Progress() {
   const [workouts, setWorkouts] = useState([])
 
   useEffect(() => {
+    let cancelled = false
     store
       .listEntries(addDays(today, -89), today)
-      .then((rows) => setDaily(dailyTotals(rows)))
-      .catch((e) => toast(e.message, 'error'))
+      .then((rows) => !cancelled && setDaily(dailyTotals(rows)))
+      .catch((e) => !cancelled && toast(e.message, 'error'))
     store
       .listWorkouts(addDays(today, -27), today)
-      .then(setWorkouts)
-      .catch(() => setWorkouts([]))
+      .then((rows) => !cancelled && setWorkouts(rows))
+      .catch(() => !cancelled && setWorkouts([]))
+    return () => {
+      cancelled = true
+    }
   }, [store, today, dataVersion, toast])
 
   const last = series[series.length - 1]
@@ -28,6 +32,8 @@ export default function Progress() {
   const rate = weeklyRate(series)
   const eta = projectGoalDate(series, goalKg, today, rate)
   const adaptive = adaptiveTdee({ daily, series, endDate: addDays(today, -1) })
+  const targetKcal = targets?.calories ?? 0
+  const suggested = adaptive && targets ? adaptiveCalorieTarget(adaptive.tdee, targets.plannedWeeklyLossKg, profile.sex) : null
 
   const week = lastNDates(addDays(today, -1), 7)
   const loggedWeek = week.filter((d) => daily[d]?.calories >= 500)
@@ -40,11 +46,9 @@ export default function Progress() {
   }
 
   async function adoptAdaptive() {
-    const plannedDeficit = targets.tdee - targets.calories
-    const newTarget = Math.round((adaptive.tdee - Math.max(0, plannedDeficit)) / 10) * 10
     try {
-      await saveProfile({ ...profile, calorie_target_override: newTarget })
-      toast(`Target set to ${newTarget} kcal`)
+      await saveProfile({ ...profile, calorie_target_override: suggested })
+      toast(`Target set to ${suggested} kcal`)
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -57,10 +61,10 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 12 }}>
         <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
         <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
+        <Stat label="To goal" value={last && goalKg ? signed(goalKg - last.trend) : '—'} />
         <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
         <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
-        <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
+        <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targetKcal} kcal` : 'no full days'} />
       </div>
 
       <section className="card">
@@ -77,8 +81,8 @@ export default function Progress() {
 
       <section className="card">
         <h2>Calories, last 14 days</h2>
-        <CalorieBars dates={lastNDates(today, 14)} daily={daily} target={targets.calories} />
-        <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target.</p>
+        <CalorieBars dates={lastNDates(today, 14)} daily={daily} target={targetKcal} />
+        <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target (before any exercise allowance).</p>
       </section>
 
       <ExerciseSummary workouts={workouts} today={today} units={units} />
@@ -93,11 +97,11 @@ export default function Progress() {
             </p>
             <p className="small muted">
               You averaged {adaptive.avgIntake} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
-              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets.tdee} kcal.
+              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets?.tdee ?? '—'} kcal.
             </p>
-            {Math.abs(adaptive.tdee - targets.tdee) >= 150 && (
+            {suggested != null && Math.abs(suggested - targetKcal) >= 100 && (
               <button className="btn soft sm" onClick={adoptAdaptive}>
-                Base my target on this ({Math.round((adaptive.tdee - Math.max(0, targets.tdee - targets.calories)) / 10) * 10} kcal)
+                Base my target on this ({suggested} kcal)
               </button>
             )}
             <p className="tiny muted" style={{ marginTop: 8, marginBottom: 0 }}>
@@ -160,6 +164,7 @@ function LogWeight() {
   async function save(e) {
     e.preventDefault()
     const kg = inputToKg(val, units)
+    if (!date || date > today) return toast('Pick a date up to today', 'error')
     if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
     setBusy(true)
     try {

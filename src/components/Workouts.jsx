@@ -185,7 +185,16 @@ export function WorkoutSheet({ date, workout, onClose }) {
   }
 
   const { estimate, ...toSave } = record
-  const valid = minutes > 0 && (f.kind === 'home' || speedKmh > 0)
+  // Mirror the table's check constraints so a bad value gets a clear message, not a database error.
+  const incline = Number(f.incline_pct) || 0
+  const problem =
+    minutes > 600 ? 'Keep it under 600 minutes.'
+      : f.kind === 'treadmill' && speedKmh > 25 ? `Speed looks too high (max ${imperial ? '15.5 mph' : '25 km/h'}).`
+        : f.kind === 'treadmill' && (incline < -5 || incline > 40) ? 'Incline should be between −5% and 40%.'
+          : f.kind === 'treadmill' && record.distance_km > 100 ? 'Distance looks too long (max 100 km).'
+            : f.manualKcal !== '' && (Number.isNaN(Number(f.manualKcal)) || Number(f.manualKcal) < 0 || Number(f.manualKcal) > 5000) ? 'Your own number should be 0–5000 kcal.'
+              : null
+  const valid = !problem && minutes > 0 && (f.kind === 'home' || speedKmh > 0)
 
   return (
     <Sheet title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
@@ -231,7 +240,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
               <input className="input" inputMode="decimal" value={f.incline_pct} onChange={set('incline_pct')} />
             </label>
           </div>
-          <label className="field">
+          <div className="field">
             <span>Walking or running?</span>
             <Segmented
               value={f.mode}
@@ -241,7 +250,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
                 ['run', 'Run / jog'],
               ]}
             />
-          </label>
+          </div>
           {record.distance_km ? (
             <p className="small muted">
               Distance ≈ {imperial ? `${r1(kmhToMph(record.distance_km))} miles` : `${r1(record.distance_km)} km`}
@@ -310,6 +319,9 @@ export function WorkoutSheet({ date, workout, onClose }) {
         <input className="input" value={f.notes} onChange={set('notes')} placeholder="How did it feel?" />
       </label>
 
+      {problem && (
+        <p className="small" style={{ color: 'var(--danger)' }} role="alert">{problem}</p>
+      )}
       <div className="stack">
         <button
           className="btn block"
