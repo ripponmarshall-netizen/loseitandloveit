@@ -184,3 +184,42 @@ export function summariseDailyLogs(logs = []) {
     symptoms: Object.entries(counts).sort((a, b) => b[1] - a[1]),
   }
 }
+
+// ---------- Dose trend (Progress chart) ----------
+
+/**
+ * The dose you're on each day from `from` to `to`, for a trend line: each
+ * dose holds until the next one, and stops after a long gap (a missed run of
+ * doses shouldn't look like you were still on it). With no doses logged, the
+ * plan's start date and dose stand in as dose one, as in doseStatus.
+ * Returns { levels: [{ date, value }], taken: [{ date, value }] } where
+ * `taken` is the days a dose was actually logged.
+ */
+export function doseLevels({ doses = [], from, to, frequency = 'weekly', plan = null }) {
+  let rows = doses.filter((d) => d?.log_date && Number(d.dose) > 0)
+  if (!rows.length && plan?.startedOn && plan.dose && plan.startedOn <= to) {
+    rows = [{ log_date: plan.startedOn, dose: plan.dose, unit: plan.unit }]
+  }
+  if (!rows.length) return { levels: [], taken: [] }
+  // Keep to one unit (mg or mcg): the one the newest dose uses.
+  rows = [...rows].sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0))
+  const unit = rows[rows.length - 1].unit
+  if (unit) rows = rows.filter((d) => !d.unit || d.unit === unit)
+
+  // Highest dose on each logged day.
+  const byDay = new Map()
+  for (const d of rows) byDay.set(d.log_date, Math.max(byDay.get(d.log_date) || 0, Number(d.dose)))
+  const days = [...byDay.keys()]
+  const maxGap = frequency === 'weekly' ? 13 : 3
+
+  const levels = []
+  let i = -1
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    while (i + 1 < days.length && days[i + 1] <= day) i++
+    if (i < 0) continue
+    if (daysBetween(days[i], day) > maxGap) continue
+    levels.push({ date: day, value: byDay.get(days[i]) })
+  }
+  const taken = days.filter((d) => d >= from && d <= to).map((d) => ({ date: d, value: byDay.get(d) }))
+  return { levels, taken }
+}

@@ -942,7 +942,7 @@ button.mimi-tip:active { transform: scale(0.98); }
 .trend-value { font-size: 20px; line-height: 25px; font-weight: 700; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-sub { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trend-spark { flex: none; display: grid; transition: opacity 0.3s var(--ease), transform 0.4s var(--spring); }
-.trend-card.open .trend-spark { opacity: 0; transform: scale(0.8); }
+.trend-card.open .trend-spark { display: none; } /* frees room for the title while open */
 .trend-chev { flex: none; color: var(--text-3); transition: transform 0.45s var(--spring); }
 .trend-card.open .trend-chev { transform: rotate(90deg); }
 .expand { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.5s var(--spring); }
@@ -967,6 +967,7 @@ button.mimi-tip:active { transform: scale(0.98); }
 .chart text { font-size: 10px; }
 .chart-target { fill: var(--text-2); font-weight: 600; }
 .chart-dot { fill: var(--text-3); }
+.chart-dot.marked { stroke: var(--card); stroke-width: 1.5; }
 .chart-area { animation: fade-in 0.8s var(--ease) 0.2s both; }
 .chart-empty { margin: 14px 2px 0; }
 .chart-tip {

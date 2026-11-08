@@ -5,7 +5,7 @@ import {
   projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
 } from '../lib/calc.js'
 import { MOOD_BY_V, SYMPTOM_BY_ID } from '../data/glp1.js'
-import { formatWater, summariseDailyLogs } from '../lib/glp1.js'
+import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } from '../lib/glp1.js'
 import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget } from './Checkin.jsx'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
@@ -36,7 +36,7 @@ export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus } = useApp()
   const [daily, setDaily] = useState({})
   const [workouts, setWorkouts] = useState([])
-  const [open, setOpen] = useState({ weight: true, macros: false })
+  const [open, setOpen] = useState({ weight: true, macros: false, dose: false })
 
   useEffect(() => {
     let cancelled = false
@@ -111,6 +111,7 @@ export default function Progress() {
 
       <WeightTrend open={open.weight} onToggle={() => toggle('weight')} goalKg={goalKg} />
       <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} />
+      <DoseTrend open={open.dose} onToggle={() => toggle('dose')} />
 
       <LogWeight />
 
@@ -299,6 +300,85 @@ function MacroTrend({ open, onToggle, daily }) {
       <p className="tiny muted trend-note">
         {gran === 'day' ? 'Every day with food logged.' : `Average per day across each ${gran}, counting only days with 500+ kcal logged.`} The dashed line is your target.
       </p>
+    </TrendCard>
+  )
+}
+
+/** GLP-1 dose over time: a stepped line, with a marker on each logged dose. */
+function DoseTrend({ open, onToggle }) {
+  const { store, profile, today, dataVersion, openSheet } = useApp()
+  const plan = glp1Plan(profile)
+  const [doses, setDoses] = useState(null)
+  const [gran, setGran] = useState('week')
+
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listDoses(addDays(today, -400), today)
+      .then((rows) => !cancelled && setDoses(rows))
+      .catch(() => !cancelled && setDoses([]))
+    return () => {
+      cancelled = true
+    }
+  }, [store, today, dataVersion])
+
+  if (!plan && !doses?.length) return null
+  const frequency = plan?.frequency || 'weekly'
+  const unit = plan?.unit || doses?.[0]?.unit || 'mg'
+  const { levels, taken } = doseLevels({ doses: doses || [], from: addDays(today, -400), to: today, frequency, plan })
+  // The dose you were on at the end of each day / week / month (never an average).
+  const buckets = bucketAverages(levels, gran, today, COUNT[gran], 'last')
+  // Markers where a dose was logged: daily only (weekly/monthly would stack on the line).
+  const marks = gran === 'day' ? bucketAverages(taken, 'day', today, COUNT.day, 'last').map((b) => b.value) : null
+  const stats = bucketStats(buckets)
+  const current = levels.length && levels[levels.length - 1].date === today ? levels[levels.length - 1].value : null
+  const first = taken[0]
+  const changes = taken.reduce((n, t, i) => (i && t.value !== taken[i - 1].value ? n + 1 : n), 0)
+  const logged = (doses || []).length
+  const fmtD = (v) => String(Math.round(v * 100) / 100)
+  return (
+    <TrendCard
+      id="dose"
+      open={open}
+      onToggle={onToggle}
+      icon={plan?.route === 'oral' ? 'pill' : 'syringe'}
+      color="var(--purple)"
+      title={`${plan?.name || 'GLP-1'} dose`}
+      value={current != null ? formatDose(current, unit) : plan ? formatDose(plan.dose, unit) : '—'}
+      sub={logged ? `${logged} logged${changes ? ` · ${changes} change${changes > 1 ? 's' : ''}` : ''}` : 'From your plan’s start date'}
+      spark={<Sparkline values={bucketAverages(levels, 'week', today, 12, 'last').map((b) => b.value)} color="var(--purple)" width={72} height={28} />}
+    >
+      <Segmented label="Dose chart period" value={gran} onChange={setGran} options={GRANULARITY} />
+      {doses === null ? null : (
+        <>
+          <TrendChart
+            buckets={buckets}
+            dots={marks}
+            granularity={gran}
+            color="var(--purple)"
+            color2="var(--indigo)"
+            format={fmtD}
+            unit={unit}
+            step
+            zero
+            ariaLabel={`Dose over the ${PERIOD[gran]}`}
+          />
+          {stats && (
+            <div className="trend-stats">
+              <MiniStat label="Now" value={current != null ? fmtD(current) : '—'} unit={current != null ? unit : null} />
+              <MiniStat label="Started on" value={first ? fmtD(first.value) : '—'} unit={first ? unit : null} />
+              <MiniStat label="Highest" value={fmtD(stats.max)} unit={unit} />
+            </div>
+          )}
+          <p className="tiny muted trend-note">
+            {gran === 'day' ? 'Each dose holds until the next; dots are the days you logged one.' : `The dose you were on at the end of each ${gran}.`}{' '}
+            {!logged && plan ? 'Drawn from your plan until you log a dose. ' : ''}Dose changes are your prescriber’s call.
+          </p>
+          <button className="btn sm secondary" style={{ marginTop: 12 }} onClick={() => openSheet('dose', { date: today })}>
+            Log a dose
+          </button>
+        </>
+      )}
     </TrendCard>
   )
 }

@@ -416,8 +416,10 @@ export function weekStart(iso) {
  * average each one. points: [{ date: 'YYYY-MM-DD', value }]. Returns the last
  * `count` buckets oldest first: [{ key, start, end, value, n }], value null
  * when the bucket has no points (so charts can leave a gap).
+ * agg 'last' takes each bucket's latest value instead of the average (a dose
+ * level shouldn't average 2.5 and 5 into 3.2).
  */
-export function bucketAverages(points, granularity, endIso, count) {
+export function bucketAverages(points, granularity, endIso, count, agg = 'avg') {
   const keyOf =
     granularity === 'month' ? (iso) => `${iso.slice(0, 7)}-01` : granularity === 'week' ? weekStart : (iso) => iso
   const buckets = []
@@ -429,7 +431,7 @@ export function bucketAverages(points, granularity, endIso, count) {
       const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
       end = addDays(next, -1)
     } else end = granularity === 'week' ? addDays(start, 6) : start
-    buckets.unshift({ key: start, start, end, sum: 0, n: 0 })
+    buckets.unshift({ key: start, start, end, sum: 0, n: 0, lastDate: '', last: null })
     if (granularity === 'month') {
       const [y, m] = start.split('-').map(Number)
       start = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
@@ -443,9 +445,13 @@ export function bucketAverages(points, granularity, endIso, count) {
     if (b) {
       b.sum += v
       b.n += 1
+      if (p.date >= b.lastDate) {
+        b.lastDate = p.date
+        b.last = v
+      }
     }
   }
-  return buckets.map(({ key, start: s, end, sum, n }) => ({ key, start: s, end, n, value: n ? sum / n : null }))
+  return buckets.map(({ key, start: s, end, sum, n, last }) => ({ key, start: s, end, n, value: n ? (agg === 'last' ? last : sum / n) : null }))
 }
 
 /** Average, min and max of the non-null bucket values, plus the change first → last. */

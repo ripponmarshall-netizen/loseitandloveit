@@ -51,13 +51,21 @@ function smoothPath(pts) {
   return d
 }
 
+/** Step path: holds each value flat until the next one (dose levels). */
+function stepPath(pts) {
+  if (!pts.length) return ''
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`
+  for (let i = 1; i < pts.length; i++) d += ` H${pts[i][0].toFixed(1)} V${pts[i][1].toFixed(1)}`
+  return d
+}
+
 /**
  * Interactive trend line for day / week / month buckets.
  * buckets: [{ key, start, end, value }] oldest first (value null = no data).
  * dots: optional raw values per bucket (e.g. scale weigh-ins under the trend).
  * Drag across it to read any point.
  */
-export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--blue)', color2, target, targetLabel = 'target', format = (v) => Math.round(v), tipFormat, unit = '', ariaLabel = 'Trend chart' }) {
+export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--blue)', color2, target, targetLabel = 'target', format = (v) => Math.round(v), tipFormat, unit = '', ariaLabel = 'Trend chart', step = false, zero = false }) {
   const id = useId().replace(/:/g, '')
   const svgRef = useRef()
   const [hover, setHover] = useState(null)
@@ -66,7 +74,7 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
     const vals = buckets.map((b) => b.value).filter((v) => v != null)
     const dotVals = (dots || []).filter((v) => v != null)
     if (!vals.length) return null
-    let min = Math.min(...vals, ...dotVals)
+    let min = zero ? 0 : Math.min(...vals, ...dotVals)
     let max = Math.max(...vals, ...dotVals)
     const showTarget = target != null && target > 0 && target >= min - (max - min) * 0.8 && target <= max + (max - min) * 0.8 + 1
     if (showTarget) {
@@ -74,16 +82,16 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
       max = Math.max(max, target)
     }
     const pad = (max - min) * 0.12 || Math.max(1, Math.abs(max) * 0.05)
-    min -= pad
+    if (!zero) min -= pad
     max += pad
     const n = buckets.length
     const x = (i) => PAD.l + (n === 1 ? 0.5 : i / (n - 1)) * (W - PAD.l - PAD.r)
     const y = (v) => PAD.t + (1 - (v - min) / (max - min)) * (H - PAD.t - PAD.b)
     const pts = buckets.map((b, i) => (b.value == null ? null : [x(i), y(b.value), i])).filter(Boolean)
-    const line = smoothPath(pts)
+    const line = step ? stepPath(pts) : smoothPath(pts)
     const area = pts.length > 1 ? `${line} L${pts[pts.length - 1][0].toFixed(1)},${H - PAD.b} L${pts[0][0].toFixed(1)},${H - PAD.b} Z` : ''
     return { min, max, x, y, pts, line, area, ticks: niceTicks(min, max), showTarget }
-  }, [buckets, dots, target])
+  }, [buckets, dots, target, step, zero])
 
   if (!geo) return <p className="small muted chart-empty">Nothing logged in this period yet.</p>
 
@@ -148,7 +156,7 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
           </g>
         )}
         {area && <path className="chart-area" d={area} fill={`url(#area-${id})`} />}
-        {dots?.map((v, i) => (v == null ? null : <circle key={`d${i}`} cx={x(i)} cy={y(v)} r="2.4" className="chart-dot" />))}
+        {dots?.map((v, i) => (v == null ? null : <circle key={`d${i}`} cx={x(i)} cy={y(v)} r={step ? 3.6 : 2.4} className={`chart-dot${step ? ' marked' : ''}`} style={step ? { fill: color } : undefined} />))}
         <path key={`${granularity}-${n}-${line.length}`} className="draw" pathLength="1" d={line} fill="none" stroke={`url(#line-${id})`} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
         {pts.length === 1 && <circle cx={pts[0][0]} cy={pts[0][1]} r="4" fill={color} />}
         {hb && (

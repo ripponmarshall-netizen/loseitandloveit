@@ -296,3 +296,15 @@ test('bucketAverages: daily, weekly and monthly averages ending today', async ()
   assert.equal(s.change, 150)
   assert.equal(bucketStats(bucketAverages([], 'day', '2026-11-08', 3)), null)
 })
+
+test('bucketAverages with agg "last" keeps the latest value in each bucket', async () => {
+  const { bucketAverages } = await import('../src/lib/calc.js')
+  const pts = [
+    { date: '2026-11-02', value: 2.5 },
+    { date: '2026-11-05', value: 5 },
+    { date: '2026-11-03', value: 2.5 },
+  ]
+  const [wk] = bucketAverages(pts, 'week', '2026-11-08', 1, 'last')
+  assert.equal(wk.value, 5)
+  assert.equal(bucketAverages(pts, 'week', '2026-11-08', 1)[0].value, 10 / 3)
+})
