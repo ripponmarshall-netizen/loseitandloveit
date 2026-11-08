@@ -446,7 +446,7 @@ export function Glp1Progress({ onEditDose, onSetup }) {
   return (
     <ListSection
       header="GLP-1 medicine"
-      footer="Logged for your records and the coach. Dose changes are your prescriber’s call."
+      footer="Logged for your records and for Mimi. Dose changes are your prescriber’s call."
     >
       <ListRow
         icon="syringe"

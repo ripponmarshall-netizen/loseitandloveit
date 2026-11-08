@@ -757,3 +757,88 @@ details[open] > summary::after { transform: rotate(90deg); }
 .bubble-row { display: flex; align-items: flex-end; gap: 8px; max-width: 92%; }
 .bubble-row .bubble { max-width: 100%; min-width: 0; }
 .bubble-face { width: 28px; height: 28px; flex: none; }
+
+/* ===================== v0.4: keyboard, meal breakdown, profile photo, Mimi ===================== */
+
+/* Keyboard: sheets and the composer live in the visible area (see lib/viewport.js),
+   so what you're typing is never hidden behind the iPhone keyboard. */
+.sheet-backdrop { top: var(--vv-top, 0px); bottom: auto; height: var(--vv-h, 100%); }
+.sheet { max-height: calc(var(--vv-h, 100dvh) - env(safe-area-inset-top) - 12px); }
+.sheet.tall { height: calc(var(--vv-h, 100dvh) - env(safe-area-inset-top) - 12px); }
+/* While typing, a sheet fills the visible area so its fields don't jump as results change. */
+.kb-open .sheet { height: calc(var(--vv-h, 100dvh) - 8px); max-height: calc(var(--vv-h, 100dvh) - 8px); padding-bottom: 12px; }
+.sheet input, .sheet textarea, .sheet select { scroll-margin: 76px 0 16px; }
+.kb-open .tabbar, .kb-open .tabbar-reveal { visibility: hidden; }
+.kb-open .composer { bottom: auto; top: calc(var(--vv-top, 0px) + var(--vv-h, 100dvh)); transform: translateY(-100%); }
+
+/* Meal rows: the name opens the nutrition breakdown, + adds food */
+.meal-row { padding: 0 12px 0 0; gap: 4px; }
+.meal-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; align-self: stretch;
+  padding: 11px 4px 11px 16px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit;
+}
+.meal-open:active { opacity: 0.6; }
+.meal-open .label { flex: 1; min-width: 0; }
+.meal-chart { color: var(--text-3); flex: none; }
+.macros-btn { width: 100%; border: 0; background: none; padding: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.macros-btn:active { opacity: 0.7; }
+
+/* Nutrition breakdown */
+.macro-split { display: flex; align-items: center; gap: 16px; }
+.donut { position: relative; flex: none; }
+.donut svg { display: block; overflow: visible; }
+.donut-seg { cursor: pointer; transition: stroke-width 0.3s var(--spring), opacity 0.2s; }
+.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; }
+.donut-big { font-size: 26px; line-height: 30px; font-weight: 700; letter-spacing: -0.02em; }
+.macro-legend { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.legend-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 4px; border: 0; border-radius: var(--r-sm);
+  background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; transition: opacity 0.2s;
+}
+.legend-row:active { background: var(--fill-2); }
+.legend-row.dim { opacity: 0.4; }
+.legend-key { width: 12px; height: 12px; border-radius: 4px; flex: none; }
+.legend-label { display: block; font-size: 16px; font-weight: 600; line-height: 20px; }
+.legend-value { display: flex; flex-direction: column; align-items: flex-end; font-weight: 600; white-space: nowrap; }
+.food-bar-row .label { display: flex; flex-direction: column; gap: 4px; }
+.food-bar { display: block; height: 8px; border-radius: 4px; background: var(--fill-2); overflow: hidden; }
+.food-bar i { display: block; height: 100%; border-radius: 4px; background: var(--green); transition: width 0.6s var(--spring); }
+@media (max-width: 360px) { .macro-split { flex-direction: column; align-items: stretch; } .donut { align-self: center; } }
+
+/* Profile photo */
+.avatar { overflow: hidden; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-btn { position: relative; flex: none; border: 0; padding: 0; background: none; border-radius: 50%; cursor: pointer; }
+.avatar-btn:active { transform: scale(0.94); }
+.avatar-badge {
+  position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--tint); color: #fff; box-shadow: 0 0 0 2.5px var(--card);
+}
+.avatar-badge svg { width: 13px; height: 13px; }
+.photo-hero { display: flex; justify-content: center; margin: 4px 0 18px; }
+.head-avatar { border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; display: grid; margin-right: 2px; }
+.head-avatar:active { transform: scale(0.92); }
+.bubble-row.mine { align-self: flex-end; justify-content: flex-end; }
+.bubble-row.mine .bubble { align-self: auto; }
+
+/* Mimi's check-in */
+.mimi-card {
+  margin-bottom: 16px; padding: 12px 12px 14px; border-radius: var(--r-lg);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--indigo) 12%, var(--card)), color-mix(in srgb, var(--purple) 9%, var(--card)));
+  animation: rise 0.45s var(--spring) both;
+}
+.mimi-card.loading { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+.mimi-head { display: flex; align-items: flex-start; gap: 10px; }
+.mimi-head .icon-btn { margin: -6px -6px 0 0; width: 36px; height: 36px; color: var(--text-2); }
+.mimi-head .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--indigo); }
+.mimi-headline { font-size: 17px; line-height: 22px; font-weight: 600; margin-top: 1px; }
+.mimi-tips { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.mimi-tip {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: var(--r);
+  background: color-mix(in srgb, var(--bg) 70%, transparent); color: var(--text); text-align: left; font: inherit; font-size: 15px; line-height: 20px;
+}
+button.mimi-tip { cursor: pointer; }
+button.mimi-tip:active { transform: scale(0.98); }
+.mimi-tip-icon { width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center; background: var(--c); color: #fff; }
+.mimi-tip-icon svg { width: 16px; height: 16px; }
+.mimi-chev { color: var(--text-3); flex: none; }

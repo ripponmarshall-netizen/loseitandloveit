@@ -9,7 +9,7 @@ const STEPS = [
   { id: 'about', title: 'About you', sub: 'Used for the calorie formula. Change any of this later in Settings.' },
   { id: 'body', title: 'Your body', sub: 'Height and today’s weight.' },
   { id: 'goal', title: 'Your goal', sub: 'Where you want to get to, and how fast.' },
-  { id: 'life', title: 'Your routine', sub: 'Shift work, exercise, medicines and anything the coach should know.' },
+  { id: 'life', title: 'Your routine', sub: 'Shift work, exercise, medicines and anything Mimi, your penguin coach, should know.' },
 ]
 
 export default function Onboarding() {

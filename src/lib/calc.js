@@ -132,6 +132,50 @@ export function sumEntries(entries) {
   return { calories: Math.round(t.calories), protein: r1(t.protein), carbs: r1(t.carbs), fat: r1(t.fat) }
 }
 
+// Split whole percentages so they always add up to exactly 100 (largest remainder).
+export function wholePercents(values) {
+  const total = values.reduce((s, v) => s + Math.max(0, Number(v) || 0), 0)
+  if (total <= 0) return values.map(() => 0)
+  const raw = values.map((v) => (Math.max(0, Number(v) || 0) / total) * 100)
+  const out = raw.map(Math.floor)
+  let left = 100 - out.reduce((s, v) => s + v, 0)
+  const order = raw.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0])
+  for (const [, i] of order) {
+    if (left <= 0) break
+    out[i] += 1
+    left -= 1
+  }
+  return out
+}
+
+/**
+ * Nutrition breakdown for a meal (or a whole day): totals, where the calories
+ * come from (protein and carbs 4 kcal/g, fat 9 kcal/g), each macro's share,
+ * how much of the daily targets it covers, and each food's share of the calories.
+ */
+export function macroBreakdown(entries = [], targets = null) {
+  const totals = sumEntries(entries)
+  const kcalFrom = { protein: totals.protein * 4, carbs: totals.carbs * 4, fat: totals.fat * 9 }
+  const [protein, carbs, fat] = wholePercents([kcalFrom.protein, kcalFrom.carbs, kcalFrom.fat])
+  const ofTarget = (v, t) => (t > 0 ? Math.round((v / t) * 100) : null)
+  const items = entries
+    .map((e) => ({ id: e.id, name: e.name, ...entryTotals(e) }))
+    .sort((a, b) => b.calories - a.calories)
+  const itemShares = wholePercents(items.map((i) => i.calories))
+  return {
+    totals,
+    kcalFrom: { protein: Math.round(kcalFrom.protein), carbs: Math.round(kcalFrom.carbs), fat: Math.round(kcalFrom.fat) },
+    split: { protein, carbs, fat },
+    ofDay: {
+      calories: ofTarget(totals.calories, targets?.calories),
+      protein: ofTarget(totals.protein, targets?.protein),
+      carbs: ofTarget(totals.carbs, targets?.carbs),
+      fat: ofTarget(totals.fat, targets?.fat),
+    },
+    items: items.map((it, i) => ({ ...it, share: itemShares[i] })),
+  }
+}
+
 // { 'YYYY-MM-DD': totals } for a list of entries
 export function dailyTotals(entries) {
   const byDay = {}

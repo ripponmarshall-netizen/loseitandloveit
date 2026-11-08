@@ -250,9 +250,10 @@ function WeightList({ weights }) {
   const [showAll, setShowAll] = useState(false)
   const list = [...weights].reverse()
   const shown = showAll ? list : list.slice(0, 7)
-  async function remove(id) {
+  async function remove(w) {
+    if (!window.confirm(`Delete the ${formatShortDate(w.log_date)} weigh-in (${displayWeight(Number(w.weight_kg), units)})?`)) return
     try {
-      await store.deleteWeight(id)
+      await store.deleteWeight(w.id)
       await reloadWeights()
     } catch (e) {
       toast(e.message, 'error')
@@ -266,7 +267,7 @@ function WeightList({ weights }) {
           <span>{formatShortDate(w.log_date)}</span>
           <span className="row">
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, color: 'var(--red)' }} onClick={() => remove(w.id)}>
+            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, color: 'var(--red)' }} onClick={() => remove(w)}>
               <Icon name="trash" size={18} />
             </button>
           </span>

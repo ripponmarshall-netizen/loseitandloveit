@@ -12,11 +12,15 @@ const PROFILE_FIELDS = [
   'calorie_target_override', 'protein_target_override', 'coach_notes', 'exercise_eatback_pct',
   // 0003: GLP-1 plan and water goal
   'glp1_med', 'glp1_name', 'glp1_dose', 'glp1_unit', 'glp1_frequency', 'glp1_started_on', 'water_target_ml',
+  // 0004: profile photo
+  'avatar',
 ]
 const DOSE_FIELDS = 'id,log_date,taken_at,med,med_name,dose,unit,route,site,notes,created_at'
 const DAILY_FIELDS = 'id,log_date,mood,energy,appetite,water_ml,symptoms,note,updated_at'
 const SITE_IDS = new Set(['abdomen-ul', 'abdomen-ur', 'abdomen-ll', 'abdomen-lr', 'thigh-l', 'thigh-r', 'arm-l', 'arm-r'])
 const MIGRATION_0003 = 'supabase/migrations/0003_glp1_checkins.sql'
+const MIGRATION_0004 = 'supabase/migrations/0004_avatar_mimi_checkins.sql'
+const INSIGHT_FIELDS = 'id,log_date,headline,tips,fingerprint,dismissed,created_at'
 const WORKOUT_FIELDS =
   'id,log_date,kind,name,duration_min,speed_kmh,incline_pct,distance_km,mode,activity,intensity,exercises,calories_burned,calories_source,notes,created_at'
 
@@ -80,6 +84,29 @@ function cleanDaily(patch) {
 function checkinError(error) {
   if (/(medication_doses|daily_logs)/.test(error.message) && /(does not exist|could not find|schema cache)/i.test(error.message)) {
     return new Error(`GLP-1 and check-ins need a database update: run ${MIGRATION_0003} in the Supabase SQL Editor.`)
+  }
+  return new Error(error.message)
+}
+
+// Mimi's check-ins: a headline and up to three short tips.
+const TIP_KINDS = new Set(['food', 'protein', 'water', 'move', 'weight', 'mood', 'dose', 'praise', 'rest'])
+function cleanInsight(i) {
+  return {
+    log_date: i.log_date,
+    headline: String(i.headline || 'Check-in').slice(0, 200),
+    tips: (Array.isArray(i.tips) ? i.tips : [])
+      .filter((t) => t && String(t.text || '').trim())
+      .slice(0, 3)
+      .map((t) => ({ text: String(t.text).slice(0, 300), kind: TIP_KINDS.has(t.kind) ? t.kind : 'food' })),
+    fingerprint: i.fingerprint ? String(i.fingerprint).slice(0, 200) : null,
+  }
+}
+
+function insightError(error) {
+  if (/coach_insights/.test(error.message) && /(does not exist|could not find|schema cache)/i.test(error.message)) {
+    const e = new Error(`Mimi's check-ins need a database update: run ${MIGRATION_0004} in the Supabase SQL Editor.`)
+    e.missingMigration = true
+    return e
   }
   return new Error(error.message)
 }
@@ -192,8 +219,11 @@ export function createCloudStore(userId) {
       }
       const saved = throwIf(res)
       if (dropped.length) {
-        const file = dropped.some((c) => c.startsWith('glp1_') || c === 'water_target_ml') ? MIGRATION_0003 : 'supabase/migrations/0002_workouts.sql'
-        const err = new Error(`Saved, except ${dropped.join(', ')}: run ${file} in the Supabase SQL Editor first.`)
+        const file = dropped.includes('avatar')
+          ? MIGRATION_0004
+          : dropped.some((c) => c.startsWith('glp1_') || c === 'water_target_ml') ? MIGRATION_0003 : 'supabase/migrations/0002_workouts.sql'
+        const what = dropped.map((c) => (c === 'avatar' ? 'your photo' : c)).join(', ')
+        const err = new Error(`Saved, except ${what}: run ${file} in the Supabase SQL Editor first.`)
         err.saved = saved
         throw err
       }
@@ -336,6 +366,29 @@ export function createCloudStore(userId) {
       throwIf(await sb.from('coach_messages').delete().eq('user_id', userId))
     },
 
+    // Mimi's check-ins (AI recommendations every few hours)
+    async latestInsight() {
+      const { data, error } = await sb.from('coach_insights').select(INSIGHT_FIELDS)
+        .order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (error) throw insightError(error)
+      return data
+    },
+    async listInsights(limit = 6) {
+      const { data, error } = await sb.from('coach_insights').select(INSIGHT_FIELDS)
+        .order('created_at', { ascending: false }).limit(limit)
+      if (error) throw insightError(error)
+      return data
+    },
+    async addInsight(i) {
+      const { data, error } = await sb.from('coach_insights').insert({ ...cleanInsight(i), user_id: userId }).select(INSIGHT_FIELDS).single()
+      if (error) throw insightError(error)
+      return data
+    },
+    async dismissInsight(id) {
+      const { error } = await sb.from('coach_insights').update({ dismissed: true }).eq('id', id)
+      if (error) throw insightError(error)
+    },
+
     async getAiUsage(day) {
       return throwIf(
         await sb.from('ai_usage').select('*').eq('user_id', userId).eq('day', day).maybeSingle(),
@@ -383,7 +436,7 @@ function loadLocal() {
   } catch {
     /* storage blocked or corrupt: start empty */
   }
-  return { profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], coach_messages: [] }
+  return { profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], coach_messages: [], insights: [] }
 }
 
 export function createLocalStore() {
@@ -392,6 +445,7 @@ export function createLocalStore() {
   db.workouts ||= []
   db.doses ||= []
   db.daily_logs ||= []
+  db.insights ||= []
   const save = () => {
     try {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(db))
@@ -556,6 +610,24 @@ export function createLocalStore() {
       save()
     },
 
+    async latestInsight() {
+      return db.insights[db.insights.length - 1] || null
+    },
+    async listInsights(limit = 6) {
+      return db.insights.slice(-limit).reverse()
+    },
+    async addInsight(i) {
+      const row = { ...cleanInsight(i), id: uid(), dismissed: false, created_at: now() }
+      db.insights = [...db.insights, row].slice(-30)
+      save()
+      return row
+    },
+    async dismissInsight(id) {
+      const row = db.insights.find((x) => x.id === id)
+      if (row) row.dismissed = true
+      save()
+    },
+
     async getAiUsage() {
       return null
     },
@@ -574,7 +646,7 @@ export function createLocalStore() {
     },
 
     wipe() {
-      db = { profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], coach_messages: [] }
+      db = { profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], coach_messages: [], insights: [] }
       try {
         localStorage.removeItem(LOCAL_KEY)
       } catch {

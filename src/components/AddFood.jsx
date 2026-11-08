@@ -30,7 +30,7 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, quer
   const day = formatDayLabel(date, today)
 
   return (
-    <Sheet title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
+    <Sheet tall title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
       <div className="stack" style={{ marginBottom: 14 }}>
         <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
         <Segmented
@@ -525,7 +525,7 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
 
       {loading && (
         <div className="card" style={{ marginTop: 14 }}>
-          <Thinking status={prefs.aiChecks ? AI_STEPS[step] : 'Thinking…'} />
+          <Thinking status={prefs.aiChecks ? AI_STEPS[step] : 'Mimi is thinking…'} />
         </div>
       )}
 

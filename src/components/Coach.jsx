@@ -5,7 +5,7 @@ import { buildCoachContext } from '../lib/coachContext.js'
 import { buildRefs } from '../lib/foodSearch.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { glp1Plan } from '../lib/glp1.js'
-import { Icon, MiniMarkdown, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
+import { Avatar, Icon, MiniMarkdown, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
 
 const GLP1_PROMPTS = [
   ['What should I eat on dose day?', 'var(--purple)'],
@@ -31,7 +31,7 @@ export default function Coach({ active = true }) {
   const [messages, setMessages] = useState(null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(null) // text while a reply is arriving
-  const [status, setStatus] = useState('Thinking…')
+  const [status, setStatus] = useState('Mimi is thinking…')
   const [busy, setBusy] = useState(false)
   const endRef = useRef()
   const abortRef = useRef()
@@ -67,12 +67,12 @@ export default function Coach({ active = true }) {
   if (mode !== 'cloud') {
     return (
       <div>
-        <h1>Coach</h1>
+        <h1>Mimi</h1>
         <div className="center" style={{ marginBottom: 8 }}>
           <Penguin kind="thinking" size={130} />
         </div>
         <div className="card warn small">
-          The AI coach needs an account, because it runs on the server where the Claude API key is kept secret. Sign out from Settings
+          Mimi the Penguin, your AI coach, needs an account, because the AI runs on the server where the Claude API key is kept secret. Sign out from Settings
           and create an account to use it. Your local data can be exported first and imported after.
         </div>
       </div>
@@ -84,7 +84,7 @@ export default function Coach({ active = true }) {
     if (!question || busy) return
     setInput('')
     setBusy(true)
-    setStatus('Thinking…')
+    setStatus('Mimi is thinking…')
     const prior = (messages || []).slice(-20).map(({ role, content }) => ({ role, content }))
     try {
       const saved = await store.addCoachMessage({ role: 'user', content: question })
@@ -137,8 +137,8 @@ export default function Coach({ active = true }) {
         <div className="row" style={{ gap: 12, alignItems: 'flex-end' }}>
           <PenguinFace size={44} />
           <div>
-            <div className="eyebrow">Your coach · Claude</div>
-            <h1>Coach</h1>
+            <div className="eyebrow">Your coach · Mimi the Penguin</div>
+            <h1>Mimi</h1>
           </div>
         </div>
         {messages?.length > 0 && !busy && (
@@ -155,9 +155,9 @@ export default function Coach({ active = true }) {
           {messages.length === 0 && (
             <div className="card center" style={{ paddingTop: 8 }}>
               <Penguin kind="thinking" size={130} />
-              <p className="headline" style={{ marginTop: 4 }}>Ask me anything</p>
+              <p className="headline" style={{ marginTop: 4 }}>Hi, I’m Mimi the Penguin</p>
               <p className="small muted">
-                Food, exercise, your numbers{onGlp1 ? ', your GLP-1 medicine' : ''} or how you’re feeling. I can see your targets, the last two weeks of
+                Your coach. Ask me about food, exercise, your numbers{onGlp1 ? ', your GLP-1 medicine' : ''} or how you’re feeling. I can see your targets, the last two weeks of
                 logs, check-ins and weight trend, and I check foods against USDA and Open Food Facts.
               </p>
               <p className="tiny muted" style={{ margin: 0 }}>
@@ -175,7 +175,10 @@ export default function Coach({ active = true }) {
                 </div>
               </div>
             ) : (
-              <div key={m.id} className="bubble user">{m.content}</div>
+              <div key={m.id} className="bubble-row mine">
+                <div className="bubble user">{m.content}</div>
+                {messages[i + 1]?.role !== 'user' ? <Avatar profile={app.profile} size={28} className="bubble-face" /> : <span className="bubble-face" />}
+              </div>
             ),
           )}
           {streaming !== null &&
@@ -220,7 +223,7 @@ export default function Coach({ active = true }) {
               ref={inputRef}
               className="input grow"
               rows={1}
-              placeholder="Ask your coach anything…"
+              placeholder="Ask Mimi anything…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

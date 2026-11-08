@@ -117,7 +117,7 @@ export function PenguinLoader({ label = 'Warming up…' }) {
 }
 
 /** Inline "the AI is thinking" row with the thinking penguin. */
-export function Thinking({ status = 'Thinking…', size = 64 }) {
+export function Thinking({ status = 'Mimi is thinking…', size = 64 }) {
   return (
     <div className="thinking" role="status" aria-live="polite">
       <Penguin kind="thinking" size={size} />
@@ -126,12 +126,25 @@ export function Thinking({ status = 'Thinking…', size = 64 }) {
   )
 }
 
+// ---------------------------------------------------------------- avatar
+
+/** The user's profile photo, or their initial on a gradient. */
+export function Avatar({ profile, name, size = 60, className = '' }) {
+  const initial = (name || profile?.display_name || '?').trim()[0]?.toUpperCase() || '?'
+  const src = typeof profile?.avatar === 'string' && profile.avatar.startsWith('data:image/') ? profile.avatar : null
+  return (
+    <span className={`avatar ${className}`} style={{ width: size, height: size, fontSize: Math.round(size * 0.43) }} aria-hidden="true">
+      {src ? <img src={src} alt="" /> : initial}
+    </span>
+  )
+}
+
 // ---------------------------------------------------------------- sheet
 
 const CLOSE_MS = 260
 
 /** Bottom sheet: slides up, swipe down on the header or tap outside to close. */
-export function Sheet({ title, onClose, children, action }) {
+export function Sheet({ title, onClose, children, action, tall = false }) {
   const [closing, setClosing] = useState(false)
   const sheetRef = useRef()
   const drag = useRef(null)
@@ -182,7 +195,7 @@ export function Sheet({ title, onClose, children, action }) {
   // Portal to <body> so no animated ancestor can trap the fixed backdrop.
   return createPortal(
     <div className={`sheet-backdrop${closing ? ' closing' : ''}`} onClick={close}>
-      <div ref={sheetRef} className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div ref={sheetRef} className={`sheet${tall ? ' tall' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-top" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
           <div className="sheet-grabber" />
           <div className="sheet-head">

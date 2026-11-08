@@ -15,7 +15,8 @@ import {
   TargetPreview,
   useProfileForm,
 } from './ProfileForm.jsx'
-import { ListRow, ListSection, MenuRow, Segmented, Sheet, ToggleRow } from './ui.jsx'
+import { Avatar, Icon, ListRow, ListSection, MenuRow, Segmented, Sheet, ToggleRow } from './ui.jsx'
+import { photoToAvatar } from '../lib/image.js'
 import { FREQUENCY_LABEL } from '../data/glp1.js'
 import { formatDose, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
 
@@ -56,7 +57,7 @@ export default function Settings() {
   const app = useApp()
   const { store, mode, session, profile, saveProfile, series, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
   const [usage, setUsage] = useState(null)
-  const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password'
+  const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password' | 'photo'
   const importRef = useRef()
   const trendKg = series.length ? series[series.length - 1].trend : null
 
@@ -136,9 +137,14 @@ export default function Settings() {
       <h1>Settings</h1>
 
       {/* Profile header */}
-      <button className="list row tap" style={{ width: '100%', padding: 14, gap: 14, border: 0, textAlign: 'left', color: 'inherit', cursor: 'pointer' }} onClick={() => setSheet('body')}>
-        <span className="avatar">{(name || '?').trim()[0]?.toUpperCase()}</span>
-        <span className="grow">
+      <div className="list row" style={{ width: '100%', padding: 14, gap: 14 }}>
+        <button className="avatar-btn" onClick={() => setSheet('photo')} aria-label={profile.avatar ? 'Change profile photo' : 'Add a profile photo'}>
+          <Avatar profile={profile} name={name} size={60} />
+          <span className="avatar-badge" aria-hidden="true">
+            <Icon name="camera" strokeWidth={2.4} />
+          </span>
+        </button>
+        <button className="grow tap" style={{ border: 0, background: 'none', padding: 0, textAlign: 'left', color: 'inherit', cursor: 'pointer', font: 'inherit' }} onClick={() => setSheet('body')}>
           <span className="title3 ellipsis" style={{ display: 'block' }}>{name}</span>
           <span className="tiny muted ellipsis" style={{ display: 'block' }}>
             {mode === 'cloud' ? session?.user?.email : 'Local mode: data stays on this device'}
@@ -148,11 +154,11 @@ export default function Settings() {
               {targets.calories.toLocaleString('en-GB')} kcal a day{targets.overridden ? ' (manual)' : ''}
             </span>
           )}
-        </span>
-      </button>
+        </button>
+      </div>
 
       <ListSection header="Plan" footer="Your calorie target updates as your trend weight changes.">
-        <ListRow icon="target" color="var(--green)" label="Daily target" value={targets ? `${targets.calories} kcal` : '—'} onClick={() => setSheet('plan')} />
+        <ListRow icon="target" color="var(--green)" label="Daily target" value={targets ? `${targets.calories.toLocaleString('en-GB')} kcal` : '—'} onClick={() => setSheet('plan')} />
         <ListRow icon="trend" color="var(--teal)" label="Goal weight" value={displayWeight(Number(profile.goal_weight_kg), units)} onClick={() => setSheet('plan')} />
         <ListRow
           icon="clock"
@@ -182,7 +188,7 @@ export default function Settings() {
 
       <ListSection
         header="GLP-1 medicine"
-        footer={plan ? 'Doses, injection sites and side effects are logged from Today. The coach tailors food, water and exercise advice to your medicine.' : 'Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda and more: log doses and injection sites, and get coaching that fits.'}
+        footer={plan ? 'Doses, injection sites and side effects are logged from Today. Mimi tailors food, water and exercise advice to your medicine.' : 'Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda and more: log doses and injection sites, and get coaching that fits.'}
       >
         <ListRow
           icon="syringe"
@@ -236,8 +242,20 @@ export default function Settings() {
       </ListSection>
 
       {mode === 'cloud' && (
-        <ListSection header="Coach">
-          <ListRow icon="note" color="var(--teal)" label="Notes for the coach" sub={profile.coach_notes ? profile.coach_notes.slice(0, 60) : 'Shifts, training, injuries, likes'} onClick={() => setSheet('notes')} />
+        <ListSection
+          header="Mimi · your coach"
+          footer="Check-ins only run when you open the app and something has changed, at most 6 a day, using a small, cheap AI request (a fraction of a US cent each)."
+        >
+          <MenuRow
+            icon="sparkles"
+            color="var(--purple)"
+            label="Mimi’s check-ins"
+            sub="Tips from your log while the app is open"
+            value={String(prefs.checkinHours ?? 3)}
+            options={[['2', 'Every 2 hours', 'Every 2 h'], ['3', 'Every 3 hours', 'Every 3 h'], ['0', 'Off']]}
+            onChange={(v) => setPrefs({ checkinHours: Number(v) })}
+          />
+          <ListRow icon="note" color="var(--teal)" label="Notes for Mimi" sub={profile.coach_notes ? profile.coach_notes.slice(0, 60) : 'Shifts, training, injuries, likes'} onClick={() => setSheet('notes')} />
           <ListRow
             icon="chat"
             color="var(--blue)"
@@ -248,8 +266,8 @@ export default function Settings() {
         </ListSection>
       )}
       {mode !== 'cloud' && (
-        <ListSection header="Coach">
-          <ListRow icon="note" color="var(--teal)" label="Notes for the coach" sub="Used when you have an account" onClick={() => setSheet('notes')} />
+        <ListSection header="Mimi · your coach">
+          <ListRow icon="note" color="var(--teal)" label="Notes for Mimi" sub="Used when you have an account" onClick={() => setSheet('notes')} />
         </ListSection>
       )}
 
@@ -300,16 +318,17 @@ export default function Settings() {
         </ProfileSheet>
       )}
       {sheet === 'notes' && (
-        <ProfileSheet title="Notes for the coach" groups={[]} onClose={() => setSheet(null)}>
+        <ProfileSheet title="Notes for Mimi" groups={[]} onClose={() => setSheet(null)}>
           {(form) => (
             <>
               <CoachNotesField form={form} />
-              <p className="list-footer" style={{ marginTop: -6, marginBottom: 14 }}>The coach reads these with every message.</p>
+              <p className="list-footer" style={{ marginTop: -6, marginBottom: 14 }}>Mimi reads these with every message.</p>
             </>
           )}
         </ProfileSheet>
       )}
       {sheet === 'password' && <ChangePassword onClose={() => setSheet(null)} />}
+      {sheet === 'photo' && <PhotoSheet name={name} onClose={() => setSheet(null)} />}
     </div>
   )
 }
@@ -373,6 +392,66 @@ function ChangePassword({ onClose }) {
         </label>
         <button className="btn block" disabled={busy || pw.length < 8}>Save</button>
       </form>
+    </Sheet>
+  )
+}
+
+/** Add, change or remove the profile photo. */
+function PhotoSheet({ name, onClose }) {
+  const { profile, saveProfile, toast } = useApp()
+  const [preview, setPreview] = useState(profile.avatar || null)
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef()
+
+  async function pick(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setPreview(await photoToAvatar(file))
+    } catch (err) {
+      toast(err.message, 'error')
+    }
+  }
+
+  async function save(avatar) {
+    setBusy(true)
+    try {
+      await saveProfile({ ...profile, avatar })
+      toast(avatar ? 'Photo saved' : 'Photo removed')
+      onClose()
+    } catch (err) {
+      toast(err.message, 'error')
+      setBusy(false)
+    }
+  }
+
+  const changed = preview !== (profile.avatar || null)
+  return (
+    <Sheet title="Profile photo" onClose={onClose}>
+      <div className="photo-hero">
+        <Avatar profile={{ ...profile, avatar: preview }} name={name} size={144} />
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} />
+      <div className="stack">
+        <button className="btn secondary block" type="button" disabled={busy} onClick={() => fileRef.current.click()}>
+          <Icon name="camera" size={18} /> {preview ? 'Choose another photo' : 'Choose a photo'}
+        </button>
+        {changed && preview && (
+          <button className="btn block" type="button" disabled={busy} onClick={() => save(preview)}>
+            {busy ? 'Saving…' : 'Use this photo'}
+          </button>
+        )}
+        {profile.avatar && (
+          <button className="btn destructive block" type="button" disabled={busy} onClick={() => save(null)}>
+            Remove photo
+          </button>
+        )}
+      </div>
+      <p className="list-footer" style={{ marginTop: 12 }}>
+        Cropped to a square and shrunk to a small image. It’s stored with your profile{' '}
+        {profile.id === 'local' ? 'on this device' : 'in your account'} and only you can see it.
+      </p>
     </Sheet>
   )
 }

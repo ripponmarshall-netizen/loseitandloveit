@@ -7,13 +7,15 @@ import { MOOD_BY_V } from '../data/glp1.js'
 import { GLASS_ML, dailyNudge, doseStatus, doseStatusLabel, formatDose, formatWater, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
-import { Icon, MacroBar, PenguinFace, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
+import { Avatar, Icon, MacroBar, PenguinFace, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { ExerciseCard } from './Workouts.jsx'
+import { MacroSplit } from './MealBreakdown.jsx'
+import MimiCheckin from './MimiCheckin.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
 
 export default function Today() {
-  const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, toast, profile } = useApp()
+  const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, toast, profile, setTab } = useApp()
   const day = useDay(date)
   const [editing, setEditing] = useState(null)
   const entries = day?.entries ?? null
@@ -68,6 +70,9 @@ export default function Today() {
           <h1>{formatDayLabel(date, today)}</h1>
         </div>
         <div className="day-nav">
+          <button className="head-avatar" aria-label="Your profile and settings" onClick={() => setTab('settings')}>
+            <Avatar profile={profile} size={34} />
+          </button>
           <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
             <Icon name="left" />
           </button>
@@ -97,11 +102,11 @@ export default function Today() {
             )}
           </div>
         </div>
-        <div className="grid3 macros">
+        <button className="grid3 macros macros-btn" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label="Today’s nutrition breakdown">
           <MacroBar label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
           <MacroBar label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
           <MacroBar label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
-        </div>
+        </button>
       </section>
 
       <div className="tiles">
@@ -149,6 +154,8 @@ export default function Today() {
         )}
       </div>
 
+      {isToday && <MimiCheckin />}
+
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
           <Icon name={nudge.tone === 'urgent' ? 'info' : 'heart'} size={18} />
@@ -172,14 +179,21 @@ export default function Today() {
             const kcal = sumEntries(list).calories
             return (
               <div key={meal} className="meal-group">
-                <button className="list-row meal-row" style={{ '--c': MEAL_COLOR[meal] }} onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
-                  <span className="dot" />
-                  <span className="label headline">{MEAL_LABEL[meal]}</span>
-                  <span className="value num">{kcal > 0 ? fmt(kcal) : ''}</span>
-                  <span className="meal-add" aria-hidden="true">
+                <div className="list-row meal-row" style={{ '--c': MEAL_COLOR[meal] }}>
+                  <button
+                    className="meal-open"
+                    onClick={() => (list.length ? openSheet('meal', { date, meal, onEdit: setEditing }) : openAdd({ meal }))}
+                    aria-label={list.length ? `${MEAL_LABEL[meal]} nutrition: ${fmt(kcal)} kcal` : `Add to ${MEAL_LABEL[meal]}`}
+                  >
+                    <span className="dot" />
+                    <span className="label headline">{MEAL_LABEL[meal]}</span>
+                    {list.length > 0 && <Icon name="chart" size={16} className="meal-chart" />}
+                    <span className="value num">{kcal > 0 ? fmt(kcal) : ''}</span>
+                  </button>
+                  <button className="meal-add" onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
                     <Icon name="plus" strokeWidth={2.8} />
-                  </span>
-                </button>
+                  </button>
+                </div>
                 {list.map((e) => (
                   <button key={e.id} className="list-row entry-row" onClick={() => setEditing(e)}>
                     <span className="label">
@@ -250,7 +264,7 @@ function Tile({ icon, emoji, color, value, sub, label, pct, onClick, onPlus, plu
   )
 }
 
-/** "Ask your coach anything": one tap from Today to an answer. */
+/** "Ask Mimi anything": one tap from Today to an answer. */
 function AskCoach() {
   const { askCoach, profile } = useApp()
   const [q, setQ] = useState('')
@@ -271,18 +285,18 @@ function AskCoach() {
           send(q)
         }}
       >
-        <button type="button" className="ask-face" aria-label="Open the coach" onClick={() => send('')}>
+        <button type="button" className="ask-face" aria-label="Open Mimi" onClick={() => send('')}>
           <PenguinFace size={36} />
         </button>
         <input
           className="ask-input"
-          placeholder="Ask your coach anything…"
+          placeholder="Ask Mimi anything…"
           value={q}
           enterKeyHint="send"
           onChange={(e) => setQ(e.target.value)}
           onFocus={() => setFocused(true)}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
-          aria-label="Ask your coach"
+          aria-label="Ask Mimi"
         />
         <button className="send-btn" disabled={!q.trim()} aria-label="Ask">
           <Icon name="up" strokeWidth={2.6} />
@@ -356,6 +370,11 @@ function EditEntry({ entry, onClose }) {
           <span className="muted"> kcal</span>
         </div>
       </div>
+      {totals.calories > 0 && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <MacroSplit entries={[{ ...e, id: entry.id }]} size={124} />
+        </div>
+      )}
       <div className="tiny muted" style={{ margin: '0 4px 6px' }}>Per serving</div>
       <div className="grid4">
         <label className="field"><span>kcal</span><input className="input" inputMode="decimal" value={e.calories} onChange={set('calories')} /></label>
