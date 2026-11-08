@@ -157,7 +157,7 @@ export function LifestyleFields({ form }) {
 export function CoachNotesField({ form }) {
   return (
     <label className="field">
-      <span>Notes for the coach (optional)</span>
+      <span>Notes for Mimi, your coach (optional)</span>
       <textarea
         className="input"
         placeholder="e.g. Rotating 24h shifts. Gym 3×/week. Don't like fish. Bad knee."

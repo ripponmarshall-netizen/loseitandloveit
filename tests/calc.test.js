@@ -199,3 +199,37 @@ test('manual target: no "raised to the minimum" warning', () => {
   assert.equal(t.calories, 1400)
   assert.ok(!t.warnings.some((w) => /raised/.test(w)), t.warnings.join())
 })
+
+// ---------- Meal breakdown ----------
+import { macroBreakdown, wholePercents } from '../src/lib/calc.js'
+
+test('wholePercents always sums to 100 and handles zeros', () => {
+  assert.deepEqual(wholePercents([1, 1, 1]), [34, 33, 33])
+  assert.equal(wholePercents([10, 20, 33.3]).reduce((s, v) => s + v, 0), 100)
+  assert.deepEqual(wholePercents([0, 0]), [0, 0])
+  assert.deepEqual(wholePercents([5, -3]), [100, 0])
+})
+
+test('macroBreakdown: calories by macro, share of day and foods sorted', () => {
+  const entries = [
+    { id: 'a', name: 'Ackee and saltfish', servings: 1, calories: 380, protein_g: 22, carbs_g: 8, fat_g: 29 },
+    { id: 'b', name: 'Fried dumpling', servings: 2, calories: 170, protein_g: 3, carbs_g: 22, fat_g: 8 },
+  ]
+  const b = macroBreakdown(entries, { calories: 2000, protein: 150, carbs: 200, fat: 60 })
+  assert.equal(b.totals.calories, 720)
+  assert.deepEqual(b.kcalFrom, { protein: 112, carbs: 208, fat: 405 })
+  assert.equal(b.split.protein + b.split.carbs + b.split.fat, 100)
+  assert.equal(b.split.fat, 56)
+  assert.equal(b.ofDay.calories, 36)
+  assert.equal(b.ofDay.protein, 19)
+  assert.deepEqual(b.items.map((i) => i.id), ['a', 'b'])
+  assert.equal(b.items[0].share + b.items[1].share, 100)
+})
+
+test('macroBreakdown: empty meal and no targets', () => {
+  const b = macroBreakdown([], null)
+  assert.equal(b.totals.calories, 0)
+  assert.deepEqual(b.split, { protein: 0, carbs: 0, fat: 0 })
+  assert.equal(b.ofDay.calories, null)
+  assert.deepEqual(b.items, [])
+})

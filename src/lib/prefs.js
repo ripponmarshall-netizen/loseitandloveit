@@ -8,6 +8,7 @@ export const DEFAULT_PREFS = {
   usda: true, // USDA FoodData Central
   off: true, // Open Food Facts
   aiChecks: true, // AI estimates look foods up in the databases first
+  checkinHours: 3, // Mimi's check-ins: every 2 or 3 hours while the app is open, 0 = off
 }
 
 export function readPrefs() {

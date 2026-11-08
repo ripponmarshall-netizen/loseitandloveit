@@ -12,12 +12,14 @@ import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
 import LogSheet from './components/LogSheet.jsx'
+import { MealBreakdownSheet } from './components/MealBreakdown.jsx'
 import { WorkoutSheet } from './components/Workouts.jsx'
 import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
 import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
+import { watchKeyboard } from './lib/viewport.js'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -46,6 +48,7 @@ const SHEETS = {
   weight: WeightSheet,
   dose: DoseSheet,
   medication: MedicationSheet,
+  meal: MealBreakdownSheet,
 }
 
 /**
@@ -101,6 +104,9 @@ export default function App() {
   // scroll positions survive when you switch tabs.
   const [visited, setVisited] = useState(() => new Set(['today']))
   const toastTimer = useRef()
+
+  // Keep sheets and the composer above the iPhone keyboard.
+  useEffect(() => watchKeyboard(), [])
 
   useEffect(() => {
     applyTheme(prefs.theme)
@@ -313,7 +319,7 @@ export default function App() {
             <button className="tab-add" aria-label="Log food, drink, water, exercise, mood or a dose" onClick={() => openSheet('log', { date })}>
               <Icon name="plus" strokeWidth={2.8} />
             </button>
-            <TabBtn id="coach" label="Coach" tab={tab} setTab={goTab} face />
+            <TabBtn id="coach" label="Mimi" tab={tab} setTab={goTab} face />
             <TabBtn id="settings" icon="gear" label="Settings" tab={tab} setTab={goTab} />
           </div>
         </nav>

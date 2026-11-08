@@ -78,6 +78,18 @@ export async function estimateMeal({ text, image, refs, sources, checkDatabases 
   return res.json()
 }
 
+/** Mimi's check-in: a headline and 1–3 short tips from a compact data snapshot. */
+export async function requestCheckin({ context, signal }) {
+  const res = await fetch(AI_FUNCTION_URL, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: 'checkin', context }),
+    signal,
+  })
+  if (!res.ok) throw await errorFrom(res)
+  return res.json()
+}
+
 /**
  * Search USDA FoodData Central and Open Food Facts (through the Edge Function,
  * which holds the USDA key and isn't blocked by CORS). No AI credit is used.

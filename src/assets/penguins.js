@@ -16,7 +16,7 @@ const body = `
     <path class="pg-body" d="M100 52c30 0 46 26 48 60 2 34-16 60-48 60s-50-26-48-60c2-34 18-60 48-60z"/>
     <ellipse class="pg-white" cx="100" cy="128" rx="32" ry="40"/>`
 
-export const PENGUIN_WORKOUT = `<svg class="pg pg-workout" viewBox="0 0 200 200" role="img" aria-label="Penguin lifting weights">
+export const PENGUIN_WORKOUT = `<svg class="pg pg-workout" viewBox="0 0 200 200" role="img" aria-label="Mimi the Penguin lifting weights">
   <defs><linearGradient id="pgw-halo" x1="0" y1="0" x2="1" y2="1"><stop class="pg-halo-a" offset="0"/><stop class="pg-halo-b" offset="1"/></linearGradient></defs>
   <circle cx="100" cy="104" r="90" fill="url(#pgw-halo)"/>
   <ellipse class="pg-shadow" cx="100" cy="181" rx="46" ry="6"/>
@@ -37,7 +37,7 @@ export const PENGUIN_WORKOUT = `<svg class="pg pg-workout" viewBox="0 0 200 200"
   </g>
 </svg>`
 
-export const PENGUIN_THINKING = `<svg class="pg pg-thinking" viewBox="0 0 200 200" role="img" aria-label="Penguin thinking">
+export const PENGUIN_THINKING = `<svg class="pg pg-thinking" viewBox="0 0 200 200" role="img" aria-label="Mimi the Penguin thinking">
   <defs><linearGradient id="pgt-halo" x1="0" y1="0" x2="1" y2="1"><stop class="pg-halo-a" offset="0"/><stop class="pg-halo-b" offset="1"/></linearGradient></defs>
   <circle cx="96" cy="108" r="86" fill="url(#pgt-halo)"/>
   <ellipse class="pg-shadow" cx="100" cy="181" rx="44" ry="6"/>
