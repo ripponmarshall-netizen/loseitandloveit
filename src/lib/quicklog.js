@@ -25,6 +25,8 @@ const WORD_NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, half
 
 function waterMl(text) {
   if (!/\bwater\b/.test(text) || /\b(coconut|soda|tonic)\b/.test(text)) return null
+  // Foods named after water: "water crackers", "water biscuits", "water bread".
+  if (/\bwater\s+(crackers?|biscuits?|bread|crax)\b/.test(text)) return null
   const m =
     text.match(new RegExp(`${NUM}\\s*([a-z ]+?)\\s*(?:of\\s+)?water`)) ||
     text.match(new RegExp(`water\\s*${NUM}\\s*([a-z]*)`)) ||

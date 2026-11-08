@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
   adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, hasCondition, kmhToMph,
-  milestones, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
+  projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
 } from '../lib/calc.js'
+import { buildMilestones, computeBadges, milestoneProgress } from '../lib/milestones.js'
+import { BadgeCelebration, BadgeDetail, BadgeGrid, MilestonesCard, keepEarned, useNewBadges } from './Milestones.jsx'
 import { MOOD_BY_V, SYMPTOM_BY_ID } from '../data/glp1.js'
 import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } from '../lib/glp1.js'
 import { Glp1Progress } from './Glp1.jsx'
@@ -33,20 +35,27 @@ async function loadYear(store, today) {
 }
 
 export default function Progress() {
-  const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus } = useApp()
+  const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus, session } = useApp()
   const [daily, setDaily] = useState({})
-  const [workouts, setWorkouts] = useState([])
+  const [workouts, setWorkouts] = useState([]) // a year, for badges; the exercise card uses the last 28 days
+  const [loaded, setLoaded] = useState({ food: false, workouts: false })
   const [open, setOpen] = useState({ weight: true, macros: false, dose: false })
+  const [badgeOpen, setBadgeOpen] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     loadYear(store, today)
-      .then((d) => !cancelled && setDaily(d))
-      .catch((e) => toast(e.message, 'error'))
+      .then((d) => {
+        if (cancelled) return
+        setDaily(d)
+        setLoaded((l) => ({ ...l, food: true }))
+      })
+      .catch((e) => !cancelled && toast(e.message, 'error'))
     store
-      .listWorkouts(addDays(today, -27), today)
+      .listWorkouts(addDays(today, -372), today)
       .then((w) => !cancelled && setWorkouts(w))
       .catch(() => !cancelled && setWorkouts([]))
+      .finally(() => !cancelled && setLoaded((l) => ({ ...l, workouts: true })))
     return () => {
       cancelled = true
     }
@@ -64,6 +73,19 @@ export default function Progress() {
   const last = series[series.length - 1]
   const startKg = Number(profile.start_weight_kg)
   const goalKg = Number(profile.goal_weight_kg)
+
+  const ms = useMemo(() => buildMilestones({ startKg, goalKg, series, units }), [startKg, goalKg, series, units])
+  const msProgress = milestoneProgress(ms, startKg, last?.trend)
+  const badges = useMemo(
+    () =>
+      computeBadges({
+        weights, daily, workouts, targets, milestones: ms, startKg, goalKg, currentKg: last?.trend,
+        stepLabel: units === 'imperial' ? '5 lb' : '2 kg',
+      }),
+    [weights, daily, workouts, targets, ms, startKg, goalKg, last?.trend, units],
+  )
+  const recentWorkouts = useMemo(() => workouts.filter((w) => w.log_date >= addDays(today, -27)), [workouts, today])
+  const celebration = useNewBadges(badges, loaded.food && loaded.workouts, session?.user?.id)
   const rate = weeklyRate(series)
   const eta = projectGoalDate(series, goalKg, today, rate)
   const adaptive = adaptiveTdee({ daily, series, endDate: addDays(today, -1) })
@@ -120,9 +142,11 @@ export default function Progress() {
 
       <WeighIns weights={weights} />
 
-      <Milestones startKg={startKg} currentKg={last?.trend} units={units} pcos={hasCondition(profile, 'pcos')} />
+      <MilestonesCard milestones={ms} progress={msProgress} series={series} units={units} pcos={hasCondition(profile, 'pcos')} />
 
-      <ExerciseSummary workouts={workouts} today={today} units={units} />
+      <BadgeGrid badges={keepEarned(badges, celebration.kept)} fresh={celebration.fresh} units={units} onOpen={setBadgeOpen} />
+
+      <ExerciseSummary workouts={recentWorkouts} today={today} units={units} />
 
       <Glp1Progress onEditDose={(d) => openSheet('dose', { date: d.log_date, dose: d })} onSetup={() => openSheet('medication')} />
 
@@ -157,6 +181,8 @@ export default function Progress() {
         )}
       </section>
 
+      {celebration.queue.length > 0 && <BadgeCelebration badges={celebration.queue} units={units} onDone={celebration.dismiss} />}
+      {badgeOpen && <BadgeDetail badge={badgeOpen} units={units} onClose={() => setBadgeOpen(null)} />}
     </div>
   )
 }
@@ -524,30 +550,3 @@ function WeighIns({ weights }) {
   )
 }
 
-function Milestones({ startKg, currentKg, units, pcos }) {
-  const list = milestones(startKg, currentKg)
-  if (!list.length) return null
-  return (
-    <section className="card">
-      <h2>Health milestones</h2>
-      {list.map((m) => (
-        <div key={m.pct} className="milestone">
-          <div className="row between small">
-            <span>
-              {m.pct}% lost · {displayWeight(m.targetKg, units)}
-            </span>
-            <span className="num muted">{m.reached ? 'Done ✓' : `${Math.round(m.progress * 100)}%`}</span>
-          </div>
-          <div className="bar" style={{ height: 8, borderRadius: 4, background: 'var(--fill)', overflow: 'hidden', marginTop: 4 }}>
-            <i style={{ display: 'block', height: '100%', width: `${m.progress * 100}%`, background: m.reached ? 'var(--green)' : 'var(--indigo)', borderRadius: 4, transition: 'width 0.4s ease' }} />
-          </div>
-        </div>
-      ))}
-      <p className="tiny muted" style={{ margin: '10px 0 0' }}>
-        {pcos
-          ? 'With PCOS, losing 5–10% of your starting weight can bring back regular cycles, help fertility and lower diabetes risk, even while the goal is still far off.'
-          : 'Losing 5–10% of your starting weight already lowers blood pressure and blood sugar, even while the goal is still far off.'}
-      </p>
-    </section>
-  )
-}
