@@ -1,5 +1,5 @@
 import { addDays, daysBetween, lastNDates } from './dates.js'
-import { ageFromBirthYear, adaptiveTdee, dailyTotals, entryTotals, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
+import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
 import { FREQUENCY_LABEL, MOOD_BY_V, SYMPTOM_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
 
@@ -37,6 +37,7 @@ export async function buildCoachContext({ store, profile, series, targets, today
       day_starts_at_hour: profile.day_start_hour,
       coach_notes: profile.coach_notes || undefined,
       exercise_eatback_pct: profile.exercise_eatback_pct ?? 0,
+      health_conditions: cleanConditions(profile.conditions, profile.sex).map((c) => CONDITIONS[c].short),
     },
     targets: targets && {
       calories: targets.calories,
@@ -44,6 +45,7 @@ export async function buildCoachContext({ store, profile, series, targets, today
       carbs_g: targets.carbs,
       fat_g: targets.fat,
       formula_maintenance_kcal: targets.tdee,
+      macro_split: targets.split,
       warnings: targets.warnings.length ? targets.warnings : undefined,
     },
     weight: last && {
@@ -53,6 +55,12 @@ export async function buildCoachContext({ store, profile, series, targets, today
       weekly_change_kg: rate == null ? null : Math.round(rate * 100) / 100,
       projected_goal_date: projectGoalDate(series, Number(profile.goal_weight_kg), today, rate),
       weigh_ins_last_28_days: series.filter((p) => p.date >= addDays(today, -27)).length,
+      milestones: milestones(profile.start_weight_kg, last.trend).map((m) => ({
+        pct_loss: m.pct,
+        target_kg: Math.round(m.targetKg * 10) / 10,
+        reached: m.reached,
+      })),
+      recent_weigh_in_notes: series.filter((p) => p.note && p.date >= addDays(today, -13)).map((p) => ({ date: p.date, note: p.note })),
     },
     adaptive_maintenance: adaptiveTdee({ daily, series, endDate: addDays(today, -1) }) || 'not enough data yet',
     last_14_days: lastNDates(today, 14).map((d) => ({

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { supabase } from '../lib/supabase.js'
-import { ACTIVITY, ageFromBirthYear, cmToFtIn, displayWeight, entryTotals } from '../lib/calc.js'
+import { ACTIVITY, CONDITIONS, ageFromBirthYear, cleanConditions, cmToFtIn, displayWeight, entryTotals } from '../lib/calc.js'
+import { formatShortDate } from '../lib/dates.js'
 import { validateProfile } from '../lib/profileForm.js'
 import { APP_VERSION } from '../config.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
@@ -12,6 +13,7 @@ import {
   DAY_START_OPTIONS,
   EATBACK_OPTIONS,
   GoalFields,
+  HealthFields,
   TargetPreview,
   useProfileForm,
 } from './ProfileForm.jsx'
@@ -55,11 +57,12 @@ function heightLabel(cm, units) {
 
 export default function Settings() {
   const app = useApp()
-  const { store, mode, session, profile, saveProfile, series, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
+  const { store, mode, session, profile, saveProfile, series, weights, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
   const [usage, setUsage] = useState(null)
   const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password' | 'photo'
   const importRef = useRef()
   const trendKg = series.length ? series[series.length - 1].trend : null
+  const latestWeighIn = weights[weights.length - 1]
 
   useEffect(() => {
     if (mode === 'cloud') store.getAiUsage(today).then(setUsage).catch(() => {})
@@ -178,12 +181,29 @@ export default function Settings() {
           value={[profile.sex === 'female' ? 'Female' : 'Male', ageFromBirthYear(profile.birth_year), heightLabel(profile.height_cm, units)].filter(Boolean).join(' · ')}
           onClick={() => setSheet('body')}
         />
-        <ListRow icon="scale" color="var(--indigo)" label="Trend weight" value={trendKg ? displayWeight(trendKg, units) : '—'} chevron={false} />
+        <ListRow
+          icon="scale"
+          color="var(--indigo)"
+          label="Current weight"
+          sub={latestWeighIn ? `Trend · last weigh-in ${displayWeight(Number(latestWeighIn.weight_kg), units)} on ${formatShortDate(latestWeighIn.log_date)}` : 'From your weigh-ins'}
+          value={trendKg ? displayWeight(trendKg, units) : '—'}
+          onClick={() => openSheet('weight', latestWeighIn?.log_date === today ? { weight: latestWeighIn } : {})}
+        />
         <ListRow icon="ruler" color="var(--purple)" label="Units">
           <div style={{ width: 140 }}>
             <Segmented label="Units" value={units} onChange={(u) => saveField({ units: u }, 'Units updated')} options={[['imperial', 'lb · ft'], ['metric', 'kg · cm']]} />
           </div>
         </ListRow>
+      </ListSection>
+
+      <ListSection header="Health" footer="Conditions a doctor has diagnosed. They adjust your targets and how Mimi coaches you.">
+        <ListRow
+          icon="heart"
+          color="var(--pink)"
+          label="Health conditions"
+          value={cleanConditions(profile.conditions, profile.sex).map((c) => CONDITIONS[c].short).join(', ') || 'None'}
+          onClick={() => setSheet('health')}
+        />
       </ListSection>
 
       <ListSection
@@ -317,6 +337,16 @@ export default function Settings() {
           )}
         </ProfileSheet>
       )}
+      {sheet === 'health' && (
+        <ProfileSheet title="Health" groups={[]} onClose={() => setSheet(null)}>
+          {(form) => (
+            <>
+              <HealthFields form={form} />
+              <TargetPreview values={form.values} currentWeightKg={trendKg} />
+            </>
+          )}
+        </ProfileSheet>
+      )}
       {sheet === 'notes' && (
         <ProfileSheet title="Notes for Mimi" groups={[]} onClose={() => setSheet(null)}>
           {(form) => (
@@ -335,7 +365,7 @@ export default function Settings() {
 
 /** A sheet that edits part of the profile and saves the whole thing. */
 function ProfileSheet({ title, groups, children, onClose }) {
-  const { profile, saveProfile, toast } = useApp()
+  const { profile, saveProfile, toast, store, weights, reloadWeights } = useApp()
   const form = useProfileForm(profile)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -345,9 +375,20 @@ function ProfileSheet({ title, groups, children, onClose }) {
     const problem = validateProfile(form.values, groups)
     if (problem) return setErr(problem)
     setBusy(true)
+    // The first weigh-in is created from the starting weight at sign-up. If it
+    // still matches the old starting weight, keep the two in step: otherwise
+    // correcting the starting weight looks like it did nothing.
+    const oldStart = Number(profile.start_weight_kg)
+    const newStart = form.values.start_weight_kg
+    const first = weights[0]
+    const syncFirst = first && newStart && Math.abs(newStart - oldStart) >= 0.05 && Math.abs(Number(first.weight_kg) - oldStart) < 0.06
     try {
       await saveProfile(form.values)
-      toast('Saved')
+      if (syncFirst) {
+        await store.updateWeight(first.id, { log_date: first.log_date, weight_kg: newStart, note: first.note })
+        await reloadWeights()
+      }
+      toast(syncFirst ? `Saved. Your first weigh-in (${formatShortDate(first.log_date)}) was updated too.` : 'Saved')
       onClose()
     } catch (ex) {
       setErr(ex.message)

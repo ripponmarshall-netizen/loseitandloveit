@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { validateProfile } from '../lib/profileForm.js'
-import { AboutFields, BodyFields, GoalFields, LifestyleFields, TargetPreview, UnitsField, useProfileForm } from './ProfileForm.jsx'
+import { AboutFields, BodyFields, GoalFields, HealthFields, LifestyleFields, TargetPreview, UnitsField, useProfileForm } from './ProfileForm.jsx'
 import { Penguin, Segmented } from './ui.jsx'
 import { GLP1_MEDS, MED_BY_ID } from '../data/glp1.js'
 
@@ -71,7 +71,12 @@ export default function Onboarding() {
           <UnitsField form={form} />
         </>
       )}
-      {s.id === 'body' && <BodyFields form={form} />}
+      {s.id === 'body' && (
+        <>
+          <BodyFields form={form} />
+          <HealthFields form={form} />
+        </>
+      )}
       {s.id === 'goal' && (
         <>
           <GoalFields form={form} />

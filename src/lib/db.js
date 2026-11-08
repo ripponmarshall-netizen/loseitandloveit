@@ -4,6 +4,7 @@
 // Screens only ever call the functions returned here.
 
 import { supabase } from './supabase.js'
+import { cleanConditions } from './calc.js'
 
 const ENTRY_FIELDS = 'id,log_date,meal,name,serving,servings,calories,protein_g,carbs_g,fat_g,source,food_id,created_at'
 const PROFILE_FIELDS = [
@@ -14,12 +15,16 @@ const PROFILE_FIELDS = [
   'glp1_med', 'glp1_name', 'glp1_dose', 'glp1_unit', 'glp1_frequency', 'glp1_started_on', 'water_target_ml',
   // 0004: profile photo
   'avatar',
+  // 0005: health conditions (PCOS etc.)
+  'conditions',
 ]
+const WEIGHT_FIELDS = 'id,log_date,weight_kg,note'
 const DOSE_FIELDS = 'id,log_date,taken_at,med,med_name,dose,unit,route,site,notes,created_at'
 const DAILY_FIELDS = 'id,log_date,mood,energy,appetite,water_ml,symptoms,note,updated_at'
 const SITE_IDS = new Set(['abdomen-ul', 'abdomen-ur', 'abdomen-ll', 'abdomen-lr', 'thigh-l', 'thigh-r', 'arm-l', 'arm-r'])
 const MIGRATION_0003 = 'supabase/migrations/0003_glp1_checkins.sql'
 const MIGRATION_0004 = 'supabase/migrations/0004_avatar_mimi_checkins.sql'
+const MIGRATION_0005 = 'supabase/migrations/0005_health_conditions.sql'
 const INSIGHT_FIELDS = 'id,log_date,headline,tips,fingerprint,dismissed,created_at'
 const WORKOUT_FIELDS =
   'id,log_date,kind,name,duration_min,speed_kmh,incline_pct,distance_km,mode,activity,intensity,exercises,calories_burned,calories_source,notes,created_at'
@@ -122,8 +127,19 @@ function workoutError(error) {
 function pickProfile(p) {
   const out = {}
   for (const k of PROFILE_FIELDS) if (k in p) out[k] = p[k] === '' ? null : p[k]
+  if ('conditions' in out) out.conditions = cleanConditions(out.conditions, out.sex ?? p.sex)
   return out
 }
+
+function cleanWeight({ log_date, weight_kg, note }) {
+  const kg = Math.round(Number(weight_kg) * 100) / 100
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(log_date || ''))) throw new Error('Pick a date for the weigh-in.')
+  if (!(kg >= 30 && kg <= 350)) throw new Error('Enter a realistic weight.')
+  const n = note == null ? '' : String(note).trim().slice(0, 300)
+  return { log_date, weight_kg: kg, note: n || null }
+}
+
+const duplicateWeighIn = (date) => new Error(`You already have a weigh-in on ${date}. Edit or delete that one instead.`)
 
 // Non-negative number (the database rejects negatives with a cryptic error).
 const pos = (v) => Math.max(0, Number(v) || 0)
@@ -231,16 +247,19 @@ export function createCloudStore(userId) {
       for (let i = 0; res.error && i < 12; i++) {
         const col = res.error.message.match(/Could not find the '(\w+)' column/)?.[1] || res.error.message.match(/column "?(\w+)"? of relation "profiles" does not exist/)?.[1]
         if (!col || !(col in row)) break
-        if (row[col] != null) dropped.push(col)
+        const empty = row[col] == null || (Array.isArray(row[col]) && !row[col].length)
+        if (!empty) dropped.push(col)
         delete row[col]
         res = await sb.from('profiles').upsert(row).select('*').single()
       }
       const saved = throwIf(res)
       if (dropped.length) {
-        const file = dropped.includes('avatar')
+        const file = dropped.includes('conditions')
+          ? MIGRATION_0005
+          : dropped.includes('avatar')
           ? MIGRATION_0004
           : dropped.some((c) => c.startsWith('glp1_') || c === 'water_target_ml') ? MIGRATION_0003 : 'supabase/migrations/0002_workouts.sql'
-        const what = dropped.map((c) => (c === 'avatar' ? 'your photo' : c)).join(', ')
+        const what = dropped.map((c) => (c === 'avatar' ? 'your photo' : c === 'conditions' ? 'health conditions' : c)).join(', ')
         const err = new Error(`Saved, except ${what}: run ${file} in the Supabase SQL Editor first.`)
         err.saved = saved
         throw err
@@ -288,16 +307,22 @@ export function createCloudStore(userId) {
     },
 
     async listWeights() {
-      return throwIf(
-        await sb.from('weights').select('id,log_date,weight_kg,note').order('log_date'),
-      )
+      return throwIf(await sb.from('weights').select(WEIGHT_FIELDS).order('log_date'))
     },
-    async upsertWeight({ log_date, weight_kg, note = null }) {
+    // One weigh-in per day: logging the same date again replaces it.
+    async upsertWeight(w) {
       return throwIf(
         await sb.from('weights')
-          .upsert({ user_id: userId, log_date, weight_kg, note }, { onConflict: 'user_id,log_date' })
-          .select('id,log_date,weight_kg,note').single(),
+          .upsert({ user_id: userId, ...cleanWeight(w) }, { onConflict: 'user_id,log_date' })
+          .select(WEIGHT_FIELDS).single(),
       )
+    },
+    async updateWeight(id, w) {
+      const row = cleanWeight(w)
+      const { data, error } = await sb.from('weights').update(row).eq('id', id).select(WEIGHT_FIELDS).single()
+      if (error?.code === '23505') throw duplicateWeighIn(row.log_date)
+      if (error) throw new Error(error.message)
+      return data
     },
     async deleteWeight(id) {
       throwIf(await sb.from('weights').delete().eq('id', id))
@@ -535,15 +560,25 @@ export function createLocalStore() {
     async listWeights() {
       return [...db.weights].sort((a, b) => (a.log_date < b.log_date ? -1 : 1))
     },
-    async upsertWeight({ log_date, weight_kg, note = null }) {
-      let w = db.weights.find((x) => x.log_date === log_date)
-      if (w) Object.assign(w, { weight_kg, note })
+    async upsertWeight(input) {
+      const row = cleanWeight(input)
+      let w = db.weights.find((x) => x.log_date === row.log_date)
+      if (w) Object.assign(w, row)
       else {
-        w = { id: uid(), log_date, weight_kg, note }
+        w = { id: uid(), ...row }
         db.weights.push(w)
       }
       save()
-      return w
+      return { ...w }
+    },
+    async updateWeight(id, input) {
+      const row = cleanWeight(input)
+      const w = db.weights.find((x) => x.id === id)
+      if (!w) throw new Error('Weigh-in not found')
+      if (db.weights.some((x) => x.id !== id && x.log_date === row.log_date)) throw duplicateWeighIn(row.log_date)
+      Object.assign(w, row)
+      save()
+      return { ...w }
     },
     async deleteWeight(id) {
       db.weights = db.weights.filter((x) => x.id !== id)

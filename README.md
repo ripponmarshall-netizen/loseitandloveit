@@ -37,6 +37,7 @@ Supabase Dashboard → **SQL Editor** → New query → paste each file in order
 2. [`supabase/migrations/0002_workouts.sql`](supabase/migrations/0002_workouts.sql): workouts and the exercise eat-back setting
 3. [`supabase/migrations/0003_glp1_checkins.sql`](supabase/migrations/0003_glp1_checkins.sql): GLP-1 doses, daily check-ins (mood, water, symptoms) and the GLP-1 plan and water goal on the profile
 4. [`supabase/migrations/0004_avatar_mimi_checkins.sql`](supabase/migrations/0004_avatar_mimi_checkins.sql): profile photo and Mimi's check-ins. Until it's run, the photo won't save (the app says so) and check-ins stay hidden.
+5. [`supabase/migrations/0005_health_conditions.sql`](supabase/migrations/0005_health_conditions.sql): health conditions (PCOS and others) and weigh-in notes. Until it's run, conditions won't save (the app says so).
 
 ### 2. Auth (2 min)
 Dashboard → **Authentication → URL Configuration**:
