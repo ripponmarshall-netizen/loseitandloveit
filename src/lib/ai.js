@@ -22,14 +22,18 @@ async function errorFrom(res) {
 }
 
 /**
- * Stream a coach reply. Calls onText(fullTextSoFar) as tokens arrive.
+ * Stream a coach reply. Calls onText(fullTextSoFar) as tokens arrive and
+ * onStatus(text) while the coach is checking the food databases.
  * Resolves with the final text.
+ *
+ * refs: the user's saved foods + built-in list (see buildRefs) the coach can search.
+ * sources: { usda, off } which online databases to use.
  */
-export async function streamCoach({ message, history, context, onText, signal }) {
+export async function streamCoach({ message, history, context, refs, sources, onText, onStatus, signal }) {
   const res = await fetch(AI_FUNCTION_URL, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ action: 'coach', message, history, context }),
+    body: JSON.stringify({ action: 'coach', message, history, context, refs, sources }),
     signal,
   })
   if (!res.ok || !res.body) throw await errorFrom(res)
@@ -38,6 +42,7 @@ export async function streamCoach({ message, history, context, onText, signal })
   const dec = new TextDecoder()
   let buf = ''
   let text = ''
+  let finished = false
   for (;;) {
     const { value, done } = await reader.read()
     if (done) break
@@ -54,19 +59,54 @@ export async function streamCoach({ message, history, context, onText, signal })
       } else if (ev.t === 'reset') {
         text = ''
         onText?.(text)
+      } else if (ev.t === 'status') {
+        onStatus?.(ev.v)
       } else if (ev.t === 'error') {
         throw new Error(ev.message)
+      } else if (ev.t === 'done') {
+        finished = true
       }
     }
   }
+  // The connection dropped before the server said it was done (weak signal,
+  // app backgrounded). Don't save half an answer as if it were complete.
+  if (!finished) throw new Error('The reply was cut off (connection dropped). Ask again.')
   return text
 }
 
-export async function estimateMeal({ text, image }) {
+export async function estimateMeal({ text, image, refs, sources, checkDatabases = true }) {
   const res = await fetch(AI_FUNCTION_URL, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ action: 'estimate', text, image }),
+    body: JSON.stringify({ action: 'estimate', text, image, refs, sources, check_databases: checkDatabases }),
+  })
+  if (!res.ok) throw await errorFrom(res)
+  return res.json()
+}
+
+/** Mimi's check-in: a headline and 1–3 short tips from a compact data snapshot. */
+export async function requestCheckin({ context, signal }) {
+  const res = await fetch(AI_FUNCTION_URL, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: 'checkin', context }),
+    signal,
+  })
+  if (!res.ok) throw await errorFrom(res)
+  return res.json()
+}
+
+/**
+ * Search USDA FoodData Central and Open Food Facts (through the Edge Function,
+ * which holds the USDA key and isn't blocked by CORS). No AI credit is used.
+ * Returns { results: [{ id, source, name, brand, per100, serving_g, serving_text }], errors }.
+ */
+export async function searchFoodDatabases({ query, barcode, sources, signal }) {
+  const res = await fetch(AI_FUNCTION_URL, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ action: 'food_search', query, barcode, sources }),
+    signal,
   })
   if (!res.ok) throw await errorFrom(res)
   return res.json()

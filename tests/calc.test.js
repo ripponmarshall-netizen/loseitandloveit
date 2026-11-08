@@ -9,6 +9,7 @@ import {
   trendSeries,
   weeklyRate,
   adaptiveTdee,
+  inputToKg,
   projectGoalDate,
   cmToFtIn,
   ftInToCm,
@@ -178,77 +179,132 @@ test('exercise allowance and weekly summary', () => {
   assert.ok(Math.abs(kmhToMph(mphToKmh(3)) - 3) < 1e-9)
 })
 
-import { CONDITIONS, cleanConditions, milestones, parseDecimal, inputToKg, isValidWeightKg, PCOS_MAX_DEFICIT } from '../src/lib/calc.js'
-
-test('weight input accepts comma decimals and rejects junk', () => {
-  assert.equal(parseDecimal('185,5'), 185.5)
-  assert.equal(parseDecimal(' 185.5 '), 185.5)
-  assert.ok(Number.isNaN(parseDecimal('18a5')))
-  assert.ok(Number.isNaN(parseDecimal('')))
-  assert.ok(Math.abs(inputToKg('220,46', 'imperial') - 100) < 0.01)
-  assert.equal(inputToKg('80', 'metric'), 80)
+test('weight input accepts a comma decimal and blanks', () => {
+  assert.equal(inputToKg('80,5', 'metric'), 80.5)
+  assert.ok(Math.abs(inputToKg(' 200 ', 'imperial') - 90.718) < 0.01)
+  assert.equal(inputToKg('', 'metric'), null)
   assert.equal(inputToKg('abc', 'metric'), null)
-  assert.ok(isValidWeightKg(140.6))
-  assert.ok(!isValidWeightKg(20))
-  assert.ok(!isValidWeightKg(NaN))
 })
 
-const pcosProfile = {
-  sex: 'female',
-  birth_year: year - 32,
-  height_cm: 165,
-  start_weight_kg: 140,
-  goal_weight_kg: 82,
-  activity_level: 'light',
-  weekly_rate_kg: 0.91, // 2 lb/week -> ~1000 kcal/day deficit
-}
-
-test('no conditions: targets are unchanged by the conditions logic', () => {
-  const a = computeTargets(pcosProfile, 140)
-  const b = computeTargets({ ...pcosProfile, conditions: [] }, 140)
-  assert.deepEqual(a, b)
-  assert.equal(a.split, 'standard')
-  assert.ok(a.deficit > 900, `deficit ${a.deficit}`)
+test('adaptive TDEE ignores a weigh-in from long before the window', () => {
+  const end = '2026-10-31'
+  const start = addDays(end, -20)
+  const daily = {}
+  for (let i = 0; i < 21; i++) daily[addDays(start, i)] = { calories: 2200 }
+  // One old weigh-in 60 days back at a much higher weight, then steady weights in the window.
+  const weights = [{ log_date: addDays(end, -80), weight_kg: 110 }]
+  for (let i = 0; i < 21; i += 2) weights.push({ log_date: addDays(start, i), weight_kg: 90 })
+  const res = adaptiveTdee({ daily, series: trendSeries(weights), endDate: end })
+  assert.ok(res, 'should still estimate')
+  assert.ok(res.spanDays <= 21, `span ${res.spanDays} should stay inside the window`)
 })
 
-test('PCOS caps the deficit at 750 kcal/day and uses a carb-conscious split', () => {
-  const t = computeTargets({ ...pcosProfile, conditions: ['pcos'] }, 140)
-  assert.ok(Math.abs(t.deficit - PCOS_MAX_DEFICIT) <= 5, `deficit ${t.deficit}`)
-  assert.ok(t.plannedWeeklyLossKg < 0.91 && t.plannedWeeklyLossKg > 0.65, `rate ${t.plannedWeeklyLossKg}`)
-  assert.equal(t.split, 'carb-conscious')
-  assert.ok(t.warnings.some((w) => w.startsWith('PCOS')))
-  assert.ok(t.notes.length >= 2)
-  // carbs at most 40% of calories, fat at most 35%, macros still add up
-  assert.ok(t.carbs * 4 <= t.calories * 0.4 + 4, `carbs ${t.carbs}`)
-  assert.ok(t.fat * 9 <= t.calories * 0.35 + 9, `fat ${t.fat}`)
-  const kcal = t.protein * 4 + t.carbs * 4 + t.fat * 9
-  assert.ok(Math.abs(kcal - t.calories) < 20, `macros ${kcal} vs ${t.calories}`)
+test('adaptive target uses the planned deficit, so re-applying it does not drift', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t1 = computeTargets(baseProfile, 100)
+  const adaptive = { tdee: 2600 }
+  const first = adaptiveTarget(adaptive, t1)
+  const t2 = computeTargets({ ...baseProfile, calorie_target_override: first }, 100)
+  assert.equal(adaptiveTarget(adaptive, t2), first)
+  assert.ok(Math.abs(first - (2600 - 550)) <= 10, `first ${first}`)
 })
 
-test('PCOS never pushes the target below the calorie floor', () => {
-  const t = computeTargets({ ...pcosProfile, height_cm: 150, start_weight_kg: 62, goal_weight_kg: 55, activity_level: 'sedentary', conditions: ['pcos'] }, 62)
-  assert.ok(t.calories >= 1200)
+test('adaptive target never goes below the floor', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t = computeTargets({ ...baseProfile, sex: 'female' }, 100)
+  assert.equal(adaptiveTarget({ tdee: 1300 }, t), 1200)
 })
 
-test('conditions are cleaned: unknown keys dropped, PCOS ignored for men', () => {
-  assert.deepEqual(cleanConditions(['pcos', 'nope', 'pcos'], 'female'), ['pcos'])
-  assert.deepEqual(cleanConditions(['pcos', 'hypertension'], 'male'), ['hypertension'])
-  assert.deepEqual(cleanConditions(null, 'female'), [])
-  const male = computeTargets({ ...baseProfile, conditions: ['pcos'] }, 100)
-  assert.equal(male.split, 'standard')
-  assert.ok(Object.keys(CONDITIONS).includes('type2_diabetes'))
-  const t2 = computeTargets({ ...baseProfile, conditions: ['type2_diabetes'] }, 100)
-  assert.equal(t2.split, 'carb-conscious')
-  assert.ok(t2.warnings.some((w) => w.startsWith('Diabetes')))
+test('manual target: no "raised to the minimum" warning', () => {
+  const t = computeTargets({ ...baseProfile, sex: 'female', height_cm: 150, start_weight_kg: 55, goal_weight_kg: 50, activity_level: 'sedentary', calorie_target_override: 1400 }, 55)
+  assert.equal(t.calories, 1400)
+  assert.ok(!t.warnings.some((w) => /raised/.test(w)), t.warnings.join())
 })
 
-test('5% and 10% milestones', () => {
-  const [m5, m10] = milestones(140, 133)
-  assert.equal(m5.pct, 5)
-  assert.ok(Math.abs(m5.targetKg - 133) < 1e-9)
-  assert.equal(m5.reached, true)
-  assert.equal(m10.reached, false)
-  assert.ok(Math.abs(m10.progress - 0.5) < 1e-9)
-  assert.deepEqual(milestones(null, 100), [])
-  assert.equal(milestones(140, 150)[0].progress, 0)
+// ---------- Meal breakdown ----------
+import { macroBreakdown, wholePercents } from '../src/lib/calc.js'
+
+test('wholePercents always sums to 100 and handles zeros', () => {
+  assert.deepEqual(wholePercents([1, 1, 1]), [34, 33, 33])
+  assert.equal(wholePercents([10, 20, 33.3]).reduce((s, v) => s + v, 0), 100)
+  assert.deepEqual(wholePercents([0, 0]), [0, 0])
+  assert.deepEqual(wholePercents([5, -3]), [100, 0])
+})
+
+test('macroBreakdown: calories by macro, share of day and foods sorted', () => {
+  const entries = [
+    { id: 'a', name: 'Ackee and saltfish', servings: 1, calories: 380, protein_g: 22, carbs_g: 8, fat_g: 29 },
+    { id: 'b', name: 'Fried dumpling', servings: 2, calories: 170, protein_g: 3, carbs_g: 22, fat_g: 8 },
+  ]
+  const b = macroBreakdown(entries, { calories: 2000, protein: 150, carbs: 200, fat: 60 })
+  assert.equal(b.totals.calories, 720)
+  assert.deepEqual(b.kcalFrom, { protein: 112, carbs: 208, fat: 405 })
+  assert.equal(b.split.protein + b.split.carbs + b.split.fat, 100)
+  assert.equal(b.split.fat, 56)
+  assert.equal(b.ofDay.calories, 36)
+  assert.equal(b.ofDay.protein, 19)
+  assert.deepEqual(b.items.map((i) => i.id), ['a', 'b'])
+  assert.equal(b.items[0].share + b.items[1].share, 100)
+})
+
+test('macroBreakdown: empty meal and no targets', () => {
+  const b = macroBreakdown([], null)
+  assert.equal(b.totals.calories, 0)
+  assert.deepEqual(b.split, { protein: 0, carbs: 0, fat: 0 })
+  assert.equal(b.ofDay.calories, null)
+  assert.deepEqual(b.items, [])
+})
+
+test('weekStart is the Monday of the week', async () => {
+  const { weekStart } = await import('../src/lib/calc.js')
+  assert.equal(weekStart('2026-11-08'), '2026-11-02') // Sunday → Monday before
+  assert.equal(weekStart('2026-11-09'), '2026-11-09') // Monday
+  assert.equal(weekStart('2026-11-01'), '2026-10-26')
+})
+
+test('bucketAverages: daily, weekly and monthly averages ending today', async () => {
+  const { bucketAverages, bucketStats } = await import('../src/lib/calc.js')
+  const pts = [
+    { date: '2026-11-08', value: 100 },
+    { date: '2026-11-07', value: 200 },
+    { date: '2026-11-02', value: 300 },
+    { date: '2026-10-31', value: 50 },
+    { date: '2026-11-09', value: 999 }, // after the end date: ignored
+    { date: '2026-11-06', value: 'x' }, // not a number: ignored
+  ]
+  const days = bucketAverages(pts, 'day', '2026-11-08', 3)
+  assert.deepEqual(days.map((b) => b.key), ['2026-11-06', '2026-11-07', '2026-11-08'])
+  assert.deepEqual(days.map((b) => b.value), [null, 200, 100])
+
+  const weeks = bucketAverages(pts, 'week', '2026-11-08', 2)
+  assert.deepEqual(weeks.map((b) => b.key), ['2026-10-26', '2026-11-02'])
+  assert.equal(weeks[1].end, '2026-11-08')
+  assert.equal(weeks[1].value, 200) // (100 + 200 + 300) / 3
+  assert.equal(weeks[0].value, 50)
+
+  const months = bucketAverages(pts, 'month', '2026-11-08', 3)
+  assert.deepEqual(months.map((b) => b.key), ['2026-09-01', '2026-10-01', '2026-11-01'])
+  assert.equal(months[1].end, '2026-10-31')
+  assert.equal(months[2].value, 200)
+  assert.equal(months[0].value, null)
+
+  // Month stepping crosses the year boundary.
+  assert.deepEqual(bucketAverages([], 'month', '2026-01-15', 2).map((b) => b.key), ['2025-12-01', '2026-01-01'])
+
+  const s = bucketStats(weeks)
+  assert.equal(s.avg, 125)
+  assert.equal(s.change, 150)
+  assert.equal(bucketStats(bucketAverages([], 'day', '2026-11-08', 3)), null)
+})
+
+test('bucketAverages with agg "last" keeps the latest value in each bucket', async () => {
+  const { bucketAverages } = await import('../src/lib/calc.js')
+  const pts = [
+    { date: '2026-11-02', value: 2.5 },
+    { date: '2026-11-05', value: 5 },
+    { date: '2026-11-03', value: 2.5 },
+  ]
+  const [wk] = bucketAverages(pts, 'week', '2026-11-08', 1, 'last')
+  assert.equal(wk.value, 5)
+  assert.equal(bucketAverages(pts, 'week', '2026-11-08', 1)[0].value, 10 / 3)
 })

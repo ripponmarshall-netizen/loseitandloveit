@@ -20,8 +20,8 @@ export const MAX_WEEKLY_LOSS_FRACTION = 0.01
 
 // ---------- Health conditions ----------
 //
-// Self-reported conditions that change the guidance. Stored as text[] on the
-// profile (migration 0003). Keys must match the database check constraint.
+// Self-reported, doctor-diagnosed conditions that change the guidance. Stored
+// as text[] on the profile (migration 0005). Keys must match its check constraint.
 export const CONDITIONS = {
   pcos: { label: 'PCOS (polycystic ovary syndrome)', short: 'PCOS', female: true },
   insulin_resistance: { label: 'Insulin resistance or prediabetes', short: 'Insulin resistance' },
@@ -30,11 +30,11 @@ export const CONDITIONS = {
   hypertension: { label: 'High blood pressure', short: 'High blood pressure' },
 }
 
-// Conditions where carb quality and amount matter most for blood sugar.
+// Conditions where carb amount and quality matter most for blood sugar.
 const INSULIN_RELATED = ['pcos', 'insulin_resistance', 'type2_diabetes']
 
 // International Evidence-based Guideline for PCOS (2023): a 500–750 kcal/day
-// deficit for weight loss. We cap the planned deficit at the top of that range.
+// deficit for weight loss. The planned deficit is capped at the top of that range.
 export const PCOS_MAX_DEFICIT = 750
 
 export function cleanConditions(list, sex) {
@@ -103,20 +103,18 @@ export function computeTargets(profile, currentWeightKg) {
   if (pcos && deficit > PCOS_MAX_DEFICIT) {
     deficit = PCOS_MAX_DEFICIT
     rate = (deficit * 7) / KCAL_PER_KG
-    warnings.push(`PCOS: deficit capped at ${PCOS_MAX_DEFICIT} kcal/day (about ${rate.toFixed(2)} kg/week), the top of the PCOS guideline range.`)
+    warnings.push(`PCOS: deficit capped at ${PCOS_MAX_DEFICIT} kcal a day (about ${rate.toFixed(2)} kg a week), the top of the PCOS guideline range.`)
   }
   let calories = tdee - deficit
   const floor = CALORIE_FLOOR[profile.sex] ?? CALORIE_FLOOR.female
-  if (calories < floor) {
+  const overridden = !!profile.calorie_target_override
+  if (overridden) {
+    // A manual target replaces the formula, so the floor warning is about it alone.
+    calories = Number(profile.calorie_target_override)
+    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
+  } else if (calories < floor) {
     calories = floor
     warnings.push(`Target raised to the ${floor} kcal minimum. Loss will be slower than planned.`)
-  }
-
-  let overridden = false
-  if (profile.calorie_target_override) {
-    calories = Number(profile.calorie_target_override)
-    overridden = true
-    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
   }
   calories = Math.round(calories / 10) * 10
 
@@ -130,16 +128,15 @@ export function computeTargets(profile, currentWeightKg) {
   let fat = Math.round((calories * 0.28) / 9)
   let carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
 
-  // Carb-conscious split for PCOS / insulin resistance / type 2 diabetes:
+  // Carb-conscious split for PCOS, insulin resistance and type 2 diabetes:
   // carbs at most 40% of calories, the spare energy goes to fat (up to 35%).
-  // Consensus practice, not proven better for weight loss: carb QUALITY
-  // (fibre, low GI) matters more than the exact split.
+  // Common practice, not proven better for weight loss: carb QUALITY (fibre,
+  // low GI) matters more than the exact split.
   if (carbConscious) {
     const maxCarbs = Math.round((calories * 0.4) / 4)
     if (carbs > maxCarbs) {
-      carbs = maxCarbs
       const maxFat = Math.round((calories * 0.35) / 9)
-      fat = Math.min(maxFat, Math.max(fat, Math.round((calories - protein * 4 - carbs * 4) / 9)))
+      fat = Math.min(maxFat, Math.max(fat, Math.round((calories - protein * 4 - maxCarbs * 4) / 9)))
       carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
     }
   }
@@ -163,6 +160,8 @@ export function computeTargets(profile, currentWeightKg) {
     carbs,
     fat,
     plannedWeeklyLossKg: Number(rate.toFixed(2)),
+    plannedDeficit: Math.round(deficit),
+    floor,
     deficit: Math.round(tdee - calories),
     overridden,
     warnings,
@@ -175,7 +174,7 @@ export function computeTargets(profile, currentWeightKg) {
 // ---------- Milestones ----------
 
 // 5% and 10% of starting weight: the losses with proven health benefits
-// (blood pressure, blood sugar; for PCOS, cycles and fertility too).
+// (blood pressure, blood sugar; with PCOS, cycles and fertility too).
 export function milestones(startKg, currentKg) {
   const start = Number(startKg)
   if (!start) return []
@@ -186,6 +185,9 @@ export function milestones(startKg, currentKg) {
     return { pct, targetKg: target, reached: now <= target, progress: Math.min(1, lost / (start - target)) }
   })
 }
+
+// Realistic adult range, matching the database check (30–350 kg).
+export const isValidWeightKg = (kg) => Number.isFinite(kg) && kg >= 30 && kg <= 350
 
 // ---------- Food entries ----------
 
@@ -211,6 +213,50 @@ export function sumEntries(entries) {
     t.fat += x.fat
   }
   return { calories: Math.round(t.calories), protein: r1(t.protein), carbs: r1(t.carbs), fat: r1(t.fat) }
+}
+
+// Split whole percentages so they always add up to exactly 100 (largest remainder).
+export function wholePercents(values) {
+  const total = values.reduce((s, v) => s + Math.max(0, Number(v) || 0), 0)
+  if (total <= 0) return values.map(() => 0)
+  const raw = values.map((v) => (Math.max(0, Number(v) || 0) / total) * 100)
+  const out = raw.map(Math.floor)
+  let left = 100 - out.reduce((s, v) => s + v, 0)
+  const order = raw.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0])
+  for (const [, i] of order) {
+    if (left <= 0) break
+    out[i] += 1
+    left -= 1
+  }
+  return out
+}
+
+/**
+ * Nutrition breakdown for a meal (or a whole day): totals, where the calories
+ * come from (protein and carbs 4 kcal/g, fat 9 kcal/g), each macro's share,
+ * how much of the daily targets it covers, and each food's share of the calories.
+ */
+export function macroBreakdown(entries = [], targets = null) {
+  const totals = sumEntries(entries)
+  const kcalFrom = { protein: totals.protein * 4, carbs: totals.carbs * 4, fat: totals.fat * 9 }
+  const [protein, carbs, fat] = wholePercents([kcalFrom.protein, kcalFrom.carbs, kcalFrom.fat])
+  const ofTarget = (v, t) => (t > 0 ? Math.round((v / t) * 100) : null)
+  const items = entries
+    .map((e) => ({ id: e.id, name: e.name, ...entryTotals(e) }))
+    .sort((a, b) => b.calories - a.calories)
+  const itemShares = wholePercents(items.map((i) => i.calories))
+  return {
+    totals,
+    kcalFrom: { protein: Math.round(kcalFrom.protein), carbs: Math.round(kcalFrom.carbs), fat: Math.round(kcalFrom.fat) },
+    split: { protein, carbs, fat },
+    ofDay: {
+      calories: ofTarget(totals.calories, targets?.calories),
+      protein: ofTarget(totals.protein, targets?.protein),
+      carbs: ofTarget(totals.carbs, targets?.carbs),
+      fat: ofTarget(totals.fat, targets?.fat),
+    },
+    items: items.map((it, i) => ({ ...it, share: itemShares[i] })),
+  }
 }
 
 // { 'YYYY-MM-DD': totals } for a list of entries
@@ -297,7 +343,13 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
   )
   if (logged.length < 10) return null
 
-  const startPt = trendOn(series, addDays(startDate, 4)) // allow a few days' slack
+  // Trend at the start of the window (a few days' slack either side). A weigh-in
+  // from long before the window would compare intake and weight change over
+  // different periods, so fall back to the first weigh-in inside the window.
+  let startPt = trendOn(series, addDays(startDate, 4))
+  if (!startPt || startPt.date < addDays(startDate, -7)) {
+    startPt = series.find((p) => p.date >= startDate && p.date <= endDate) || null
+  }
   const endPt = trendOn(series, endDate)
   if (!startPt || !endPt) return null
   const span = daysBetween(startPt.date, endPt.date)
@@ -318,6 +370,18 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
     spanDays: span,
     confidence,
   }
+}
+
+/**
+ * A calorie target built on measured maintenance: adaptive TDEE minus the
+ * deficit for the chosen pace (not minus the gap to the current target,
+ * which would shrink the target again every time it is applied).
+ * Never below the safety floor. Returns null when there is nothing to suggest.
+ */
+export function adaptiveTarget(adaptive, targets) {
+  if (!adaptive?.tdee || !targets) return null
+  const raw = adaptive.tdee - Math.max(0, targets.plannedDeficit ?? 0)
+  return Math.max(targets.floor ?? CALORIE_FLOOR.female, Math.round(raw / 10) * 10)
 }
 
 // ---------- Units ----------
@@ -351,22 +415,11 @@ export function weightUnit(units) {
   return units === 'imperial' ? 'lb' : 'kg'
 }
 
-// Accepts "185.5" and "185,5" (some iPhone regions show a comma on the decimal pad).
-export function parseDecimal(value) {
-  if (value == null) return NaN
-  const s = String(value).trim().replace(/\s/g, '').replace(',', '.')
-  if (!/^\d*\.?\d+$|^\d+\.$/.test(s)) return NaN
-  return Number(s)
-}
-
 export function inputToKg(value, units) {
-  const n = parseDecimal(value)
+  const n = Number(String(value ?? '').trim().replace(',', '.'))
   if (!n) return null
   return units === 'imperial' ? lbToKg(n) : n
 }
-
-// Realistic adult range, matching the database check (30–350 kg).
-export const isValidWeightKg = (kg) => Number.isFinite(kg) && kg >= 30 && kg <= 350
 
 // ---------- Exercise ----------
 //
@@ -430,4 +483,64 @@ export function workoutSummary(workouts) {
   s.minutes = Math.round(s.minutes)
   s.treadmillKm = Math.round(s.treadmillKm * 10) / 10
   return s
+}
+
+// ---------- Trend buckets (Progress charts) ----------
+
+/** Monday of the week containing iso (weeks start on Monday, as in Jamaica and the UK). */
+export function weekStart(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dow = (new Date(y, m - 1, d, 12).getDay() + 6) % 7 // 0 = Monday
+  return addDays(iso, -dow)
+}
+
+/**
+ * Group dated values into day, week or month buckets ending at endIso and
+ * average each one. points: [{ date: 'YYYY-MM-DD', value }]. Returns the last
+ * `count` buckets oldest first: [{ key, start, end, value, n }], value null
+ * when the bucket has no points (so charts can leave a gap).
+ * agg 'last' takes each bucket's latest value instead of the average (a dose
+ * level shouldn't average 2.5 and 5 into 3.2).
+ */
+export function bucketAverages(points, granularity, endIso, count, agg = 'avg') {
+  const keyOf =
+    granularity === 'month' ? (iso) => `${iso.slice(0, 7)}-01` : granularity === 'week' ? weekStart : (iso) => iso
+  const buckets = []
+  let start = keyOf(endIso)
+  for (let i = 0; i < count; i++) {
+    let end
+    if (granularity === 'month') {
+      const [y, m] = start.split('-').map(Number)
+      const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+      end = addDays(next, -1)
+    } else end = granularity === 'week' ? addDays(start, 6) : start
+    buckets.unshift({ key: start, start, end, sum: 0, n: 0, lastDate: '', last: null })
+    if (granularity === 'month') {
+      const [y, m] = start.split('-').map(Number)
+      start = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
+    } else start = addDays(start, granularity === 'week' ? -7 : -1)
+  }
+  const byKey = new Map(buckets.map((b) => [b.key, b]))
+  for (const p of points) {
+    const v = Number(p?.value)
+    if (!p?.date || p.date > endIso || !Number.isFinite(v)) continue
+    const b = byKey.get(keyOf(p.date))
+    if (b) {
+      b.sum += v
+      b.n += 1
+      if (p.date >= b.lastDate) {
+        b.lastDate = p.date
+        b.last = v
+      }
+    }
+  }
+  return buckets.map(({ key, start: s, end, sum, n, last }) => ({ key, start: s, end, n, value: n ? (agg === 'last' ? last : sum / n) : null }))
+}
+
+/** Average, min and max of the non-null bucket values, plus the change first → last. */
+export function bucketStats(buckets) {
+  const vals = buckets.map((b) => b.value).filter((v) => v != null)
+  if (!vals.length) return null
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length
+  return { avg, min: Math.min(...vals), max: Math.max(...vals), first: vals[0], last: vals[vals.length - 1], change: vals[vals.length - 1] - vals[0], count: vals.length }
 }

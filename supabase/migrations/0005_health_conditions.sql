@@ -1,7 +1,7 @@
 -- Lose It & Love It: health conditions (PCOS etc.) and weigh-in notes.
 -- Paste into Supabase Dashboard -> SQL Editor -> Run (safe to re-run).
 
--- Self-reported conditions that change targets and coaching.
+-- Self-reported, doctor-diagnosed conditions that change targets and coaching.
 -- Keys must match CONDITIONS in src/lib/calc.js.
 alter table public.profiles
   add column if not exists conditions text[] not null default '{}';
