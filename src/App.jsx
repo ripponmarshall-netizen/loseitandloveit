@@ -11,8 +11,13 @@ import Progress from './components/Progress.jsx'
 import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
-import { Icon, PenguinLoader } from './components/ui.jsx'
+import LogSheet from './components/LogSheet.jsx'
+import { WorkoutSheet } from './components/Workouts.jsx'
+import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
+import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
+import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
+import { guessMeal } from './lib/quicklog.js'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -31,12 +36,51 @@ const writeMode = (m) => {
   }
 }
 
-function guessMeal(date = new Date()) {
-  const h = date.getHours() + date.getMinutes() / 60
-  if (h >= 4 && h < 10.5) return 'breakfast'
-  if (h >= 10.5 && h < 15) return 'lunch'
-  if (h >= 17 && h < 21.5) return 'dinner'
-  return 'snack'
+// Every bottom sheet the app opens from more than one place.
+const SHEETS = {
+  log: LogSheet,
+  food: AddFood,
+  workout: WorkoutSheet,
+  water: WaterSheet,
+  mood: MoodSheet,
+  weight: WeightSheet,
+  dose: DoseSheet,
+  medication: MedicationSheet,
+}
+
+/**
+ * Safari-style tab bar: slides away while you scroll down to read, and
+ * comes back when you scroll up, reach the top or bottom, or touch the
+ * bottom edge of the screen.
+ */
+function useAutoHideTabBar(enabled, resetKey) {
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => setHidden(false), [resetKey])
+  useEffect(() => {
+    if (!enabled) {
+      setHidden(false)
+      return
+    }
+    let lastY = window.scrollY
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const y = window.scrollY
+        const atBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 24
+        if (y < 40 || atBottom) setHidden(false)
+        else if (y > lastY + 6) setHidden(true)
+        else if (y < lastY - 6) setHidden(false)
+        lastY = y
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [enabled])
+  return [hidden, setHidden]
 }
 
 export default function App() {
@@ -47,7 +91,8 @@ export default function App() {
   const [weights, setWeights] = useState([])
   const [tab, setTab] = useState('today')
   const [selectedDate, setSelectedDate] = useState(null)
-  const [addFor, setAddFor] = useState(null)
+  const [sheet, setSheet] = useState(null) // { type, props }
+  const [coachAsk, setCoachAsk] = useState(null) // { text, id } handed to the Coach tab
   const [dataVersion, setDataVersion] = useState(0)
   const [toastMsg, setToastMsg] = useState(null)
   const [clock, setClock] = useState(() => Date.now())
@@ -160,9 +205,14 @@ export default function App() {
 
   const saveProfile = useCallback(
     async (p) => {
-      const saved = await store.saveProfile(p)
-      setProfile(saved)
-      return saved
+      try {
+        const saved = await store.saveProfile(p)
+        setProfile(saved)
+        return saved
+      } catch (e) {
+        if (e.saved) setProfile(e.saved) // saved apart from columns a migration adds
+        throw e
+      }
     },
     [store],
   )
@@ -187,7 +237,20 @@ export default function App() {
     tabRef.current = 'today'
     setVisited(new Set(['today']))
     setSelectedDate(null)
+    setSheet(null)
+    setCoachAsk(null)
   }, [localMode])
+
+  const openSheet = useCallback((type, props = {}) => setSheet({ type, props, id: Date.now() }), [])
+  const closeSheet = useCallback(() => setSheet(null), [])
+  const askCoach = useCallback(
+    (text) => {
+      setCoachAsk({ text: String(text || '').trim(), id: Date.now() })
+      goTab('coach')
+    },
+    [goTab],
+  )
+  const [tabbarHidden, setTabbarHidden] = useAutoHideTabBar(tab !== 'coach' && !!store && !!profile, tab)
 
   const enterLocalMode = useCallback(() => {
     writeMode('local')
@@ -211,7 +274,11 @@ export default function App() {
     toast,
     dataVersion,
     bumpData: () => setDataVersion((v) => v + 1),
-    openAdd: (opts = {}) => setAddFor({ date, meal: opts.meal || guessMeal(), tab: opts.tab }),
+    openAdd: (opts = {}) => openSheet('food', { date, ...opts, meal: opts.meal || (date === today ? guessMeal() : 'dinner') }),
+    openSheet,
+    askCoach,
+    coachAsk,
+    clearCoachAsk: () => setCoachAsk(null),
     signOut,
     setTab: goTab,
     prefs,
@@ -237,18 +304,23 @@ export default function App() {
     body = (
       <>
         {['today', 'progress', 'coach', 'settings'].map(show)}
-        <nav className="tabbar" aria-label="Main">
+        {/* Touching the bottom edge brings a hidden tab bar back. */}
+        {tabbarHidden && <div className="tabbar-reveal" onTouchStart={() => setTabbarHidden(false)} onClick={() => setTabbarHidden(false)} aria-hidden="true" />}
+        <nav className={`tabbar${tabbarHidden ? ' hidden' : ''}`} aria-label="Main">
           <div className="tabbar-inner">
             <TabBtn id="today" icon="today" label="Today" tab={tab} setTab={goTab} />
             <TabBtn id="progress" icon="trend" label="Progress" tab={tab} setTab={goTab} />
-            <button className="tab-add" aria-label="Add food" onClick={() => ctx.openAdd()}>
+            <button className="tab-add" aria-label="Log food, drink, water, exercise, mood or a dose" onClick={() => openSheet('log', { date })}>
               <Icon name="plus" strokeWidth={2.8} />
             </button>
-            <TabBtn id="coach" icon="chat" label="Coach" tab={tab} setTab={goTab} />
+            <TabBtn id="coach" label="Coach" tab={tab} setTab={goTab} face />
             <TabBtn id="settings" icon="gear" label="Settings" tab={tab} setTab={goTab} />
           </div>
         </nav>
-        {addFor && <AddFood {...addFor} onClose={() => setAddFor(null)} />}
+        {sheet && SHEETS[sheet.type] && (() => {
+          const S = SHEETS[sheet.type]
+          return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />
+        })()}
       </>
     )
   }
@@ -265,10 +337,10 @@ export default function App() {
   )
 }
 
-function TabBtn({ id, icon, label, tab, setTab }) {
+function TabBtn({ id, icon, label, tab, setTab, face }) {
   return (
-    <button className={`tab${tab === id ? ' on' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      <Icon name={icon} strokeWidth={tab === id ? 2.3 : 1.8} />
+    <button className={`tab${tab === id ? ' on' : ''}${face ? ' tab-face' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+      {face ? <PenguinFace size={28} /> : <Icon name={icon} strokeWidth={tab === id ? 2.3 : 1.8} />}
       {label}
     </button>
   )

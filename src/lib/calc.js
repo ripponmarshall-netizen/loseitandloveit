@@ -69,16 +69,14 @@ export function computeTargets(profile, currentWeightKg) {
   const deficit = (rate * KCAL_PER_KG) / 7
   let calories = tdee - deficit
   const floor = CALORIE_FLOOR[profile.sex] ?? CALORIE_FLOOR.female
-  if (calories < floor) {
+  const overridden = !!profile.calorie_target_override
+  if (overridden) {
+    // A manual target replaces the formula, so the floor warning is about it alone.
+    calories = Number(profile.calorie_target_override)
+    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
+  } else if (calories < floor) {
     calories = floor
     warnings.push(`Target raised to the ${floor} kcal minimum. Loss will be slower than planned.`)
-  }
-
-  let overridden = false
-  if (profile.calorie_target_override) {
-    calories = Number(profile.calorie_target_override)
-    overridden = true
-    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
   }
   calories = Math.round(calories / 10) * 10
 
@@ -100,6 +98,8 @@ export function computeTargets(profile, currentWeightKg) {
     carbs,
     fat,
     plannedWeeklyLossKg: Number(rate.toFixed(2)),
+    plannedDeficit: Math.round(deficit),
+    floor,
     deficit: Math.round(tdee - calories),
     overridden,
     warnings,
@@ -237,6 +237,18 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
     spanDays: span,
     confidence,
   }
+}
+
+/**
+ * A calorie target built on measured maintenance: adaptive TDEE minus the
+ * deficit for the chosen pace (not minus the gap to the current target,
+ * which would shrink the target again every time it is applied).
+ * Never below the safety floor. Returns null when there is nothing to suggest.
+ */
+export function adaptiveTarget(adaptive, targets) {
+  if (!adaptive?.tdee || !targets) return null
+  const raw = adaptive.tdee - Math.max(0, targets.plannedDeficit ?? 0)
+  return Math.max(targets.floor ?? CALORIE_FLOOR.female, Math.round(raw / 10) * 10)
 }
 
 // ---------- Units ----------

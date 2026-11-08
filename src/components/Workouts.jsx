@@ -27,17 +27,8 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
   const { units } = useApp()
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
   return (
-    <section className="rise" style={{ '--i': 4 }}>
-      <div className="row between" style={{ margin: '18px 4px 8px' }}>
-        <div className="meal-title">
-          <span className="dot" style={{ '--c': 'var(--red)' }} />
-          <span className="title3">Exercise</span>
-          {burned > 0 && <span className="small muted num">{burned} kcal</span>}
-        </div>
-        <button className="meal-add" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
-          <Icon name="plus" strokeWidth={2.8} />
-        </button>
-      </div>
+    <section>
+      <div className="list-header">Exercise{burned > 0 ? ` · ${burned} kcal` : ''}</div>
       <div className="list">
         {error && <div className="list-row small danger-text">{error}</div>}
         {workouts.map((w) => (
@@ -52,9 +43,13 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
             <span className="entry-kcal">{w.calories_burned}</span>
           </button>
         ))}
-        {!error && workouts.length === 0 && (
-          <button className="list-row empty-row" onClick={onAdd}>Log a treadmill or home workout</button>
-        )}
+        <button className="list-row meal-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
+          <span className="dot" />
+          <span className="label">{workouts.length ? 'Add another workout' : 'Treadmill or home workout'}</span>
+          <span className="meal-add" aria-hidden="true">
+            <Icon name="plus" strokeWidth={2.8} />
+          </span>
+        </button>
       </div>
       {burned > 0 && (
         <div className="list-footer">
@@ -102,9 +97,17 @@ function fromWorkout(w, units) {
 }
 
 /** Add or edit a workout. */
-export function WorkoutSheet({ date, workout, onClose }) {
+function fromPreset(p = {}) {
+  const f = emptyForm(p.kind === 'home' ? 'home' : 'treadmill')
+  if (p.duration_min) f.duration_min = String(p.duration_min)
+  if (p.mode) Object.assign(f, { mode: p.mode, modeTouched: true })
+  if (p.activity) f.activity = p.activity
+  return f
+}
+
+export function WorkoutSheet({ date, workout, preset, onClose }) {
   const { store, units, series, profile, bumpData, toast, today } = useApp()
-  const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : emptyForm('treadmill')))
+  const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : fromPreset(preset)))
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
   const imperial = units === 'imperial'

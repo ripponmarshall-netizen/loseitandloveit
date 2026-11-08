@@ -15,7 +15,10 @@ A phone-first calorie tracker PWA with a Claude-powered coach. It has Jamaican f
 | Weight | Weigh-ins, a smoothed trend line (gap-aware EMA), weekly rate, goal ETA |
 | Exercise | **Treadmill** (minutes, speed, incline, walk/run) and **at-home workouts** (bodyweight, dumbbells, HIIT, skipping, mobility) with exercise lists and presets. Net burn from the ACSM treadmill equations or MET values. Optional "eat back" of 0/25/50/100% to the food target. Weekly summary on Progress. |
 | Adaptive maintenance | Works out your *real* TDEE from logged intake vs trend change (needs about 2–3 weeks of data). One tap to re-base your target on it. |
-| Coach | Streaming chat with Claude. Each message carries a compact snapshot: targets, the last 14 days, today's log, workouts, trend, adaptive TDEE and your coach notes. |
+| Log anything | The centre **+** opens a Log sheet: type "2 glasses water", "30 min walk", "212 lb", "feeling good", "Mounjaro 5 mg" or a food and it goes to the right place. Tiles for meal, drink, water, exercise, mood, weight and GLP-1, with the top two suggested by time of day and what's due. |
+| GLP-1 | Ozempic, Wegovy, Rybelsus, Mounjaro, Zepbound, Saxenda, Victoza, Trulicity, Byetta, Bydureon or any other. Log doses with the usual dose ladder, date/time and an **injection-site body map** that suggests the next site to rotate to. Next-dose status on Today, dose history and weight change since starting on Progress. |
+| Check-ins | Daily mood, energy, appetite and symptoms (with an urgent-care warning for red-flag symptoms), and water with one-tap glasses. A 14-day wellbeing summary on Progress. |
+| Coach | Streaming chat with Claude, one tap from Today ("Ask your coach anything"). Each message carries a compact snapshot: targets, the last 14 days, today's log, workouts, trend, adaptive TDEE, GLP-1 plan and recent doses, check-ins and your coach notes. The system prompt has GLP-1 guidance: protein first, eating enough, hydration, side-effect self-care, strength training, red flags; it never advises on dosing. |
 | Shift work | "My day starts at" setting (default 4 am), so a 2 am meal after a night shift counts toward the previous day |
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
 | Design | Apple-style: system font (SF Pro on iPhone), white background, pure black in dark mode, iOS grouped lists, sheets with swipe-to-dismiss, spring animations. Appearance: Automatic, Light or Dark. A penguin works out while the app loads and thinks while the AI works. |
@@ -29,6 +32,7 @@ The Supabase project `loseitandloveit` already exists, and its URL and publishab
 Supabase Dashboard → **SQL Editor** → New query → paste each file in order and **Run** it. Each one is safe to re-run.
 1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql): core tables
 2. [`supabase/migrations/0002_workouts.sql`](supabase/migrations/0002_workouts.sql): workouts and the exercise eat-back setting
+3. [`supabase/migrations/0003_glp1_checkins.sql`](supabase/migrations/0003_glp1_checkins.sql): GLP-1 doses, daily check-ins (mood, water, symptoms) and the GLP-1 plan and water goal on the profile
 
 ### 2. Auth (2 min)
 Dashboard → **Authentication → URL Configuration**:
@@ -104,11 +108,15 @@ src/
   lib/ai.js             calls the Edge Function (streaming coach, meal estimate, photo resize)
   lib/coachContext.js   the data snapshot sent to the coach
   lib/foodSearch.js     food ranking, database result → loggable food, AI reference list
+  lib/glp1.js           dose schedule, site rotation, water goal, daily nudges (pure, tested)
+  lib/quicklog.js       "log anything" parser and Log sheet suggestions (pure, tested)
+  lib/useDay.js         one shared fetch per day for Today and the Log sheet
+  data/glp1.js          GLP-1 medicine catalogue, injection sites, mood and symptom scales
   lib/profileForm.js    profile ↔ form conversion and friendly validation
   lib/prefs.js          per-device settings: appearance, food database toggles
   assets/penguins.js    the penguin SVGs (splash, loaders, thinking)
   data/foods.js         built-in Jamaican foods (estimates, edit freely)
-  components/           Today, AddFood, Progress, Coach, Settings, ProfileForm, Onboarding, Charts, ui
+  components/           Today, LogSheet, AddFood, Glp1, Checkin, Progress, Coach, Settings, ProfileForm, Onboarding, Charts, ui
 supabase/
   migrations/0001_init.sql   tables + RLS + AI usage functions
   functions/ai/index.ts      Claude API proxy (coach + estimate + food search), allowlist, daily cap
@@ -120,7 +128,7 @@ tests/calc.test.js, tests/food.test.js
 1. **Offline logging.** The app shell works offline, but saving needs a connection. Next: an outbox queue in `db.js`.
 2. **Food database.** Built-ins are approximate. USDA and Open Food Facts are now searchable (barcodes by typing the number). Next: verify the top 20 built-ins against recipes, and camera barcode scanning (iOS Safari has no BarcodeDetector, so it needs a library).
 3. **Weekly check-in.** A scheduled coach summary every Sunday (Supabase cron → Edge Function).
-4. **Water and steps.** Exercise is logged; water and steps aren't yet.
+4. **Steps.** Exercise and water are logged; steps aren't yet (no HealthKit access from a web app).
 5. **Tests.** Add Playwright smoke tests to CI.
 
 Built-in nutrition values and AI estimates are estimates, not medical advice.

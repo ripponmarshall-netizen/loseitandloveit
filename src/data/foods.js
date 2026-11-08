@@ -133,6 +133,13 @@ export const BUILTIN_FOODS = [
   F('Sweet juice or lemonade', '1 cup (250 ml)', 110, 0, 28, 0, 'drink'),
   F('Tea with milk and 2 sugars', '1 cup', 60, 1, 11, 1, 'drink breakfast'),
   F('Coffee with condensed milk', '1 cup', 130, 3, 21, 3.5, 'drink breakfast'),
+  F('Black coffee or tea, no sugar', '1 cup', 4, 0.3, 0.5, 0, 'drink breakfast'),
+  F('Ginger tea, unsweetened', '1 cup', 4, 0, 1, 0, 'drink nausea'),
+  F('Soft drink, zero sugar', '1 can (355 ml)', 1, 0, 0, 0, 'drink diet soda'),
+  F('Bag juice', '1 bag (~250 ml)', 110, 0, 28, 0, 'drink jamaican'),
+  F('Oral rehydration drink', '1 cup (250 ml)', 20, 0, 5, 0, 'drink electrolyte'),
+  F('Beer, regular lager', '1 bottle (330 ml)', 145, 1.5, 12, 0, 'drink alcohol'),
+  F('Rum and cola', '1 glass (~250 ml)', 210, 0, 26, 0, 'drink alcohol'),
 
   // Fruit
   F('Mango', '1 medium (~200 g flesh)', 120, 1.6, 30, 0.8, 'fruit'),

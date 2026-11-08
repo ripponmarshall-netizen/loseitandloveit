@@ -22,7 +22,7 @@ function Badge({ food }) {
   return <span className={`badge ${cls}`}>{text}</span>
 }
 
-export default function AddFood({ date, meal: initialMeal, tab: initialTab, onClose }) {
+export default function AddFood({ date, meal: initialMeal, tab: initialTab, query = '', drinks = false, onClose }) {
   const { today } = useApp()
   const [meal, setMeal] = useState(initialMeal)
   const [tab, setTab] = useState(initialTab || 'search')
@@ -30,7 +30,7 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, onCl
   const day = formatDayLabel(date, today)
 
   return (
-    <Sheet title={`Add food${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
+    <Sheet title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
       <div className="stack" style={{ marginBottom: 14 }}>
         <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
         <Segmented
@@ -48,6 +48,8 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, onCl
         <SearchTab
           date={date}
           meal={meal}
+          initialQuery={query}
+          drinks={drinks}
           onDone={onClose}
           onAskAi={(q) => {
             setAiText(q)
@@ -125,9 +127,11 @@ function useOnlineSearch(query, enabled, sources) {
   return state
 }
 
-function SearchTab({ date, meal, onDone, onAskAi }) {
+const DRINKS = BUILTIN_FOODS.filter((f) => /\bdrink\b/.test(f.tags || ''))
+
+function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = false }) {
   const { store, toast, mode, prefs } = useApp()
-  const [q, setQ] = useState('')
+  const [q, setQ] = useState(initialQuery)
   const [recent, setRecent] = useState([])
   const [mine, setMine] = useState([])
   const [picked, setPicked] = useState(null)
@@ -146,6 +150,12 @@ function SearchTab({ date, meal, onDone, onAskAi }) {
   }, [store, toast])
 
   const sections = useMemo(() => {
+    if (!q.trim() && drinks) {
+      return [
+        ['Drinks', DRINKS],
+        ['Recent', recent.filter((f) => DRINKS.some((d) => d.name === f.name)).slice(0, 6)],
+      ]
+    }
     if (!q.trim()) {
       return [
         ['Recent', recent.slice(0, 10)],
@@ -158,7 +168,7 @@ function SearchTab({ date, meal, onDone, onAskAi }) {
       ['Recent', rankFoods(recent, q).slice(0, 6)],
       ['Jamaican staples & basics', rankFoods(BUILTIN_FOODS, q)],
     ]
-  }, [q, recent, mine, showAll])
+  }, [q, recent, mine, showAll, drinks])
   const localCount = sections.reduce((s, [, l]) => s + l.length, 0)
 
   if (picked) {
@@ -187,7 +197,7 @@ function SearchTab({ date, meal, onDone, onAskAi }) {
           className="input"
           type="search"
           enterKeyHint="search"
-          placeholder="Ackee, patty, Grace… or a barcode"
+          placeholder={drinks ? 'Sorrel, juice, tea, soda…' : 'Ackee, patty, Grace… or a barcode'}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoFocus
