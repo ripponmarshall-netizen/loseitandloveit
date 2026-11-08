@@ -42,28 +42,34 @@ export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Weight and trend chart">
         {niceTicks(min, max).map((t) => (
           <g key={t}>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--line)" />
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--sep)" />
             <text x={PAD.l - 4} y={y(t) + 3} textAnchor="end">{t}</text>
           </g>
         ))}
         {showGoal && (
           <g>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(goal)} y2={y(goal)} stroke="var(--ok)" strokeDasharray="4 4" />
-            <text x={W - PAD.r} y={y(goal) - 4} textAnchor="end" style={{ fill: 'var(--ok)' }}>goal</text>
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(goal)} y2={y(goal)} stroke="var(--green)" strokeDasharray="4 4" />
+            <text x={W - PAD.r} y={y(goal) - 4} textAnchor="end" style={{ fill: 'var(--green)', fontWeight: 600 }}>goal</text>
           </g>
         )}
         {pts.map((p) => (
-          <line key={`s${p.date}`} x1={x(p.date)} x2={x(p.date)} y1={y(conv(p.weight))} y2={y(conv(p.trend))} stroke="var(--muted)" strokeOpacity="0.35" />
+          <line key={`s${p.date}`} x1={x(p.date)} x2={x(p.date)} y1={y(conv(p.weight))} y2={y(conv(p.trend))} stroke="var(--text-3)" strokeOpacity="0.6" />
         ))}
         {pts.map((p) => (
-          <circle key={p.date} cx={x(p.date)} cy={y(conv(p.weight))} r="2.6" fill="var(--muted)" fillOpacity="0.7" />
+          <circle key={p.date} cx={x(p.date)} cy={y(conv(p.weight))} r="2.6" fill="var(--text-3)" />
         ))}
-        <path d={trendPath} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <defs>
+          <linearGradient id="trend-grad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stopColor="var(--blue)" />
+            <stop offset="1" stopColor="var(--purple)" />
+          </linearGradient>
+        </defs>
+        <path className="draw" pathLength="1" d={trendPath} fill="none" stroke="url(#trend-grad)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
         <text x={PAD.l} y={H - 6}>{formatShortDate(pts[0].date)}</text>
         <text x={W - PAD.r} y={H - 6} textAnchor="end">{formatShortDate(pts[pts.length - 1].date)}</text>
       </svg>
-      <p className="tiny muted" style={{ margin: '4px 0 0' }}>
-        Dots are weigh-ins; the line is your smoothed trend. Judge progress by the line, not the dots.
+      <p className="tiny muted" style={{ margin: '6px 0 0' }}>
+        Dots are weigh-ins; the line is your smoothed trend. Judge progress by the line.
       </p>
     </div>
   )
@@ -84,12 +90,14 @@ export function CalorieBars({ dates, daily, target }) {
           return (
             <g key={d}>
               <rect
+                className="grow-bar"
+                style={{ '--i': i }}
                 x={PAD.l + i * bw + bw * 0.15}
                 y={v ? y(v) : y(0) - 2}
                 width={bw * 0.7}
                 height={v ? y(0) - y(v) : 2}
-                rx="3"
-                fill={!v ? 'var(--line)' : over ? 'var(--accent)' : 'var(--brand)'}
+                rx="4"
+                fill={!v ? 'var(--fill)' : over ? 'var(--orange)' : 'var(--green)'}
               />
               {(i === 0 || i === dates.length - 1 || i % 7 === 6) && (
                 <text x={PAD.l + i * bw + bw / 2} y={H2 - 6} textAnchor="middle">{formatShortDate(d).split(' ')[0]}</text>
@@ -97,7 +105,7 @@ export function CalorieBars({ dates, daily, target }) {
             </g>
           )
         })}
-        <line x1={PAD.l} x2={W - PAD.r} y1={y(target)} y2={y(target)} stroke="var(--text)" strokeOpacity="0.5" strokeDasharray="4 4" />
+        <line x1={PAD.l} x2={W - PAD.r} y1={y(target)} y2={y(target)} stroke="var(--text-2)" strokeDasharray="4 4" />
         <text x={PAD.l - 4} y={y(target) + 3} textAnchor="end">{target}</text>
       </svg>
     </div>

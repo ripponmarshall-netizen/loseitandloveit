@@ -1,4 +1,6 @@
-// Starter food list: Jamaican staples plus a few basics.
+// Built-in food list: Jamaican staples, cookshop meals and everyday basics.
+// The AI estimate and the coach can search this list (and your saved foods)
+// alongside USDA FoodData Central and Open Food Facts.
 //
 // ESTIMATES ONLY. Home cooking varies a lot (oil, coconut milk, portion
 // size), so treat these as starting points. Edit or save your own version
@@ -38,6 +40,29 @@ export const BUILTIN_FOODS = [
   F('Red peas soup', '1 bowl (~350 g)', 300, 18, 40, 8, 'jamaican soup'),
   F('Chicken foot / Saturday soup', '1 bowl (~350 g)', 250, 15, 30, 8, 'jamaican soup'),
 
+  F('Brown stew fish', '1 piece (~200 g)', 360, 38, 8, 20, 'jamaican fish'),
+  F('Fried fish (snapper or parrot)', '1 fish (~150 g edible)', 330, 36, 6, 18, 'jamaican fish'),
+  F('Curry shrimp', '1 cup (~200 g)', 280, 30, 8, 14, 'jamaican seafood'),
+  F('Pepper steak', '1 cup (~240 g)', 360, 30, 12, 21, 'jamaican beef chinese'),
+  F('Stew beef', '1 cup (~240 g)', 400, 34, 10, 25, 'jamaican beef'),
+  F('Cow foot stew', '1 cup (~240 g)', 380, 32, 15, 21, 'jamaican beef'),
+  F('Tripe and beans', '1 cup (~240 g)', 330, 26, 22, 15, 'jamaican beef'),
+  F('Liver and onions, stewed', '1 cup (~200 g)', 330, 40, 12, 14, 'breakfast jamaican'),
+  F('Corned beef and cabbage', '1 cup (~200 g)', 300, 22, 8, 20, 'breakfast jamaican bully beef'),
+  F('Jerk chicken wings', '6 wings (~180 g)', 480, 42, 4, 33, 'jamaican chicken'),
+  F('Ackee, boiled (no saltfish)', '½ cup (~100 g)', 150, 3, 1, 15, 'breakfast jamaican'),
+  F('Saltfish, boiled (desalted)', '100 g', 130, 29, 0, 1.5, 'jamaican fish'),
+  F('Ital stew (vegetables, coconut milk)', '1 bowl (~350 g)', 380, 8, 40, 22, 'jamaican vegan rasta'),
+  F('Mannish water (goat soup)', '1 bowl (~350 g)', 220, 18, 20, 8, 'jamaican soup'),
+  F('Pumpkin soup with dumplings', '1 bowl (~350 g)', 260, 10, 40, 7, 'jamaican soup'),
+  F('Chicken soup with food', '1 bowl (~350 g)', 250, 18, 28, 7, 'jamaican soup'),
+  F('Fish tea', '1 cup (~250 g)', 120, 12, 10, 3, 'jamaican soup'),
+  F('Cookshop box: brown stew chicken, rice and peas, salad', '1 large box', 1100, 55, 120, 45, 'jamaican lunch dinner takeaway'),
+  F('Cookshop box: curry goat, white rice', '1 large box', 1000, 50, 115, 37, 'jamaican lunch dinner takeaway'),
+  F('Fried rice (Chinese-Jamaican)', '1 cup (~200 g)', 340, 9, 50, 11, 'chinese takeaway rice'),
+  F('Chow mein', '1 cup (~200 g)', 320, 14, 40, 12, 'chinese takeaway'),
+  F('Macaroni and cheese (pie)', '1 cup (~200 g)', 420, 16, 45, 19, 'side sunday'),
+
   // Starches & sides ("food")
   F('Rice and peas', '1 cup (~200 g)', 380, 9, 55, 13, 'jamaican rice side'),
   F('White rice, cooked', '1 cup (~160 g)', 205, 4, 45, 0.4, 'rice side'),
@@ -55,6 +80,20 @@ export const BUILTIN_FOODS = [
   F('Cho cho (chayote), boiled', '1 cup (~160 g)', 38, 1, 8, 0.8, 'veg side'),
   F('Roast corn', '1 ear', 150, 5, 32, 2, 'jamaican snack'),
 
+  F('Fried breadfruit', '2 slices (~120 g)', 300, 1.5, 38, 16, 'jamaican side'),
+  F('Boiled ripe plantain', '½ plantain (~90 g)', 105, 1, 28, 0.2, 'jamaican side'),
+  F('Fried green plantain', '½ plantain (~80 g)', 190, 1, 26, 9, 'jamaican side tostones'),
+  F('Bammy, fried', '1 piece (~110 g)', 320, 1.5, 48, 13, 'jamaican side cassava'),
+  F('Boiled Irish potato', '1 medium (~170 g)', 145, 3, 33, 0.2, 'side'),
+  F('Brown rice, cooked', '1 cup (~195 g)', 218, 4.5, 46, 1.6, 'rice side'),
+  F('Spaghetti, cooked', '1 cup (~140 g)', 220, 8, 43, 1.3, 'pasta side'),
+  F('Gungo peas (pigeon peas), boiled', '1 cup (~170 g)', 200, 11, 39, 0.6, 'jamaican beans'),
+  F('Red kidney beans, boiled', '1 cup (~180 g)', 225, 15, 40, 0.9, 'beans peas'),
+  F('Okra, boiled', '1 cup (~160 g)', 35, 3, 7, 0.3, 'veg side'),
+  F('Potato salad (with beetroot)', '1 cup (~200 g)', 360, 6, 30, 24, 'jamaican side sunday'),
+  F('Coleslaw', '½ cup (~75 g)', 150, 1, 10, 12, 'side salad'),
+  F('Mixed salad (lettuce, tomato, cucumber)', '1 cup', 20, 1, 4, 0.2, 'veg side salad'),
+
   // Breads & bakery
   F('Jamaican beef patty', '1 patty (~130 g)', 470, 13, 40, 28, 'jamaican snack lunch'),
   F('Coco bread', '1 (~100 g)', 310, 7, 48, 10, 'jamaican bread'),
@@ -66,6 +105,19 @@ export const BUILTIN_FOODS = [
   F('Saltfish fritter (stamp and go)', '1 (~45 g)', 110, 4, 10, 6, 'jamaican snack'),
   F('Plantain or banana chips', '1 small bag (~28 g)', 150, 1, 16, 9, 'snack'),
 
+  F('Chicken patty', '1 patty (~130 g)', 450, 15, 40, 25, 'jamaican snack lunch'),
+  F('Vegetable patty', '1 patty (~130 g)', 400, 7, 45, 21, 'jamaican snack lunch'),
+  F('Coco bread and beef patty', '1 (~230 g)', 780, 20, 88, 38, 'jamaican snack lunch'),
+  F('Spice bun', '1 slice (~100 g)', 330, 6, 62, 6, 'jamaican bread easter'),
+  F('Bun and cheese', '1 slice bun + 1 slice cheese (~130 g)', 440, 13, 63, 15, 'jamaican snack easter'),
+  F('Grater cake', '1 piece (~50 g)', 220, 1.5, 35, 9, 'jamaican snack sweet coconut'),
+  F('Coconut drops', '1 piece (~50 g)', 230, 1.5, 32, 11, 'jamaican snack sweet'),
+  F('Banana bread', '1 slice (~70 g)', 230, 3, 35, 9, 'snack sweet'),
+  F('Rock bun', '1 (~70 g)', 280, 4, 42, 11, 'jamaican snack sweet'),
+  F('Tamarind ball', '1 (~25 g)', 80, 0.3, 20, 0, 'jamaican snack sweet'),
+  F('Salted peanuts', '1 small pack (~28 g)', 165, 7, 6, 14, 'snack nuts'),
+  F('Cheese puffs', '1 small bag (~28 g)', 155, 2, 15, 10, 'snack'),
+
   // Porridge & drinks
   F('Cornmeal porridge', '1 cup (~250 g)', 290, 6, 50, 7, 'breakfast jamaican porridge'),
   F('Peanut porridge', '1 cup (~250 g)', 420, 14, 45, 20, 'breakfast jamaican porridge'),
@@ -74,10 +126,27 @@ export const BUILTIN_FOODS = [
   F('Carrot juice (with milk)', '1 cup (250 ml)', 230, 4, 38, 7, 'drink jamaican'),
   F('Soft drink, regular', '1 can (355 ml)', 150, 0, 39, 0, 'drink'),
 
+  F('Malt drink', '1 bottle (~330 ml)', 200, 2, 48, 0, 'drink'),
+  F('Irish moss drink', '1 cup (250 ml)', 280, 6, 42, 10, 'drink jamaican sea moss'),
+  F('Guinness punch', '1 cup (250 ml)', 330, 8, 50, 10, 'drink jamaican'),
+  F('Coconut water', '1 cup (250 ml)', 45, 1.7, 9, 0.5, 'drink jelly'),
+  F('Sweet juice or lemonade', '1 cup (250 ml)', 110, 0, 28, 0, 'drink'),
+  F('Tea with milk and 2 sugars', '1 cup', 60, 1, 11, 1, 'drink breakfast'),
+  F('Coffee with condensed milk', '1 cup', 130, 3, 21, 3.5, 'drink breakfast'),
+
   // Fruit
   F('Mango', '1 medium (~200 g flesh)', 120, 1.6, 30, 0.8, 'fruit'),
   F('Avocado (pear)', '½ medium (~100 g)', 160, 2, 9, 15, 'fruit'),
   F('Banana, ripe', '1 medium', 105, 1.3, 27, 0.4, 'fruit'),
+
+  F('Pineapple', '1 cup chunks (~165 g)', 82, 0.9, 22, 0.2, 'fruit'),
+  F('Papaya (pawpaw)', '1 cup (~145 g)', 62, 0.7, 16, 0.4, 'fruit'),
+  F('Orange', '1 medium', 62, 1.2, 15, 0.2, 'fruit'),
+  F('Guava', '1 fruit (~55 g)', 37, 1.4, 8, 0.5, 'fruit'),
+  F('Watermelon', '1 cup (~150 g)', 46, 0.9, 11.5, 0.2, 'fruit'),
+  F('Star apple', '1 fruit (~130 g)', 85, 1, 19, 1, 'fruit jamaican'),
+  F('Naseberry (sapodilla)', '1 fruit (~170 g)', 140, 0.7, 34, 1.9, 'fruit jamaican'),
+  F('Jackfruit', '1 cup (~165 g)', 155, 2.8, 38, 1, 'fruit'),
 
   // Basics
   F('Egg, boiled', '1 large', 78, 6.3, 0.6, 5.3, 'breakfast protein'),
@@ -88,4 +157,17 @@ export const BUILTIN_FOODS = [
   F('Whey protein shake (water)', '1 scoop (~30 g)', 120, 24, 3, 1.5, 'protein drink'),
   F('Peanut butter', '1 tbsp (16 g)', 95, 4, 3, 8, 'snack'),
   F('Wholewheat bread', '1 slice', 80, 4, 14, 1, 'bread breakfast'),
+  F('Cornflakes with milk', '1 bowl (30 g + 125 ml milk)', 190, 6, 32, 4.5, 'breakfast cereal'),
+  F('Greek yoghurt, plain', '1 pot (~170 g)', 170, 17, 7, 8, 'breakfast protein snack'),
+  F('Cheddar cheese', '1 slice (~28 g)', 115, 7, 0.4, 9.5, 'snack'),
+  F('Tuna in water, drained', '1 tin (~120 g)', 130, 29, 0, 1, 'protein fish'),
+  F('Sardines in oil, drained', '½ tin (~60 g)', 125, 15, 0, 7, 'protein fish'),
+  F('Mackerel in tomato sauce', '½ tin (~100 g)', 190, 15, 3, 13, 'protein fish jamaican'),
+  F('Vienna sausages', '4 sausages (~55 g)', 140, 5, 1, 13, 'protein breakfast'),
+  F('Hot dog frank', '1 frank', 150, 5, 2, 13, 'protein'),
+  F('Minced beef, cooked', '100 g', 250, 26, 0, 16, 'protein beef'),
+  F('Butter', '1 tsp (5 g)', 36, 0, 0, 4, 'fat'),
+  F('Cooking oil', '1 tbsp (14 g)', 120, 0, 0, 14, 'fat'),
+  F('Sugar', '1 tsp (4 g)', 16, 0, 4, 0, 'sweet'),
+  F('Condensed milk', '1 tbsp (20 g)', 65, 1.6, 11, 1.7, 'sweet drink'),
 ]

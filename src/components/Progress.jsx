@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
-import { Segmented } from './ui.jsx'
+import { Icon, Segmented } from './ui.jsx'
 
 export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
@@ -54,19 +54,19 @@ export default function Progress() {
     <div>
       <h1>Progress</h1>
 
-      <div className="stats" style={{ marginBottom: 12 }}>
-        <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
-        <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
-        <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
-        <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
-        <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
+      <div className="stats" style={{ marginBottom: 14 }}>
+        <Stat label="Trend" color="var(--blue)" value={last ? displayWeight(last.trend, units) : '—'} />
+        <Stat label="Since start" color="var(--green)" value={last ? signed(last.trend - startKg) : '—'} />
+        <Stat label="To goal" color="var(--teal)" value={last ? signed(goalKg - last.trend) : '—'} />
+        <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} />
+        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatShortDate(eta) : '—'} />
+        <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
       </div>
 
       <section className="card">
-        <div className="row between" style={{ marginBottom: 8 }}>
+        <div className="row between" style={{ marginBottom: 10 }}>
           <h2 style={{ margin: 0 }}>Weight</h2>
-          <div style={{ width: 170 }}>
+          <div style={{ width: 160 }}>
             <Segmented value={range} onChange={setRange} options={[['30', '30d'], ['90', '90d'], ['all', 'All']]} />
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function Progress() {
       <section className="card">
         <h2>Calories, last 14 days</h2>
         <CalorieBars dates={lastNDates(today, 14)} daily={daily} target={targets.calories} />
-        <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target.</p>
+        <p className="tiny muted" style={{ margin: '6px 0 0' }}>Green = on target. Orange = over. Grey = nothing logged.</p>
       </section>
 
       <ExerciseSummary workouts={workouts} today={today} units={units} />
@@ -89,14 +89,14 @@ export default function Progress() {
           <>
             <p>
               About <strong className="num">{adaptive.tdee} kcal/day</strong>{' '}
-              <span className="tag">{adaptive.confidence} confidence</span>
+              <span className={`badge ${adaptive.confidence === 'high' ? 'jam' : adaptive.confidence === 'low' ? 'off' : 'usda'}`}>{adaptive.confidence} confidence</span>
             </p>
             <p className="small muted">
               You averaged {adaptive.avgIntake} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
               {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets.tdee} kcal.
             </p>
             {Math.abs(adaptive.tdee - targets.tdee) >= 150 && (
-              <button className="btn soft sm" onClick={adoptAdaptive}>
+              <button className="btn secondary sm" onClick={adoptAdaptive}>
                 Base my target on this ({Math.round((adaptive.tdee - Math.max(0, targets.tdee - targets.calories)) / 10) * 10} kcal)
               </button>
             )}
@@ -128,12 +128,12 @@ function ExerciseSummary({ workouts, today, units }) {
     <section className="card">
       <h2>Exercise, last 7 days</h2>
       <div className="stats" style={{ marginBottom: 8 }}>
-        <Stat label="Sessions" value={week.sessions} />
-        <Stat label="Minutes" value={week.minutes} />
-        <Stat label="Burned" value={week.kcal} sub="net kcal" />
-        <Stat label="Strength" value={`${week.strength}/2+`} sub="sessions" />
-        <Stat label="Treadmill" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
-        <Stat label="28 days" value={month.sessions} sub={`${month.minutes} min`} />
+        <Stat inner label="Sessions" color="var(--red)" value={week.sessions} />
+        <Stat inner label="Minutes" color="var(--orange)" value={week.minutes} />
+        <Stat inner label="Burned" color="var(--pink)" value={week.kcal} sub="net kcal" />
+        <Stat inner label="Strength" color="var(--purple)" value={`${week.strength}/2+`} sub="sessions" />
+        <Stat inner label="Treadmill" color="var(--blue)" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
+        <Stat inner label="28 days" color="var(--teal)" value={month.sessions} sub={`${month.minutes} min`} />
       </div>
       <p className="tiny muted" style={{ margin: 0 }}>
         Aim for 2–3 strength sessions a week to keep muscle while you lose fat, plus walking or treadmill for steps.
@@ -142,12 +142,12 @@ function ExerciseSummary({ workouts, today, units }) {
   )
 }
 
-function Stat({ label, value, sub }) {
+function Stat({ label, value, sub, color, inner }) {
   return (
-    <div className="stat">
+    <div className="stat" style={{ '--c': color, background: inner ? 'var(--card-2)' : undefined }}>
       <div className="l">{label}</div>
       <div className="v num">{value}</div>
-      {sub && <div className="tiny muted">{sub}</div>}
+      {sub && <div className="s">{sub}</div>}
     </div>
   )
 }
@@ -179,7 +179,7 @@ function LogWeight() {
       <div className="row">
         <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: 1.3 }} aria-label="Date" />
         <input className="input" inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} style={{ flex: 1 }} aria-label="Weight" />
-        <button className="btn" disabled={busy || !val}>Save</button>
+        <button className="btn" disabled={busy || !val} style={{ minHeight: 46 }}>Save</button>
       </div>
     </form>
   )
@@ -202,12 +202,12 @@ function WeightList({ weights }) {
   return (
     <div>
       {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+        <div key={w.id} className="row between" style={{ padding: '6px 0', borderTop: '0.5px solid var(--sep)' }}>
           <span>{formatShortDate(w.log_date)}</span>
           <span className="row">
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, fontSize: 16 }} onClick={() => remove(w.id)}>
-              🗑
+            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, color: 'var(--red)' }} onClick={() => remove(w.id)}>
+              <Icon name="trash" size={18} />
             </button>
           </span>
         </div>

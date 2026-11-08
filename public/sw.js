@@ -1,5 +1,5 @@
 // Minimal offline shell. Bump VERSION when you change this file.
-const VERSION = 'v1'
+const VERSION = 'v2'
 const CACHE = `lili-${VERSION}`
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png']
 

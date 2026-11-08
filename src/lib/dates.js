@@ -39,6 +39,7 @@ export function lastNDates(endIso, n) {
 
 const DAY_FMT = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 const SHORT_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' })
+const LONG_FMT = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 
 export function formatDayLabel(iso, todayIso) {
   const diff = daysBetween(todayIso, iso)
@@ -50,4 +51,8 @@ export function formatDayLabel(iso, todayIso) {
 
 export function formatShortDate(iso) {
   return SHORT_FMT.format(parseISODate(iso))
+}
+
+export function formatLongDate(iso) {
+  return LONG_FMT.format(parseISODate(iso))
 }

@@ -11,7 +11,8 @@ import Progress from './components/Progress.jsx'
 import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
-import { Spinner } from './components/ui.jsx'
+import { Icon, PenguinLoader } from './components/ui.jsx'
+import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -50,7 +51,38 @@ export default function App() {
   const [dataVersion, setDataVersion] = useState(0)
   const [toastMsg, setToastMsg] = useState(null)
   const [clock, setClock] = useState(() => Date.now())
+  const [prefs, setPrefsState] = useState(readPrefs)
+  // Tabs stay mounted once visited, so a coach reply keeps streaming and
+  // scroll positions survive when you switch tabs.
+  const [visited, setVisited] = useState(() => new Set(['today']))
   const toastTimer = useRef()
+
+  useEffect(() => {
+    applyTheme(prefs.theme)
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)')
+    const onChange = () => applyTheme(prefs.theme)
+    mq?.addEventListener?.('change', onChange)
+    return () => mq?.removeEventListener?.('change', onChange)
+  }, [prefs.theme])
+
+  const setPrefs = useCallback((patch) => {
+    setPrefsState((p) => {
+      const next = { ...p, ...patch }
+      writePrefs(next)
+      return next
+    })
+  }, [])
+
+  const tabRef = useRef('today')
+  const scrollPos = useRef({})
+  const goTab = useCallback((t) => {
+    if (t === tabRef.current) return window.scrollTo({ top: 0, behavior: 'smooth' }) // tap again: back to top
+    scrollPos.current[tabRef.current] = window.scrollY
+    tabRef.current = t
+    setTab(t)
+    setVisited((v) => (v.has(t) ? v : new Set(v).add(t)))
+    requestAnimationFrame(() => window.scrollTo({ top: scrollPos.current[t] || 0 }))
+  }, [])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -61,7 +93,7 @@ export default function App() {
       setSession(s)
       // Arrived from a password-reset email: send them to Settings to set a new one.
       if (event === 'PASSWORD_RECOVERY') {
-        setTab('settings')
+        goTab('settings')
         setTimeout(() => toast('Choose a new password under Account → Change password'), 500)
       }
     })
@@ -89,7 +121,7 @@ export default function App() {
 
   const toast = useCallback((msg, kind = 'info') => {
     clearTimeout(toastTimer.current)
-    setToastMsg({ msg, kind })
+    setToastMsg({ msg, kind, id: Date.now() })
     toastTimer.current = setTimeout(() => setToastMsg(null), kind === 'error' ? 5000 : 2500)
   }, [])
 
@@ -152,6 +184,8 @@ export default function App() {
       await supabase.auth.signOut()
     }
     setTab('today')
+    tabRef.current = 'today'
+    setVisited(new Set(['today']))
     setSelectedDate(null)
   }, [localMode])
 
@@ -179,40 +213,39 @@ export default function App() {
     bumpData: () => setDataVersion((v) => v + 1),
     openAdd: (opts = {}) => setAddFor({ date, meal: opts.meal || guessMeal(), tab: opts.tab }),
     signOut,
-    setTab,
+    setTab: goTab,
+    prefs,
+    setPrefs,
   }
 
   let body
-  if (!authReady && !localMode) {
-    body = (
-      <div className="center" style={{ marginTop: '30vh' }}>
-        <Spinner />
-      </div>
-    )
+  if ((!authReady && !localMode) || (store && profile === undefined)) {
+    body = <PenguinLoader />
   } else if (!store) {
     body = <Auth onUseLocal={enterLocalMode} />
-  } else if (profile === undefined) {
-    body = (
-      <div className="center" style={{ marginTop: '30vh' }}>
-        <Spinner />
-      </div>
-    )
   } else if (profile === null) {
     body = <Onboarding />
   } else {
+    const show = (id) => (visited.has(id) || tab === id) && (
+      <div key={id} hidden={tab !== id} className={tab === id ? 'page' : undefined}>
+        {id === 'today' && <Today />}
+        {id === 'progress' && <Progress />}
+        {id === 'coach' && <Coach active={tab === 'coach'} />}
+        {id === 'settings' && <Settings />}
+      </div>
+    )
     body = (
       <>
-        {tab === 'today' && <Today />}
-        {tab === 'progress' && <Progress />}
-        {tab === 'coach' && <Coach />}
-        {tab === 'settings' && <Settings />}
-        <nav className="nav" aria-label="Main">
-          <div className="nav-inner">
-            <NavBtn id="today" icon="🍽️" label="Today" tab={tab} setTab={setTab} />
-            <NavBtn id="progress" icon="📉" label="Progress" tab={tab} setTab={setTab} />
-            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>＋</button>
-            <NavBtn id="coach" icon="💬" label="Coach" tab={tab} setTab={setTab} />
-            <NavBtn id="settings" icon="⚙️" label="Settings" tab={tab} setTab={setTab} />
+        {['today', 'progress', 'coach', 'settings'].map(show)}
+        <nav className="tabbar" aria-label="Main">
+          <div className="tabbar-inner">
+            <TabBtn id="today" icon="today" label="Today" tab={tab} setTab={goTab} />
+            <TabBtn id="progress" icon="trend" label="Progress" tab={tab} setTab={goTab} />
+            <button className="tab-add" aria-label="Add food" onClick={() => ctx.openAdd()}>
+              <Icon name="plus" strokeWidth={2.8} />
+            </button>
+            <TabBtn id="coach" icon="chat" label="Coach" tab={tab} setTab={goTab} />
+            <TabBtn id="settings" icon="gear" label="Settings" tab={tab} setTab={goTab} />
           </div>
         </nav>
         {addFor && <AddFood {...addFor} onClose={() => setAddFor(null)} />}
@@ -222,9 +255,9 @@ export default function App() {
 
   return (
     <AppCtx.Provider value={ctx}>
-      <main className="app">{body}</main>
+      <main className={`app${store && profile ? '' : ' bare'}`}>{body}</main>
       {toastMsg && (
-        <div className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
+        <div key={toastMsg.id} className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
           {toastMsg.msg}
         </div>
       )}
@@ -232,10 +265,10 @@ export default function App() {
   )
 }
 
-function NavBtn({ id, icon, label, tab, setTab }) {
+function TabBtn({ id, icon, label, tab, setTab }) {
   return (
-    <button className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      <span className="ico" aria-hidden="true">{icon}</span>
+    <button className={`tab${tab === id ? ' on' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+      <Icon name={icon} strokeWidth={tab === id ? 2.3 : 1.8} />
       {label}
     </button>
   )

@@ -105,6 +105,20 @@ function dedupeRecent(entries, limit) {
   return out
 }
 
+// Import helpers shared by both stores: saved foods get new ids on import.
+async function importFoods(store, foods = []) {
+  const map = new Map()
+  for (const f of foods) {
+    const saved = await store.saveFood({ ...f, id: undefined })
+    if (f.id) map.set(f.id, saved.id)
+  }
+  return map
+}
+
+export function remapEntries(entries = [], foodIds = new Map()) {
+  return entries.map((e) => ({ ...e, food_id: e.food_id ? foodIds.get(e.food_id) ?? null : null }))
+}
+
 const throwIf = ({ data, error }) => {
   if (error) throw new Error(error.message)
   return data
@@ -244,9 +258,11 @@ export function createCloudStore(userId) {
     },
     async importAll(data) {
       if (data.profile) await this.saveProfile(data.profile)
+      // Foods first: they get new ids, so entries must point at the new ones
+      // (the old ids would break the food_id foreign key).
+      const foodIds = await importFoods(this, data.foods)
       const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
-      for (const c of chunks(data.entries || [], 200)) await this.addEntries(c)
-      for (const f of data.foods || []) await this.saveFood({ ...f, id: undefined })
+      for (const c of chunks(remapEntries(data.entries, foodIds), 200)) await this.addEntries(c)
       for (const w of data.weights || []) await this.upsertWeight(w)
       for (const w of data.workouts || []) await this.addWorkout(w)
     },
@@ -405,8 +421,8 @@ export function createLocalStore() {
     },
     async importAll(data) {
       if (data.profile) await this.saveProfile(data.profile)
-      await this.addEntries(data.entries || [])
-      for (const f of data.foods || []) await this.saveFood({ ...f, id: undefined })
+      const foodIds = await importFoods(this, data.foods)
+      await this.addEntries(remapEntries(data.entries, foodIds))
       for (const w of data.weights || []) await this.upsertWeight(w)
       for (const w of data.workouts || []) await this.addWorkout(w)
     },

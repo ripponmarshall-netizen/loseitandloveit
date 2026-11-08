@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { supabase } from '../lib/supabase.js'
-import { entryTotals } from '../lib/calc.js'
+import { ACTIVITY, ageFromBirthYear, cmToFtIn, displayWeight, entryTotals } from '../lib/calc.js'
+import { validateProfile } from '../lib/profileForm.js'
 import { APP_VERSION } from '../config.js'
-import ProfileForm from './ProfileForm.jsx'
+import { BUILTIN_FOODS } from '../data/foods.js'
+import {
+  AboutFields,
+  BodyFields,
+  CoachNotesField,
+  DAY_START_OPTIONS,
+  EATBACK_OPTIONS,
+  GoalFields,
+  TargetPreview,
+  useProfileForm,
+} from './ProfileForm.jsx'
+import { ListRow, ListSection, MenuRow, Segmented, Sheet, ToggleRow } from './ui.jsx'
 
 async function shareOrDownload(filename, text, type) {
   const blob = new Blob([text], { type })
@@ -31,18 +43,32 @@ const csvCell = (v) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+function heightLabel(cm, units) {
+  if (!cm) return '—'
+  if (units === 'metric') return `${Math.round(cm)} cm`
+  const { ft, in: inch } = cmToFtIn(Number(cm))
+  return `${ft}′${inch}″`
+}
+
 export default function Settings() {
-  const { store, mode, session, profile, saveProfile, series, toast, signOut, today, bumpData, reloadWeights } = useApp()
+  const app = useApp()
+  const { store, mode, session, profile, saveProfile, series, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs } = app
   const [usage, setUsage] = useState(null)
+  const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password'
   const importRef = useRef()
+  const trendKg = series.length ? series[series.length - 1].trend : null
 
   useEffect(() => {
     if (mode === 'cloud') store.getAiUsage(today).then(setUsage).catch(() => {})
   }, [store, mode, today])
 
-  async function onSave(values) {
-    await saveProfile(values)
-    toast('Saved')
+  async function saveField(patch, msg = 'Saved') {
+    try {
+      await saveProfile({ ...profile, ...patch })
+      toast(msg)
+    } catch (e) {
+      toast(e.message, 'error')
+    }
   }
 
   async function exportJson() {
@@ -94,89 +120,212 @@ export default function Settings() {
     await signOut()
   }
 
+  const name = profile.display_name || (mode === 'cloud' ? session?.user?.email?.split('@')[0] : 'You')
+  const pace = Number(profile.weekly_rate_kg) || 0
+
   return (
     <div>
       <h1>Settings</h1>
 
-      <section className="card">
-        <h3>Account</h3>
-        {mode === 'cloud' ? (
-          <p>
-            Signed in as <strong>{session?.user?.email}</strong>
-          </p>
-        ) : (
-          <p className="small">
-            <strong>Local mode.</strong> Data lives only in this browser on this device. If iOS clears website data, it's gone, so export
-            regularly or create an account.
-          </p>
-        )}
-        <button className="btn ghost block" onClick={signOut}>
-          {mode === 'cloud' ? 'Sign out' : 'Leave local mode'}
-        </button>
-        {mode === 'cloud' && <ChangePassword />}
-      </section>
+      {/* Profile header */}
+      <button className="list row tap" style={{ width: '100%', padding: 14, gap: 14, border: 0, textAlign: 'left', color: 'inherit', cursor: 'pointer' }} onClick={() => setSheet('body')}>
+        <span className="avatar">{(name || '?').trim()[0]?.toUpperCase()}</span>
+        <span className="grow">
+          <span className="title3 ellipsis" style={{ display: 'block' }}>{name}</span>
+          <span className="tiny muted ellipsis" style={{ display: 'block' }}>
+            {mode === 'cloud' ? session?.user?.email : 'Local mode: data stays on this device'}
+          </span>
+          {targets && (
+            <span className="tiny" style={{ color: 'var(--green)', fontWeight: 600 }}>
+              {targets.calories.toLocaleString('en-GB')} kcal a day{targets.overridden ? ' (manual)' : ''}
+            </span>
+          )}
+        </span>
+      </button>
 
-      <h3 style={{ margin: '18px 4px 8px' }}>Profile &amp; targets</h3>
-      <ProfileForm
-        key={profile.updated_at || 'p'}
-        initial={profile}
-        currentWeightKg={series.length ? series[series.length - 1].trend : null}
-        onSubmit={onSave}
-        submitLabel="Save changes"
-        advanced
-      />
+      <ListSection header="Plan" footer="Your calorie target updates as your trend weight changes.">
+        <ListRow icon="target" color="var(--green)" label="Daily target" value={targets ? `${targets.calories} kcal` : '—'} onClick={() => setSheet('plan')} />
+        <ListRow icon="trend" color="var(--teal)" label="Goal weight" value={displayWeight(Number(profile.goal_weight_kg), units)} onClick={() => setSheet('plan')} />
+        <ListRow
+          icon="clock"
+          color="var(--cyan)"
+          label="Pace"
+          value={units === 'imperial' ? `${Math.round(pace * 2.2046 * 2) / 2} lb/wk` : `${pace} kg/wk`}
+          onClick={() => setSheet('plan')}
+        />
+        <ListRow icon="run" color="var(--orange)" label="Activity" value={ACTIVITY[profile.activity_level]?.label} onClick={() => setSheet('plan')} />
+      </ListSection>
+
+      <ListSection header="Body">
+        <ListRow
+          icon="person"
+          color="var(--blue)"
+          label="Personal details"
+          value={[profile.sex === 'female' ? 'Female' : 'Male', ageFromBirthYear(profile.birth_year), heightLabel(profile.height_cm, units)].filter(Boolean).join(' · ')}
+          onClick={() => setSheet('body')}
+        />
+        <ListRow icon="scale" color="var(--indigo)" label="Trend weight" value={trendKg ? displayWeight(trendKg, units) : '—'} chevron={false} />
+        <ListRow icon="ruler" color="var(--purple)" label="Units">
+          <div style={{ width: 140 }}>
+            <Segmented label="Units" value={units} onChange={(u) => saveField({ units: u }, 'Units updated')} options={[['imperial', 'lb · ft'], ['metric', 'kg · cm']]} />
+          </div>
+        </ListRow>
+      </ListSection>
+
+      <ListSection header="Tracking" footer="Night shifts: food eaten before your day starts counts toward the day before.">
+        <MenuRow
+          icon="moon"
+          color="var(--indigo)"
+          label="Day starts at"
+          value={String(profile.day_start_hour ?? 4)}
+          options={DAY_START_OPTIONS}
+          onChange={(v) => saveField({ day_start_hour: Number(v) })}
+        />
+        <MenuRow
+          icon="flame"
+          color="var(--red)"
+          label="Exercise calories"
+          sub="Add workouts to that day’s food target"
+          value={String(profile.exercise_eatback_pct ?? 0)}
+          options={EATBACK_OPTIONS}
+          onChange={(v) => saveField({ exercise_eatback_pct: Number(v) })}
+        />
+      </ListSection>
+
+      <ListSection
+        header="Food databases"
+        footer={
+          mode === 'cloud'
+            ? 'Search and the AI use these alongside your saved foods and the built-in Jamaican list. Packaged-food data comes from labels and can contain errors.'
+            : 'Online databases need an account (they are searched through the server).'
+        }
+      >
+        <ListRow icon="leaf" color="var(--green)" label="Jamaican list" sub={`${BUILTIN_FOODS.length} built-in foods plus your saved foods`} value="Always on" />
+        <ToggleRow icon="db" color="var(--indigo)" label="USDA FoodData Central" sub="Generic foods and dishes" checked={prefs.usda} onChange={(v) => setPrefs({ usda: v })} />
+        <ToggleRow icon="barcode" color="var(--orange)" label="Open Food Facts" sub="Packaged products and barcodes" checked={prefs.off} onChange={(v) => setPrefs({ off: v })} />
+        <ToggleRow icon="sparkles" color="var(--purple)" label="AI checks databases" sub="Estimates look foods up first" checked={prefs.aiChecks} onChange={(v) => setPrefs({ aiChecks: v })} />
+      </ListSection>
 
       {mode === 'cloud' && (
-        <section className="card" style={{ marginTop: 12 }}>
-          <h3>AI usage today</h3>
-          <p className="small" style={{ margin: 0 }}>
-            {usage
-              ? `${usage.requests} requests · ${Number(usage.input_tokens).toLocaleString('en-GB')} input / ${Number(usage.output_tokens).toLocaleString('en-GB')} output tokens`
-              : 'No AI requests yet today.'}
-          </p>
-        </section>
+        <ListSection header="Coach">
+          <ListRow icon="note" color="var(--teal)" label="Notes for the coach" sub={profile.coach_notes ? profile.coach_notes.slice(0, 60) : 'Shifts, training, injuries, likes'} onClick={() => setSheet('notes')} />
+          <ListRow
+            icon="chat"
+            color="var(--blue)"
+            label="AI usage today"
+            value={usage ? `${usage.requests} req · ${Math.round((Number(usage.input_tokens) + Number(usage.output_tokens)) / 1000)}k tokens` : 'None yet'}
+            chevron={false}
+          />
+        </ListSection>
+      )}
+      {mode !== 'cloud' && (
+        <ListSection header="Coach">
+          <ListRow icon="note" color="var(--teal)" label="Notes for the coach" sub="Used when you have an account" onClick={() => setSheet('notes')} />
+        </ListSection>
       )}
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <h3>Your data</h3>
-        <div className="stack">
-          <button className="btn soft block" onClick={exportJson}>Export everything (JSON backup)</button>
-          <button className="btn soft block" onClick={exportCsv}>Export food log (CSV for Sheets/Excel)</button>
-          <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importJson} />
-          <button className="btn ghost block" onClick={() => importRef.current.click()}>Import JSON backup</button>
-          {mode === 'local' && (
-            <button className="btn danger block" onClick={wipeLocal}>Delete all data on this device</button>
-          )}
+      <ListSection header="Appearance">
+        <div className="list-row">
+          <div style={{ width: '100%' }}>
+            <Segmented label="Appearance" value={prefs.theme} onChange={(t) => setPrefs({ theme: t })} options={[['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']]} />
+          </div>
         </div>
-      </section>
+      </ListSection>
 
-      <section className="card">
-        <h3>Install on iPhone</h3>
-        <p className="small" style={{ margin: 0 }}>
-          In Safari tap <strong>Share</strong> → <strong>Add to Home Screen</strong>. It then opens full-screen like an app and works offline for viewing.
-        </p>
-      </section>
+      <ListSection header="Your data" footer={mode === 'local' ? 'Local mode: if iOS clears website data, it’s gone. Export regularly or create an account.' : 'Imports add entries; they don’t merge.'}>
+        <ListRow icon="download" color="var(--blue)" label="Export backup (JSON)" onClick={exportJson} />
+        <ListRow icon="table" color="var(--green)" label="Export food log (CSV)" onClick={exportCsv} />
+        <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importJson} />
+        <ListRow icon="share" color="var(--orange)" label="Import backup" onClick={() => importRef.current.click()} />
+        {mode === 'local' && <ListRow icon="trash" color="var(--red)" label="Delete all data on this device" className="destructive" onClick={wipeLocal} />}
+      </ListSection>
 
-      <p className="tiny muted center">
-        v{APP_VERSION} · Estimates, not medical advice. Talk to your doctor before big diet changes, especially with diabetes, blood pressure
-        medication or pregnancy.
-      </p>
+      <ListSection header="Account">
+        {mode === 'cloud' && <ListRow icon="lock" color="var(--text-2)" label="Change password" onClick={() => setSheet('password')} />}
+        <ListRow icon="logout" color="var(--red)" label={mode === 'cloud' ? 'Sign out' : 'Leave local mode'} className="destructive" chevron={false} onClick={signOut} />
+      </ListSection>
+
+      <ListSection header="About" footer="Estimates, not medical advice. Talk to your doctor before big diet changes, especially with diabetes, blood pressure medication or pregnancy.">
+        <ListRow icon="phone" color="var(--text-2)" label="Install on iPhone" sub="Safari → Share → Add to Home Screen" />
+        <ListRow icon="info" color="var(--text-2)" label="Version" value={APP_VERSION} chevron={false} />
+      </ListSection>
+
+      {sheet === 'plan' && (
+        <ProfileSheet title="Your plan" groups={['goal', 'targets']} currentWeightKg={trendKg} onClose={() => setSheet(null)}>
+          {(form) => (
+            <>
+              <GoalFields form={form} advanced />
+              <TargetPreview values={form.values} currentWeightKg={trendKg} />
+            </>
+          )}
+        </ProfileSheet>
+      )}
+      {sheet === 'body' && (
+        <ProfileSheet title="Personal details" groups={['about', 'body']} onClose={() => setSheet(null)}>
+          {(form) => (
+            <>
+              <AboutFields form={form} />
+              <BodyFields form={form} hasWeighIns={series.length > 0} />
+            </>
+          )}
+        </ProfileSheet>
+      )}
+      {sheet === 'notes' && (
+        <ProfileSheet title="Notes for the coach" groups={[]} onClose={() => setSheet(null)}>
+          {(form) => (
+            <>
+              <CoachNotesField form={form} />
+              <p className="list-footer" style={{ marginTop: -6, marginBottom: 14 }}>The coach reads these with every message.</p>
+            </>
+          )}
+        </ProfileSheet>
+      )}
+      {sheet === 'password' && <ChangePassword onClose={() => setSheet(null)} />}
     </div>
   )
 }
 
-function ChangePassword() {
+/** A sheet that edits part of the profile and saves the whole thing. */
+function ProfileSheet({ title, groups, children, onClose }) {
+  const { profile, saveProfile, toast } = useApp()
+  const form = useProfileForm(profile)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function save(e) {
+    e.preventDefault()
+    const problem = validateProfile(form.values, groups)
+    if (problem) return setErr(problem)
+    setBusy(true)
+    try {
+      await saveProfile(form.values)
+      toast('Saved')
+      onClose()
+    } catch (ex) {
+      setErr(ex.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Sheet title={title} onClose={onClose}>
+      <form onSubmit={save}>
+        {children(form)}
+        {err && (
+          <p className="small danger-text" role="alert">
+            {err}
+          </p>
+        )}
+        <button className="btn block" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+      </form>
+    </Sheet>
+  )
+}
+
+function ChangePassword({ onClose }) {
   const { toast } = useApp()
-  const [open, setOpen] = useState(false)
   const [pw, setPw] = useState('')
   const [busy, setBusy] = useState(false)
-  if (!open) {
-    return (
-      <p style={{ margin: '10px 0 0' }}>
-        <button className="link small" onClick={() => setOpen(true)}>Change password</button>
-      </p>
-    )
-  }
   async function save(e) {
     e.preventDefault()
     setBusy(true)
@@ -184,13 +333,17 @@ function ChangePassword() {
     setBusy(false)
     if (error) return toast(error.message, 'error')
     toast('Password updated')
-    setPw('')
-    setOpen(false)
+    onClose()
   }
   return (
-    <form className="row" style={{ marginTop: 10 }} onSubmit={save}>
-      <input className="input grow" type="password" autoComplete="new-password" minLength={8} placeholder="New password (8+ chars)" value={pw} onChange={(e) => setPw(e.target.value)} />
-      <button className="btn" disabled={busy || pw.length < 8}>Save</button>
-    </form>
+    <Sheet title="Change password" onClose={onClose}>
+      <form onSubmit={save}>
+        <label className="field">
+          <span>New password</span>
+          <input className="input" type="password" autoComplete="new-password" minLength={8} placeholder="8+ characters" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus />
+        </label>
+        <button className="btn block" disabled={busy || pw.length < 8}>Save</button>
+      </form>
+    </Sheet>
   )
 }
