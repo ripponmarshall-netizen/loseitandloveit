@@ -40,3 +40,12 @@ test('suggestions follow the clock and what is due', () => {
   assert.equal(lunch[0].id, 'meal')
   assert.equal(lunch[0].reason, 'Log lunch')
 })
+
+test('water crackers are food, not water', () => {
+  assert.deepEqual(parseQuickLog('water crackers'), { type: 'food', query: 'water crackers', drink: false })
+  assert.equal(parseQuickLog('2 water crackers and cheese').type, 'food')
+  assert.equal(parseQuickLog('Excelsior water crackers').type, 'food')
+  // plain water still works
+  assert.deepEqual(parseQuickLog('2 glasses water'), { type: 'water', ml: 500 })
+  assert.equal(parseQuickLog('water').type, 'water')
+})

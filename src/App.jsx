@@ -21,6 +21,8 @@ import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
 import { watchKeyboard } from './lib/viewport.js'
+import { buildMilestones } from './lib/milestones.js'
+import { milestoneLabel } from './components/Milestones.jsx'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -246,6 +248,35 @@ export default function App() {
     [profile, currentWeight],
   )
   const today = useMemo(() => logicalToday(profile?.day_start_hour ?? 4, new Date(clock)), [profile, clock])
+
+  // A weigh-in that moves the trend past a milestone gets a cheer straight away.
+  // The baseline resets when the plan (start, goal, units) changes, so editing
+  // the profile never announces milestones.
+  const msUnits = profile?.units || 'imperial'
+  const msPlan = profile ? `${profile.start_weight_kg}|${profile.goal_weight_kg}|${msUnits}` : null
+  const reachedMs = useMemo(
+    () => (msPlan ? buildMilestones({ startKg: profile.start_weight_kg, goalKg: profile.goal_weight_kg, series, units: msUnits }).filter((m) => m.reached) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [msPlan, series],
+  )
+  const msBaseline = useRef({ plan: null, ids: null })
+  useEffect(() => {
+    if (!reachedMs) return
+    const base = msBaseline.current
+    const ids = reachedMs.map((m) => m.id)
+    if (base.plan !== msPlan || !base.ids) {
+      msBaseline.current = { plan: msPlan, ids }
+      return
+    }
+    const added = reachedMs.filter((m) => !base.ids.includes(m.id))
+    msBaseline.current = { plan: msPlan, ids }
+    if (added.length) {
+      const m = added[added.length - 1]
+      const msg = m.kind === 'goal' ? '🏆 Goal reached! Amazing work.' : `🎉 Milestone reached: ${m.kind === 'health' ? `${m.pct}% lighter` : milestoneLabel(m, msUnits)}`
+      // After the sheet's own "Weight saved" toast, which would otherwise replace this one.
+      setTimeout(() => toast(msg), 1400)
+    }
+  }, [reachedMs, msPlan, msUnits, toast])
   const date = selectedDate ?? today
 
   const signOut = useCallback(async () => {
