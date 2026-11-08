@@ -1,11 +1,19 @@
 // Supabase Edge Function "ai": the only place the Anthropic API key lives.
 //
-//   POST { action: "coach", message, history, context }  -> NDJSON stream
-//   POST { action: "estimate", text, image?: { media_type, data } } -> JSON
+//   POST { action: "coach", message, history, context, refs?, sources? } -> NDJSON stream
+//   POST { action: "estimate", text, image?: { media_type, data }, refs?, sources? } -> JSON
+//   POST { action: "food_search", query? | barcode?, sources? } -> JSON (no Claude call)
+//
+// Both AI actions can call one tool, search_food_databases, which checks:
+//   - the user's saved foods and the app's Jamaican list (sent by the app as `refs`)
+//   - USDA FoodData Central (generic foods and mixed dishes, per 100 g)
+//   - Open Food Facts (packaged and branded products, per 100 g)
 //
 // Secrets (Dashboard -> Edge Functions -> Secrets):
 //   ANTHROPIC_API_KEY  required
 //   ALLOWED_EMAILS     required, comma-separated; only these accounts may use AI
+//   USDA_API_KEY       optional but recommended (free at fdc.nal.usda.gov/api-key-signup).
+//                      Without it the shared DEMO_KEY is used, which allows ~10 requests an hour.
 //   COACH_MODEL        optional, default claude-haiku-5-5
 //   ESTIMATE_MODEL     optional, default claude-haiku-5-5
 //   COACH_EFFORT / ESTIMATE_EFFORT  optional, default medium (low|medium|high)
@@ -151,6 +159,306 @@ async function recordTokens(userId: string, day: string, usage: Record<string, n
   if (error) console.error("add_ai_tokens failed", error.message);
 }
 
+// ---------------------------------------------------------------- food databases
+//
+// Everything is normalised to per-100 g (USDA, Open Food Facts) or per-serving
+// (the app's own lists) so the model and the app can scale portions.
+
+const USDA_KEY = env("USDA_API_KEY") || "DEMO_KEY";
+const UA = "LoseItAndLoveIt/0.2 (https://github.com/ripponmarshall-netizen/loseitandloveit)";
+const FETCH_TIMEOUT_MS = 6000;
+
+type Sources = { usda: boolean; off: boolean };
+type DbItem = {
+  id: string;
+  source: "usda" | "off";
+  name: string;
+  brand?: string;
+  per100: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+  serving_g?: number;
+  serving_text?: string;
+};
+type LocalRef = {
+  name: string;
+  serving?: string;
+  calories: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  src?: string;
+  tags?: string;
+};
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+const toNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
+
+function readSources(raw: unknown): Sources {
+  const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { usda: s.usda !== false, off: s.off !== false };
+}
+
+// Small per-instance cache: the same query often repeats within minutes.
+const cache = new Map<string, { at: number; value: unknown }>();
+async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  const value = await fn();
+  cache.set(key, { at: Date.now(), value });
+  if (cache.size > 300) cache.delete(cache.keys().next().value as string);
+  return value;
+}
+
+async function getJson(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<Record<string, unknown>> {
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const text = await res.text();
+  let body: Record<string, unknown> = {};
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  if (!res.ok) {
+    const err = body.error as { code?: string; message?: string } | undefined;
+    if (err?.code === "OVER_RATE_LIMIT") throw new Error("USDA rate limit reached. Add a free USDA_API_KEY secret.");
+    throw new Error(err?.message || `HTTP ${res.status}`);
+  }
+  return body;
+}
+
+const tidyName = (s: string) => s.replace(/\s+/g, " ").trim().slice(0, 160);
+
+// USDA nutrient ids: 1008 energy (kcal), 2047/2048 Atwater energy (Foundation
+// foods), 1003 protein, 1005 carbohydrate, 1004 total fat.
+function normaliseUsda(food: Record<string, unknown>): DbItem | null {
+  const nutrients = (food.foodNutrients as Array<Record<string, unknown>>) || [];
+  const get = (...ids: number[]) => {
+    for (const id of ids) {
+      const n = nutrients.find((x) => x.nutrientId === id && String(x.unitName || "").toUpperCase() !== "KJ");
+      if (n && n.value != null) return toNum(n.value);
+    }
+    return null;
+  };
+  const kcal = get(1008, 2047, 2048);
+  if (kcal == null) return null;
+  const unit = String(food.servingSizeUnit || "").toLowerCase();
+  const servingG = unit === "g" || unit === "grm" ? toNum(food.servingSize) : 0;
+  return {
+    id: `usda:${food.fdcId}`,
+    source: "usda",
+    name: tidyName(String(food.description || "Food")),
+    brand: food.brandOwner ? tidyName(String(food.brandName || food.brandOwner)) : undefined,
+    per100: { calories: Math.round(kcal), protein_g: r1(get(1003) ?? 0), carbs_g: r1(get(1005) ?? 0), fat_g: r1(get(1004) ?? 0) },
+    serving_g: servingG > 0 ? servingG : undefined,
+    serving_text: food.householdServingFullText ? String(food.householdServingFullText).slice(0, 60) : undefined,
+  };
+}
+
+function normaliseOff(p: Record<string, unknown>): DbItem | null {
+  const n = (p.nutriments || {}) as Record<string, unknown>;
+  let kcal = n["energy-kcal_100g"] != null ? toNum(n["energy-kcal_100g"]) : null;
+  if (kcal == null && n["energy-kj_100g"] != null) kcal = toNum(n["energy-kj_100g"]) / 4.184;
+  if (kcal == null && n["energy_100g"] != null) kcal = toNum(n["energy_100g"]) / 4.184; // energy_100g is kJ
+  const name = String(p.product_name || "").trim();
+  if (kcal == null || !name) return null;
+  const brands = Array.isArray(p.brands) ? p.brands.join(", ") : String(p.brands || "");
+  const servingG = toNum(p.serving_quantity);
+  return {
+    id: `off:${p.code}`,
+    source: "off",
+    name: tidyName(name),
+    brand: brands ? tidyName(brands.split(",")[0]) : undefined,
+    per100: {
+      calories: Math.round(kcal),
+      protein_g: r1(toNum(n.proteins_100g)),
+      carbs_g: r1(toNum(n.carbohydrates_100g)),
+      fat_g: r1(toNum(n.fat_100g)),
+    },
+    serving_g: servingG > 0 && servingG < 2000 ? servingG : undefined,
+    serving_text: p.serving_size ? String(p.serving_size).slice(0, 60) : undefined,
+  };
+}
+
+async function searchUsda(query: string): Promise<DbItem[]> {
+  return await cached(`usda:${query}`, 3_600_000, async () => {
+    const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+    url.searchParams.set("api_key", USDA_KEY);
+    url.searchParams.set("query", query);
+    url.searchParams.set("pageSize", "8");
+    url.searchParams.set("dataType", "Foundation,SR Legacy,Survey (FNDDS)");
+    const body = await getJson(url.toString());
+    return ((body.foods as Array<Record<string, unknown>>) || []).map(normaliseUsda).filter(Boolean).slice(0, 6) as DbItem[];
+  });
+}
+
+const OFF_FIELDS = "code,product_name,brands,nutriments,serving_size,serving_quantity";
+
+async function searchOff(query: string): Promise<DbItem[]> {
+  return await cached(`off:${query}`, 3_600_000, async () => {
+    // search.openfoodfacts.org is the current full-text search; the old cgi/search.pl is unreliable.
+    const url = new URL("https://search.openfoodfacts.org/search");
+    url.searchParams.set("q", query);
+    url.searchParams.set("page_size", "12");
+    url.searchParams.set("fields", OFF_FIELDS);
+    const body = await getJson(url.toString());
+    return ((body.hits as Array<Record<string, unknown>>) || []).map(normaliseOff).filter(Boolean).slice(0, 6) as DbItem[];
+  });
+}
+
+// Barcode: the search service matches the exact stored code (UPC-A is stored as
+// a 13-digit EAN with a leading zero), so try both forms. The product API on
+// world.openfoodfacts.org is the fallback; it is slower and sometimes times out.
+async function lookupBarcode(code: string): Promise<DbItem | null> {
+  return await cached(`bar:${code}`, 86_400_000, async () => {
+    const variants = code.length === 12 ? [`0${code}`, code] : [code];
+    for (const v of variants) {
+      try {
+        const url = new URL("https://search.openfoodfacts.org/search");
+        url.searchParams.set("q", `code:${v}`);
+        url.searchParams.set("page_size", "1");
+        url.searchParams.set("fields", OFF_FIELDS);
+        const hit = ((await getJson(url.toString())).hits as Array<Record<string, unknown>>)?.[0];
+        if (hit) return normaliseOff(hit);
+      } catch {
+        break; // search service down: go to the product API
+      }
+    }
+    const body = await getJson(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${OFF_FIELDS}`, 10_000);
+    return body.product ? normaliseOff({ ...(body.product as Record<string, unknown>), code }) : null;
+  });
+}
+
+async function searchOnline(query: string, sources: Sources) {
+  const jobs: Array<[keyof Sources, Promise<DbItem[]>]> = [];
+  if (sources.usda) jobs.push(["usda", searchUsda(query)]);
+  if (sources.off) jobs.push(["off", searchOff(query)]);
+  const settled = await Promise.allSettled(jobs.map(([, p]) => p));
+  const results: DbItem[] = [];
+  const errors: Record<string, string> = {};
+  settled.forEach((s, i) => {
+    const name = jobs[i][0];
+    if (s.status === "fulfilled") results.push(...s.value);
+    else errors[name] = s.reason?.name === "TimeoutError" ? "timed out" : s.reason instanceof Error ? s.reason.message : "unavailable";
+  });
+  return { results, errors };
+}
+
+function readRefs(raw: unknown): LocalRef[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r) => r && typeof r.name === "string" && Number.isFinite(Number(r.calories)))
+    .slice(0, 500)
+    .map((r) => ({
+      name: String(r.name).slice(0, 120),
+      serving: r.serving ? String(r.serving).slice(0, 60) : undefined,
+      calories: Math.round(Number(r.calories)),
+      protein_g: r1(toNum(r.protein_g)),
+      carbs_g: r1(toNum(r.carbs_g)),
+      fat_g: r1(toNum(r.fat_g)),
+      src: r.src === "mine" ? "mine" : "jamaican",
+      tags: r.tags ? String(r.tags).slice(0, 80) : undefined,
+    }));
+}
+
+const words = (s: string) => s.toLowerCase().normalize("NFD").replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 1);
+
+function matchRefs(query: string, refs: LocalRef[], limit = 5): LocalRef[] {
+  const q = words(query);
+  if (!q.length) return [];
+  return refs
+    .map((r) => {
+      const hay = words(`${r.name} ${r.tags || ""}`);
+      const hits = q.filter((w) => hay.some((h) => h.startsWith(w) || w.startsWith(h))).length;
+      return { r, score: hits / q.length + (r.src === "mine" ? 0.05 : 0) };
+    })
+    .filter((x) => x.score >= 0.5)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.r);
+}
+
+const macros = (x: { calories: number; protein_g?: number; carbs_g?: number; fat_g?: number }) =>
+  `${x.calories} kcal, P ${x.protein_g ?? 0} g, C ${x.carbs_g ?? 0} g, F ${x.fat_g ?? 0} g`;
+
+// Compact text for the model: fewer tokens than JSON and easy to cite.
+async function foodToolResult(query: string, refs: LocalRef[], sources: Sources): Promise<string> {
+  const local = matchRefs(query, refs);
+  const { results, errors } = await searchOnline(query, sources);
+  const lines: string[] = [`Results for "${query}":`];
+  const mine = local.filter((r) => r.src === "mine");
+  const jam = local.filter((r) => r.src !== "mine");
+  if (mine.length) {
+    lines.push("", "User's saved foods (per serving; their own numbers, prefer these):");
+    for (const r of mine) lines.push(`- ${r.name} [${r.serving || "1 serving"}]: ${macros(r)}`);
+  }
+  if (jam.length) {
+    lines.push("", "App's Jamaican list (per serving; typical home/cookshop estimates):");
+    for (const r of jam) lines.push(`- ${r.name} [${r.serving || "1 serving"}]: ${macros(r)}`);
+  }
+  const usda = results.filter((r) => r.source === "usda");
+  const off = results.filter((r) => r.source === "off");
+  if (usda.length) {
+    lines.push("", "USDA FoodData Central (per 100 g):");
+    for (const r of usda) lines.push(`- ${r.name}: ${macros(r.per100)}`);
+  }
+  if (off.length) {
+    lines.push("", "Open Food Facts, packaged products (per 100 g; label data, can contain errors):");
+    for (const r of off) {
+      lines.push(`- ${r.name}${r.brand ? ` (${r.brand})` : ""}: ${macros(r.per100)}${r.serving_text ? `; label serving ${r.serving_text}` : ""}`);
+    }
+  }
+  for (const [name, msg] of Object.entries(errors)) lines.push("", `${name === "usda" ? "USDA" : "Open Food Facts"} unavailable: ${msg}`);
+  if (lines.length === 1) lines.push("No matches. Try a simpler or more generic name, or estimate from knowledge.");
+  return lines.join("\n");
+}
+
+const FOOD_TOOL_BASE = {
+  name: "search_food_databases",
+  description:
+    "Look up nutrition values for one food. Searches the user's saved foods, the app's Jamaican food list, " +
+    "USDA FoodData Central (generic foods, per 100 g) and Open Food Facts (packaged/branded products, per 100 g). " +
+    "Use one short, specific query per food, e.g. 'rice and peas', 'fried dumpling', 'white rice cooked', 'Grace corned beef'. " +
+    "Call it several times in one turn (in parallel) when a meal has several foods.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: { query: { type: "string", description: "Food name to look up, 2-6 words." } },
+    required: ["query"],
+  },
+};
+// Non-streaming: strict keeps the input schema-valid. Streaming: eager input
+// streaming (the server no longer validates, so runFoodTools checks the input).
+const FOOD_TOOL_STRICT = { ...FOOD_TOOL_BASE, strict: true };
+const FOOD_TOOL_STREAMING = { ...FOOD_TOOL_BASE, eager_input_streaming: true };
+
+type ToolUse = { type: "tool_use"; id: string; name: string; input: unknown };
+
+async function runFoodTools(blocks: ToolUse[], refs: LocalRef[], sources: Sources) {
+  return await Promise.all(
+    blocks.map(async (b) => {
+      const query = (b.input as { query?: unknown })?.query;
+      if (b.name !== FOOD_TOOL_BASE.name || typeof query !== "string" || !query.trim()) {
+        return { type: "tool_result", tool_use_id: b.id, is_error: true, content: "Invalid input: send {\"query\": \"food name\"}." };
+      }
+      try {
+        return { type: "tool_result", tool_use_id: b.id, content: await foodToolResult(query.trim().slice(0, 100), refs, sources) };
+      } catch (e) {
+        return { type: "tool_result", tool_use_id: b.id, is_error: true, content: `Lookup failed: ${e instanceof Error ? e.message : e}` };
+      }
+    }),
+  );
+}
+
+const MAX_TOOL_ROUNDS = 3;
+
+function addUsage(total: Record<string, number>, usage: Record<string, number | null | undefined>) {
+  for (const k of ["input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]) {
+    total[k] = (total[k] ?? 0) + (usage?.[k] ?? 0);
+  }
+}
+
 // ---------------------------------------------------------------- coach
 
 const COACH_SYSTEM = `You are the coach inside "Lose It & Love It", a calorie-tracking app. Most users live in Jamaica.
@@ -163,6 +471,7 @@ How to coach:
 - Base advice on evidence: energy balance, enough protein, fibre and vegetables, resistance training, daily steps, sleep, and consistency over perfection. No fad diets, detoxes, "fat-burning" foods or supplement hype.
 - Explain weight noise when relevant: the trend matters, not one weigh-in. Salt (saltfish, soups, seasoning), carbs, alcohol, poor sleep and hard shifts all cause water swings.
 - Know Jamaican food well. Suggest realistic swaps and portions for local dishes (for example boiled instead of fried dumpling, steamed fish, a fist of rice and peas plus extra vegetables, callaloo or cabbage on the side, water or unsweetened drinks instead of sweet juice or soda). Assume cookshop and home-cooked food, and mention local options when you suggest meals.
+- When you quote calories or protein for a specific food or product, check it with search_food_databases first rather than relying on memory. Say where a number came from in a few words when it matters (for example "USDA" or "the label"). Don't look things up for general advice that needs no numbers.
 - Respect anything in profile.coach_notes, such as shift patterns, training, injuries or food preferences.
 - app_data may include workouts: treadmill sessions (minutes, speed, incline) and at-home workouts (type, intensity, exercises). Use them. Encourage resistance training 2–3 times a week to keep muscle while losing fat, and treadmill or incline walking for steps and heart health. Suggest small progressions (one more round, a few more reps, +1% incline, +5 minutes) and allow recovery after long or night shifts. Burned-calorie figures are estimates, so don't tell the user to eat them all back.
 
@@ -196,11 +505,16 @@ function coach(body: Record<string, unknown>, userId: string, day: string): Resp
   if (!question) return json({ error: "Empty message" }, 400);
   const history = sanitizeHistory(body.history);
   const appData = JSON.stringify(body.context ?? {}).slice(0, 30000);
+  const refs = readRefs(body.refs);
+  const sources = readSources(body.sources);
 
   // Every turn is a list of text blocks so the cached prefix renders the same
   // way next time. The cache breakpoint sits on the question; the volatile
-  // app data comes after it and is never stored in history.
-  const messages = [
+  // app data comes after it and is never stored in history. Within one
+  // request the tool loop only ever appends (assistant content is passed back
+  // unchanged, thinking blocks included).
+  // deno-lint-ignore no-explicit-any
+  const messages: any[] = [
     ...history.map((t) => ({ role: t.role, content: [{ type: "text", text: t.content }] })),
     {
       role: "user",
@@ -211,12 +525,13 @@ function coach(body: Record<string, unknown>, userId: string, day: string): Resp
     },
   ];
 
-  const params = {
+  const base = {
     model: COACH_MODEL,
     max_tokens: 16000,
     output_config: { effort: COACH_EFFORT },
+    // Tools render before the system prompt, so this breakpoint caches both.
+    tools: [FOOD_TOOL_STREAMING],
     system: [{ type: "text", text: COACH_SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages,
     ...fallbackParams(COACH_MODEL),
   };
 
@@ -224,28 +539,48 @@ function coach(body: Record<string, unknown>, userId: string, day: string): Resp
   const stream = new ReadableStream({
     async start(controller) {
       const send = (o: unknown) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+      const usage: Record<string, number> = {};
+      let wroteText = false;
       try {
-        // deno-lint-ignore no-explicit-any
-        const s = anthropic.beta.messages.stream(params as any);
-        for await (const event of s) {
-          if (event.type === "content_block_start" && (event.content_block as { type: string }).type === "fallback") {
-            // Model switched mid-answer after a refusal: client clears partial text.
-            send({ t: "reset" });
-          } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            send({ t: "delta", v: event.delta.text });
+        for (let round = 0; ; round++) {
+          const lastRound = round >= MAX_TOOL_ROUNDS;
+          // deno-lint-ignore no-explicit-any
+          const s = anthropic.beta.messages.stream({ ...base, messages, ...(lastRound ? { tool_choice: { type: "none" } } : {}) } as any);
+          let roundText = false;
+          for await (const event of s) {
+            if (event.type === "content_block_start" && (event.content_block as { type: string }).type === "fallback") {
+              // Model switched mid-answer after a refusal: client clears partial text.
+              send({ t: "reset" });
+              wroteText = false;
+            } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              if (!roundText && wroteText) send({ t: "delta", v: "\n\n" }); // separate text from earlier rounds
+              roundText = wroteText = true;
+              send({ t: "delta", v: event.delta.text });
+            }
           }
-        }
-        const final = await s.finalMessage();
-        await recordTokens(userId, day, final.usage as unknown as Record<string, number>);
-        if (final.stop_reason === "refusal") {
-          send({ t: "error", message: "The coach can't help with that one. Try asking another way." });
-        } else {
-          send({ t: "done", stop: final.stop_reason, model: final.model });
+          const final = await s.finalMessage();
+          addUsage(usage, final.usage as unknown as Record<string, number>);
+
+          if (final.stop_reason === "refusal") {
+            send({ t: "error", message: "The coach can't help with that one. Try asking another way." });
+            break;
+          }
+          const toolUses = final.content.filter((b: { type: string }) => b.type === "tool_use") as unknown as ToolUse[];
+          if (final.stop_reason !== "tool_use" || !toolUses.length) {
+            send({ t: "done", stop: final.stop_reason, model: final.model });
+            break;
+          }
+          const queries = toolUses.map((b) => (b.input as { query?: string })?.query).filter(Boolean);
+          send({ t: "status", v: `Checking food databases: ${queries.join(", ")}`.slice(0, 140) });
+          messages.push({ role: "assistant", content: final.content });
+          messages.push({ role: "user", content: await runFoodTools(toolUses, refs, sources) });
+          send({ t: "status", v: "Thinking…" });
         }
       } catch (e) {
         console.error("coach error", e);
         send({ t: "error", message: friendlyError(e) });
       } finally {
+        await recordTokens(userId, day, usage);
         controller.close();
       }
     },
@@ -261,7 +596,10 @@ function coach(body: Record<string, unknown>, userId: string, day: string): Resp
 const ESTIMATE_SYSTEM = `You estimate nutrition for meals logged in a calorie-tracking app used mainly in Jamaica.
 
 - Split the meal into separate items (for example "rice and peas", "brown stew chicken", "coleslaw").
+- Check each item with search_food_databases before you estimate it. Look up all the items in one turn (parallel calls). One retry with a simpler name is fine; don't keep searching.
+- Choose references in this order: the user's saved foods (their own numbers), the app's Jamaican list for Jamaican dishes, USDA for generic foods and ingredients, Open Food Facts for packaged or branded products. Scale per-100 g values to the portion. Ignore matches that are clearly a different food or preparation.
 - For each item give a realistic portion in "serving" (for example "1 cup", "2 pieces", "1 medium") and the calories, protein, carbs and fat for that whole portion.
+- In "reference" name the source and entry you based it on in a few words (for example "USDA: Rice, white, cooked" or "Jamaican list: Fried dumpling"), or "Estimate" if nothing matched.
 - Assume typical Jamaican home or cookshop preparation for Jamaican dishes (oil, coconut milk, sugar in drinks) unless told otherwise.
 - If the portion is unclear, assume one typical adult portion and say so in "notes".
 - With a photo, judge portion size from plate size and visual cues. If the photo shows no food, return no items and explain in "notes".
@@ -277,7 +615,7 @@ const ESTIMATE_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["name", "serving", "calories", "protein_g", "carbs_g", "fat_g", "confidence"],
+        required: ["name", "serving", "calories", "protein_g", "carbs_g", "fat_g", "confidence", "reference"],
         properties: {
           name: { type: "string" },
           serving: { type: "string" },
@@ -286,6 +624,7 @@ const ESTIMATE_SCHEMA = {
           carbs_g: { type: "number" },
           fat_g: { type: "number" },
           confidence: { type: "string", enum: ["low", "medium", "high"] },
+          reference: { type: "string" },
         },
       },
     },
@@ -299,6 +638,9 @@ async function estimate(body: Record<string, unknown>, userId: string, day: stri
   const text = String(body.text ?? "").trim().slice(0, 2000);
   const image = body.image as { media_type?: string; data?: string } | undefined;
   if (!text && !image?.data) return json({ error: "Describe the meal or add a photo." }, 400);
+  const refs = readRefs(body.refs);
+  const sources = readSources(body.sources);
+  const useTools = body.check_databases !== false;
 
   const content: Record<string, unknown>[] = [];
   if (image?.data) {
@@ -308,32 +650,72 @@ async function estimate(body: Record<string, unknown>, userId: string, day: stri
   }
   content.push({ type: "text", text: text ? `Meal: ${text}` : "Estimate the meal in this photo." });
 
+  // deno-lint-ignore no-explicit-any
+  const messages: any[] = [{ role: "user", content }];
+  const usage: Record<string, number> = {};
+  const lookedUp: string[] = [];
+
   try {
-    // deno-lint-ignore no-explicit-any
-    const res: any = await anthropic.beta.messages.create({
-      model: ESTIMATE_MODEL,
-      max_tokens: 16000,
-      output_config: { effort: ESTIMATE_EFFORT, format: { type: "json_schema", schema: ESTIMATE_SCHEMA } },
-      system: ESTIMATE_SYSTEM,
-      messages: [{ role: "user", content }],
-      ...fallbackParams(ESTIMATE_MODEL),
+    for (let round = 0; ; round++) {
+      const lastRound = !useTools || round >= MAX_TOOL_ROUNDS;
       // deno-lint-ignore no-explicit-any
-    } as any);
-    await recordTokens(userId, day, res.usage);
+      const res: any = await anthropic.beta.messages.create({
+        model: ESTIMATE_MODEL,
+        max_tokens: 16000,
+        output_config: { effort: ESTIMATE_EFFORT, format: { type: "json_schema", schema: ESTIMATE_SCHEMA } },
+        system: ESTIMATE_SYSTEM,
+        messages,
+        ...(useTools ? { tools: [FOOD_TOOL_STRICT], ...(lastRound ? { tool_choice: { type: "none" } } : {}) } : {}),
+        ...fallbackParams(ESTIMATE_MODEL),
+        // deno-lint-ignore no-explicit-any
+      } as any);
+      addUsage(usage, res.usage);
 
-    if (res.stop_reason === "refusal") return json({ error: "Couldn't estimate that. Try describing it differently." }, 422);
-    if (res.stop_reason === "max_tokens") return json({ error: "Estimate was cut off. Try fewer items at once." }, 502);
+      if (res.stop_reason === "refusal") return json({ error: "Couldn't estimate that. Try describing it differently." }, 422);
+      if (res.stop_reason === "max_tokens") return json({ error: "Estimate was cut off. Try fewer items at once." }, 502);
 
-    const block = res.content.find((b: { type: string }) => b.type === "text");
-    const parsed = JSON.parse(block?.text ?? "{}");
-    return json({ items: parsed.items ?? [], notes: parsed.notes ?? "", model: res.model });
+      const toolUses = res.content.filter((b: { type: string }) => b.type === "tool_use") as ToolUse[];
+      if (res.stop_reason === "tool_use" && toolUses.length && !lastRound) {
+        lookedUp.push(...toolUses.map((b) => String((b.input as { query?: string })?.query ?? "")).filter(Boolean));
+        messages.push({ role: "assistant", content: res.content });
+        messages.push({ role: "user", content: await runFoodTools(toolUses, refs, sources) });
+        continue;
+      }
+
+      const block = res.content.find((b: { type: string }) => b.type === "text");
+      const parsed = JSON.parse(block?.text ?? "{}");
+      return json({ items: parsed.items ?? [], notes: parsed.notes ?? "", looked_up: lookedUp, model: res.model });
+    }
   } catch (e) {
     console.error("estimate error", e);
     return json({ error: friendlyError(e) }, 502);
+  } finally {
+    await recordTokens(userId, day, usage);
+  }
+}
+
+// ---------------------------------------------------------------- food search (no AI)
+
+async function foodSearch(body: Record<string, unknown>): Promise<Response> {
+  const sources = readSources(body.sources);
+  const barcode = String(body.barcode ?? "").replace(/\D/g, "");
+  try {
+    if (barcode) {
+      if (barcode.length < 8 || barcode.length > 14) return json({ error: "Barcodes are 8 to 14 digits." }, 400);
+      const item = await lookupBarcode(barcode);
+      return json({ results: item ? [item] : [], errors: {} });
+    }
+    const query = String(body.query ?? "").trim().slice(0, 100);
+    if (query.length < 2) return json({ results: [], errors: {} });
+    return json(await searchOnline(query, sources));
+  } catch (e) {
+    return json({ error: e instanceof Error ? e.message : "Search failed" }, 502);
   }
 }
 
 // ---------------------------------------------------------------- entry
+
+const ACTIONS = new Set(["coach", "estimate", "food_search"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -344,6 +726,17 @@ Deno.serve(async (req) => {
   const { data: auth, error: authErr } = await admin.auth.getUser(token);
   const user = auth?.user;
   if (authErr || !user) return json({ error: "Your session expired. Sign in again." }, 401);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "Bad request body" }, 400);
+  }
+  if (!ACTIONS.has(String(body.action))) return json({ error: "Unknown action" }, 400);
+
+  // Database search costs no Anthropic credit, so any signed-in user may use it.
+  if (body.action === "food_search") return await foodSearch(body);
 
   const problem = keyProblem();
   if (problem) {
@@ -359,14 +752,6 @@ Deno.serve(async (req) => {
     console.warn(`[ai] signed-in email not on allowlist (${ALLOWED.length} entries)`);
     return json({ error: "This account's email isn't in the ALLOWED_EMAILS secret. Check it matches your sign-in email exactly." }, 403);
   }
-
-  let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "Bad request body" }, 400);
-  }
-  if (body.action !== "coach" && body.action !== "estimate") return json({ error: "Unknown action" }, 400);
 
   const day = localDay();
   const { data: count, error: usageErr } = await admin.rpc("bump_ai_usage", {

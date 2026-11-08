@@ -9,7 +9,8 @@ A phone-first calorie tracker PWA with a Claude-powered coach. It has Jamaican f
 | Area | Features |
 |---|---|
 | Log | Four meals per day, a servings stepper, edit and delete, "copy the day before" |
-| Add food | Search 58 built-in Jamaican staples and basics, your saved foods and recent items. **AI estimate** from a text description and/or a photo. Quick add. |
+| Add food | Search 133 built-in Jamaican staples, cookshop meals and basics, your saved foods and recent items, plus **USDA FoodData Central** and **Open Food Facts** (type a barcode number to look up a packaged product). Log database foods by servings or grams. **AI estimate** from a text description and/or a photo. Quick add. |
+| Food databases | The AI estimate and the coach call a `search_food_databases` tool that checks your saved foods, the Jamaican list, USDA and Open Food Facts before giving numbers. Each AI item shows the reference it used. Toggle sources in Settings → Food databases. |
 | Targets | Mifflin-St Jeor BMR × activity, minus the deficit for your chosen pace. Safety floor (1200/1500 kcal) and a cap of 1% body weight per week. Protein, carbs and fat targets. Manual overrides. |
 | Weight | Weigh-ins, a smoothed trend line (gap-aware EMA), weekly rate, goal ETA |
 | Exercise | **Treadmill** (minutes, speed, incline, walk/run) and **at-home workouts** (bodyweight, dumbbells, HIIT, skipping, mobility) with exercise lists and presets. Net burn from the ACSM treadmill equations or MET values. Optional "eat back" of 0/25/50/100% to the food target. Weekly summary on Progress. |
@@ -17,7 +18,8 @@ A phone-first calorie tracker PWA with a Claude-powered coach. It has Jamaican f
 | Coach | Streaming chat with Claude. Each message carries a compact snapshot: targets, the last 14 days, today's log, workouts, trend, adaptive TDEE and your coach notes. |
 | Shift work | "My day starts at" setting (default 4 am), so a 2 am meal after a night shift counts toward the previous day |
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
-| PWA | Installable on iPhone, offline app shell, light and dark mode |
+| Design | Apple-style: system font (SF Pro on iPhone), white background, pure black in dark mode, iOS grouped lists, sheets with swipe-to-dismiss, spring animations. Appearance: Automatic, Light or Dark. A penguin works out while the app loads and thinks while the AI works. |
+| PWA | Installable on iPhone, offline app shell |
 
 ## One-time setup (all from an iPhone browser)
 
@@ -36,6 +38,8 @@ Dashboard → **Authentication → URL Configuration**:
 Create your account in the app. Then, under **Authentication → Sign In / Providers**, turn off **Allow new users to sign up** so strangers can't make accounts.
 
 ### 3. AI Edge Function (5 min)
+**Updating:** whenever `supabase/functions/ai/index.ts` changes, open the `ai` function → **Code** → paste the new file → **Deploy**. (v0.2.0 changed it: food databases and the lookup tool.)
+
 Dashboard → **Edge Functions** → Deploy a new function → **Via Editor** → name it `ai` → paste [`supabase/functions/ai/index.ts`](supabase/functions/ai/index.ts) → Deploy.
 Then, in the function's **Details**, turn **JWT verification OFF** (the toggle name varies a little between dashboard versions). The function checks the user itself, and this avoids issues with the newer JWT signing keys.
 
@@ -48,6 +52,7 @@ Dashboard → **Edge Functions → Secrets**, add:
 | `COACH_MODEL` *(optional)* | default `claude-haiku-5-5` |
 | `ESTIMATE_MODEL` *(optional)* | default `claude-haiku-5-5` |
 | `AI_DAILY_LIMIT` *(optional)* | default `60` requests/user/day |
+| `USDA_API_KEY` *(recommended)* | free from [fdc.nal.usda.gov/api-key-signup](https://fdc.nal.usda.gov/api-key-signup). Without it USDA search uses the shared `DEMO_KEY`, which allows only about 10 searches an hour. |
 
 The AI stays **locked** until `ALLOWED_EMAILS` is set. This is deliberate: anyone who finds the URL could otherwise spend your API credit.
 
@@ -80,7 +85,7 @@ The app shows the function's error message. Check Supabase → Edge Functions �
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # node:test unit tests for the maths (src/lib/calc.js, dates.js)
+npm test         # node:test unit tests: maths, dates, food search, profile form
 npm run build
 ```
 
@@ -98,18 +103,22 @@ src/
   lib/db.js             data layer: cloud (Supabase) and local (localStorage)
   lib/ai.js             calls the Edge Function (streaming coach, meal estimate, photo resize)
   lib/coachContext.js   the data snapshot sent to the coach
+  lib/foodSearch.js     food ranking, database result → loggable food, AI reference list
+  lib/profileForm.js    profile ↔ form conversion and friendly validation
+  lib/prefs.js          per-device settings: appearance, food database toggles
+  assets/penguins.js    the penguin SVGs (splash, loaders, thinking)
   data/foods.js         built-in Jamaican foods (estimates, edit freely)
-  components/           Today, AddFood, Progress, Coach, Settings, ProfileForm, Charts, ui
+  components/           Today, AddFood, Progress, Coach, Settings, ProfileForm, Onboarding, Charts, ui
 supabase/
   migrations/0001_init.sql   tables + RLS + AI usage functions
-  functions/ai/index.ts      Claude API proxy (coach + estimate), allowlist, daily cap
-tests/calc.test.js
+  functions/ai/index.ts      Claude API proxy (coach + estimate + food search), allowlist, daily cap
+tests/calc.test.js, tests/food.test.js
 ```
 
 ## Known limits / next steps
 
 1. **Offline logging.** The app shell works offline, but saving needs a connection. Next: an outbox queue in `db.js`.
-2. **Food database.** Built-ins are approximate. Next: verify the top 20 foods against labels and recipes, and add Open Food Facts barcode lookup (check Jamaican product coverage first).
+2. **Food database.** Built-ins are approximate. USDA and Open Food Facts are now searchable (barcodes by typing the number). Next: verify the top 20 built-ins against recipes, and camera barcode scanning (iOS Safari has no BarcodeDetector, so it needs a library).
 3. **Weekly check-in.** A scheduled coach summary every Sunday (Supabase cron → Edge Function).
 4. **Water and steps.** Exercise is logged; water and steps aren't yet.
 5. **Tests.** Add Playwright smoke tests to CI.
