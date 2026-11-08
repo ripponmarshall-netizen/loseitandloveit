@@ -177,3 +177,25 @@ test('exercise allowance and weekly summary', () => {
   assert.deepEqual(s, { sessions: 3, minutes: 65, kcal: 295, strength: 1, treadmill: 1, treadmillKm: 2.5 })
   assert.ok(Math.abs(kmhToMph(mphToKmh(3)) - 3) < 1e-9)
 })
+
+test('adaptive target uses the planned deficit, so re-applying it does not drift', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t1 = computeTargets(baseProfile, 100)
+  const adaptive = { tdee: 2600 }
+  const first = adaptiveTarget(adaptive, t1)
+  const t2 = computeTargets({ ...baseProfile, calorie_target_override: first }, 100)
+  assert.equal(adaptiveTarget(adaptive, t2), first)
+  assert.ok(Math.abs(first - (2600 - 550)) <= 10, `first ${first}`)
+})
+
+test('adaptive target never goes below the floor', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t = computeTargets({ ...baseProfile, sex: 'female' }, 100)
+  assert.equal(adaptiveTarget({ tdee: 1300 }, t), 1200)
+})
+
+test('manual target: no "raised to the minimum" warning', () => {
+  const t = computeTargets({ ...baseProfile, sex: 'female', height_cm: 150, start_weight_kg: 55, goal_weight_kg: 50, activity_level: 'sedentary', calorie_target_override: 1400 }, 55)
+  assert.equal(t.calories, 1400)
+  assert.ok(!t.warnings.some((w) => /raised/.test(w)), t.warnings.join())
+})

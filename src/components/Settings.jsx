@@ -16,6 +16,8 @@ import {
   useProfileForm,
 } from './ProfileForm.jsx'
 import { ListRow, ListSection, MenuRow, Segmented, Sheet, ToggleRow } from './ui.jsx'
+import { FREQUENCY_LABEL } from '../data/glp1.js'
+import { formatDose, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
 
 async function shareOrDownload(filename, text, type) {
   const blob = new Blob([text], { type })
@@ -52,7 +54,7 @@ function heightLabel(cm, units) {
 
 export default function Settings() {
   const app = useApp()
-  const { store, mode, session, profile, saveProfile, series, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs } = app
+  const { store, mode, session, profile, saveProfile, series, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
   const [usage, setUsage] = useState(null)
   const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password'
   const importRef = useRef()
@@ -121,6 +123,12 @@ export default function Settings() {
   }
 
   const name = profile.display_name || (mode === 'cloud' ? session?.user?.email?.split('@')[0] : 'You')
+  const plan = glp1Plan(profile)
+  const autoWater = waterTargetMl(trendKg ?? Number(profile.start_weight_kg))
+  const WATER_OPTIONS = [
+    ['', `Automatic (${formatWater(autoWater)})`, 'Auto'],
+    ...[1500, 2000, 2500, 3000, 3500, 4000].map((ml) => [String(ml), formatWater(ml)]),
+  ]
   const pace = Number(profile.weekly_rate_kg) || 0
 
   return (
@@ -172,7 +180,20 @@ export default function Settings() {
         </ListRow>
       </ListSection>
 
-      <ListSection header="Tracking" footer="Night shifts: food eaten before your day starts counts toward the day before.">
+      <ListSection
+        header="GLP-1 medicine"
+        footer={plan ? 'Doses, injection sites and side effects are logged from Today. The coach tailors food, water and exercise advice to your medicine.' : 'Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda and more: log doses and injection sites, and get coaching that fits.'}
+      >
+        <ListRow
+          icon="syringe"
+          color="var(--purple)"
+          label={plan ? plan.name : 'Track a GLP-1 medicine'}
+          sub={plan ? `${formatDose(plan.dose, plan.unit)} · ${FREQUENCY_LABEL[plan.frequency]}` : 'Off'}
+          onClick={() => openSheet('medication')}
+        />
+      </ListSection>
+
+      <ListSection header="Tracking" footer="Night shifts: food eaten before your day starts counts toward the day before. Water goal ≈ 30 ml per kg; drink more in the heat and on shift.">
         <MenuRow
           icon="moon"
           color="var(--indigo)"
@@ -189,6 +210,14 @@ export default function Settings() {
           value={String(profile.exercise_eatback_pct ?? 0)}
           options={EATBACK_OPTIONS}
           onChange={(v) => saveField({ exercise_eatback_pct: Number(v) })}
+        />
+        <MenuRow
+          icon="drop"
+          color="var(--cyan)"
+          label="Water goal"
+          value={profile.water_target_ml ? String(profile.water_target_ml) : ''}
+          options={WATER_OPTIONS}
+          onChange={(v) => saveField({ water_target_ml: v ? Number(v) : null })}
         />
       </ListSection>
 

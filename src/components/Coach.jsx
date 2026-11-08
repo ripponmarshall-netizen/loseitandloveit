@@ -4,7 +4,17 @@ import { streamCoach } from '../lib/ai.js'
 import { buildCoachContext } from '../lib/coachContext.js'
 import { buildRefs } from '../lib/foodSearch.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
-import { Icon, MiniMarkdown, Penguin, Spinner, Thinking } from './ui.jsx'
+import { glp1Plan } from '../lib/glp1.js'
+import { Icon, MiniMarkdown, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
+
+const GLP1_PROMPTS = [
+  ['What should I eat on dose day?', 'var(--purple)'],
+  ['Help me with nausea', 'var(--green)'],
+  ['Am I eating enough protein?', 'var(--pink)'],
+  ['Exercise plan to keep muscle on my GLP-1', 'var(--orange)'],
+  ['Review my last 7 days', 'var(--blue)'],
+  ['Small high-protein Jamaican meals', 'var(--teal)'],
+]
 
 const PROMPTS = [
   ['Review my last 7 days', 'var(--blue)'],
@@ -25,6 +35,8 @@ export default function Coach({ active = true }) {
   const [busy, setBusy] = useState(false)
   const endRef = useRef()
   const abortRef = useRef()
+  const inputRef = useRef()
+  const onGlp1 = !!glp1Plan(app.profile)
 
   useEffect(() => {
     store
@@ -41,10 +53,24 @@ export default function Coach({ active = true }) {
     if (active) endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }, [messages, streaming, status, active])
 
+  // A question asked from Today: send it once the history has loaded
+  // (so it lands after earlier messages), or just focus the box.
+  const ask = app.coachAsk
+  useEffect(() => {
+    if (!ask || !active || messages === null) return
+    app.clearCoachAsk()
+    if (ask.text && mode === 'cloud') send(ask.text)
+    else setTimeout(() => inputRef.current?.focus(), 350)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ask?.id, active, messages === null])
+
   if (mode !== 'cloud') {
     return (
       <div>
         <h1>Coach</h1>
+        <div className="center" style={{ marginBottom: 8 }}>
+          <Penguin kind="thinking" size={130} />
+        </div>
         <div className="card warn small">
           The AI coach needs an account, because it runs on the server where the Claude API key is kept secret. Sign out from Settings
           and create an account to use it. Your local data can be exported first and imported after.
@@ -108,9 +134,12 @@ export default function Coach({ active = true }) {
   return (
     <div style={{ paddingBottom: 64 }}>
       <header className="page-head">
-        <div>
-          <div className="eyebrow">Powered by Claude</div>
-          <h1>Coach</h1>
+        <div className="row" style={{ gap: 12, alignItems: 'flex-end' }}>
+          <PenguinFace size={44} />
+          <div>
+            <div className="eyebrow">Your coach · Claude</div>
+            <h1>Coach</h1>
+          </div>
         </div>
         {messages?.length > 0 && !busy && (
           <button className="btn sm gray" onClick={clear}>Clear</button>
@@ -128,25 +157,36 @@ export default function Coach({ active = true }) {
               <Penguin kind="thinking" size={130} />
               <p className="headline" style={{ marginTop: 4 }}>Ask me anything</p>
               <p className="small muted">
-                About your eating, your numbers or your plan. I can see your targets, the last two weeks of logs and your weight trend, and I can
-                check foods against USDA and Open Food Facts.
+                Food, exercise, your numbers{onGlp1 ? ', your GLP-1 medicine' : ''} or how you’re feeling. I can see your targets, the last two weeks of
+                logs, check-ins and weight trend, and I check foods against USDA and Open Food Facts.
               </p>
               <p className="tiny muted" style={{ margin: 0 }}>
                 General guidance, not medical advice. Check with your doctor if you have a medical condition or take medication.
               </p>
             </div>
           )}
-          {messages.map((m) => (
-            <div key={m.id} className={`bubble ${m.role}`}>
-              {m.role === 'assistant' ? <MiniMarkdown text={m.content} /> : m.content}
-            </div>
-          ))}
+          {messages.map((m, i) =>
+            m.role === 'assistant' ? (
+              <div key={m.id} className="bubble-row">
+                {/* Penguin beside the first reply in a run */}
+                {messages[i - 1]?.role !== 'assistant' ? <PenguinFace size={28} className="bubble-face" /> : <span className="bubble-face" />}
+                <div className="bubble assistant">
+                  <MiniMarkdown text={m.content} />
+                </div>
+              </div>
+            ) : (
+              <div key={m.id} className="bubble user">{m.content}</div>
+            ),
+          )}
           {streaming !== null &&
             (streaming ? (
               <>
-                <div className="bubble assistant">
-                  <MiniMarkdown text={streaming} />
-                  {!checking && <span className="typing" />}
+                <div className="bubble-row">
+                  <PenguinFace size={28} className="bubble-face" />
+                  <div className="bubble assistant">
+                    <MiniMarkdown text={streaming} />
+                    {!checking && <span className="typing" />}
+                  </div>
                 </div>
                 {checking && <Thinking status={status} size={52} />}
               </>
@@ -159,7 +199,7 @@ export default function Coach({ active = true }) {
 
       {!busy && (
         <div className="chips" style={{ marginTop: 14 }}>
-          {PROMPTS.map(([p, c]) => (
+          {(onGlp1 ? GLP1_PROMPTS : PROMPTS).map(([p, c]) => (
             <button key={p} className="chip tinted" style={{ '--c': c }} onClick={() => send(p)}>
               {p}
             </button>
@@ -177,9 +217,10 @@ export default function Coach({ active = true }) {
         >
           <div className="composer-inner">
             <textarea
+              ref={inputRef}
               className="input grow"
               rows={1}
-              placeholder="Ask your coach…"
+              placeholder="Ask your coach anything…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {

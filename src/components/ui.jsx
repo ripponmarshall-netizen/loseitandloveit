@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { PENGUIN_THINKING, PENGUIN_WORKOUT } from '../assets/penguins.js'
+import { PENGUIN_FACE, PENGUIN_THINKING, PENGUIN_WORKOUT } from '../assets/penguins.js'
 
 // ---------------------------------------------------------------- icons
 // Simple line icons drawn for this app (SF Symbols-like, not copies).
@@ -45,6 +45,14 @@ const PATHS = {
   info: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 11v5M12 8v.5',
   phone: 'M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM11 18h2',
   check: 'M5 12.5l4.5 4.5L19 7',
+  drop: 'M12 3.5c3.2 4 6 7.3 6 10.5a6 6 0 0 1-12 0c0-3.2 2.8-6.5 6-10.5z',
+  smile: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM8.8 14c.8 1.3 1.9 2 3.2 2s2.4-.7 3.2-2M9.2 10v.5M14.8 10v.5',
+  syringe: 'M15 3l6 6M18 6l-9.5 9.5M13.5 5.5l5 5M11 8l5 5-6.5 6.5H5v-4.5zM5 19.5L3 21.5M8 12.5l2 2M10.5 10l2 2',
+  pill: 'M9.5 4.5a4.95 4.95 0 0 1 7 7l-5 5a4.95 4.95 0 0 1-7-7zM7 9.5l7 7',
+  cup: 'M6 4h12l-1.5 15a1.5 1.5 0 0 1-1.5 1.4H9a1.5 1.5 0 0 1-1.5-1.4zM6.6 9h10.8',
+  fork: 'M7 3v7a2 2 0 0 0 2 2M11 3v7a2 2 0 0 1-2 2M9 12v9M9 3v6M16.5 3C15 5 14.5 8 14.5 10.5c0 1 .5 1.5 1.5 1.5h1v9M17 3v18',
+  heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
+  calendar: 'M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM4 10h16M8 4v4M16 4v4',
 }
 
 export function Icon({ name, size, className, style, strokeWidth = 2 }) {
@@ -82,6 +90,18 @@ export function Penguin({ kind = 'workout', size, className = '' }) {
       style={size ? { display: 'inline-block', width: size, height: size } : undefined}
       // Static markup from src/assets/penguins.js, never user input.
       dangerouslySetInnerHTML={{ __html: kind === 'thinking' ? PENGUIN_THINKING : PENGUIN_WORKOUT }}
+    />
+  )
+}
+
+/** Small static penguin head: the coach's face on tabs, buttons and bubbles. */
+export function PenguinFace({ size = 28, className = '' }) {
+  return (
+    <span
+      className={`pg-face-wrap ${className}`}
+      style={{ width: size, height: size }}
+      // Static markup from src/assets/penguins.js, never user input.
+      dangerouslySetInnerHTML={{ __html: PENGUIN_FACE }}
     />
   )
 }
@@ -185,9 +205,10 @@ export function Sheet({ title, onClose, children, action }) {
 // ---------------------------------------------------------------- controls
 
 export function Segmented({ value, options, onChange, label }) {
-  const i = Math.max(0, options.findIndex(([v]) => v === value))
+  const found = options.findIndex(([v]) => v === value)
+  const i = Math.max(0, found)
   return (
-    <div className="segmented" role="radiogroup" aria-label={label} style={{ '--n': options.length, '--i': i }}>
+    <div className={`segmented${found < 0 ? ' empty' : ''}`} role="radiogroup" aria-label={label} style={{ '--n': options.length, '--i': i }}>
       <span className="thumb" aria-hidden="true" />
       {options.map(([v, text]) => (
         <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>

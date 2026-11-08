@@ -65,6 +65,11 @@ test('built-in foods are sane', () => {
     ids.add(f.id)
     // Atwater check: macros should roughly add up to the calories (alcohol and fibre aside)
     const kcal = f.protein_g * 4 + f.carbs_g * 4 + f.fat_g * 9
+    // Alcohol adds ~7 kcal/g that isn't a macro: only check it isn't below them.
+    if (/\balcohol\b/.test(f.tags || '')) {
+      assert.ok(f.calories >= kcal, `${f.name}: ${kcal} vs ${f.calories}`)
+      continue
+    }
     assert.ok(Math.abs(kcal - f.calories) <= Math.max(40, f.calories * 0.2), `${f.name}: ${kcal} vs ${f.calories}`)
   }
 })

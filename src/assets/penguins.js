@@ -57,3 +57,13 @@ export const PENGUIN_THINKING = `<svg class="pg pg-thinking" viewBox="0 0 200 20
     </g>
   </g>
 </svg>`
+
+// Head only, static: for the Coach tab, the "ask" bar and chat avatars.
+export const PENGUIN_FACE = `<svg class="pg pg-face" viewBox="0 0 40 40" aria-hidden="true">
+  <circle class="pg-body" cx="20" cy="20.5" r="18"/>
+  <path class="pg-white" d="M20 12.6c-3.2-2.6-9.4-1.8-9.4 4.6 0 5.8 4.6 10 9.4 10s9.4-4.2 9.4-10c0-6.4-6.2-7.2-9.4-4.6z"/>
+  <circle class="pg-ink" cx="16" cy="18.4" r="2"/><circle class="pg-ink" cx="24" cy="18.4" r="2"/>
+  <circle class="pg-glint" cx="16.7" cy="17.7" r="0.7"/><circle class="pg-glint" cx="24.7" cy="17.7" r="0.7"/>
+  <circle class="pg-cheek" cx="12.6" cy="22" r="1.9"/><circle class="pg-cheek" cx="27.4" cy="22" r="1.9"/>
+  <path class="pg-beak" d="M17.4 21.4h5.2l-2.6 3.4z"/>
+</svg>`
