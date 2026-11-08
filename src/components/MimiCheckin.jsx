@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { requestCheckin } from '../lib/ai.js'
 import { dailyTotals, weeklyRate } from '../lib/calc.js'
 import { buildCheckinContext, checkinDue, checkinFingerprint, MAX_PER_DAY } from '../lib/checkins.js'
 import { addDays } from '../lib/dates.js'
-import { doseStatus, doseStatusLabel, glp1Plan } from '../lib/glp1.js'
+import { planDoseStatus, doseStatusLabel, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWaterTarget } from './Checkin.jsx'
 import { Icon, PenguinFace } from './ui.jsx'
@@ -29,6 +29,25 @@ const writeFail = (v) => {
 // One request at a time across the app (React StrictMode runs effects twice).
 let inflight = false
 
+const SEEN_KEY = 'lili:checkin:seen'
+const readSeen = () => {
+  try {
+    return localStorage.getItem(SEEN_KEY)
+  } catch {
+    return null
+  }
+}
+const writeSeen = (id) => {
+  try {
+    localStorage.setItem(SEEN_KEY, id)
+  } catch {
+    /* private mode */
+  }
+}
+
+const MimiCtx = createContext({ enabled: false })
+export const useMimi = () => useContext(MimiCtx)
+
 const KIND = {
   food: { icon: 'fork', color: 'var(--orange)' },
   protein: { icon: 'fork', color: 'var(--pink)' },
@@ -44,11 +63,13 @@ const KIND = {
 const timeLabel = (iso) => new Date(iso).toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 /**
- * Mimi's check-in on Today: every few hours (while the app is open) the AI
- * reads a small snapshot of today's log and leaves 1–3 next steps.
+ * Mimi's check-ins: every few hours (while the app is open) the AI reads a
+ * small snapshot of today's log and leaves 1–3 next steps. This provider runs
+ * them for the whole app; the floating penguin bubble shows when one is new,
+ * and the card itself lives at the top of the Mimi section.
  */
-export default function MimiCheckin() {
-  const { store, mode, today, prefs, profile, targets, series, weights, openSheet, openAdd, askCoach } = useApp()
+export function MimiProvider({ children }) {
+  const { store, mode, today, prefs, profile, targets, series, weights } = useApp()
   const day = useDay(today)
   const waterTarget = useWaterTarget()
   const [insight, setInsight] = useState(undefined) // undefined = loading
@@ -92,7 +113,7 @@ export default function MimiCheckin() {
   useEffect(() => {
     if (!cloud || off || insight === undefined || !day || inflight || !everyHours) return
     const plan = glp1Plan(profile)
-    const dose = plan ? doseStatus({ doses: day.doses, frequency: plan.frequency, today }) : null
+    const dose = planDoseStatus(plan, day.doses, today)
     const weighed = weights.some((w) => w.log_date === today)
     const fingerprint = checkinFingerprint({
       entries: day.entries,
@@ -147,11 +168,19 @@ export default function MimiCheckin() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloud, off, insight, day, today, everyHours, tick])
 
-  if (!cloud || off || !everyHours) return null
-  const show = insight && insight.log_date === today && !insight.dismissed
-  if (!show && !busy) return null
+  const [seen, setSeen] = useState(readSeen)
+  const enabled = cloud && !off && !!everyHours
+  const show = enabled && !!insight && insight.log_date === today && !insight.dismissed
+  const unseen = show && seen !== insight.id
 
-  async function dismiss() {
+  const markSeen = useCallback(() => {
+    if (!insight?.id) return
+    writeSeen(insight.id)
+    setSeen(insight.id)
+  }, [insight?.id])
+
+  const dismiss = useCallback(async () => {
+    if (!insight) return
     const id = insight.id
     setInsight((i) => ({ ...i, dismissed: true }))
     try {
@@ -159,12 +188,55 @@ export default function MimiCheckin() {
     } catch {
       /* hidden locally either way */
     }
-  }
+  }, [insight, store])
+
+  const value = { enabled, insight: show ? insight : null, busy: enabled && busy, unseen, markSeen, dismiss }
+  return <MimiCtx.Provider value={value}>{children}</MimiCtx.Provider>
+}
+
+/** Floating penguin on the Dashboard: opens the Mimi section. A dot means a new check-in. */
+export function MimiBubble({ lowered = false }) {
+  const { setTab } = useApp()
+  const { insight, busy, unseen } = useMimi()
+  const [peek, setPeek] = useState(false)
+  const peekedFor = useRef(null)
+
+  // Say hello once when a new check-in lands, then tuck the label away.
+  useEffect(() => {
+    if (!unseen || peekedFor.current === insight.id) return
+    peekedFor.current = insight.id
+    setPeek(true)
+    const t = setTimeout(() => setPeek(false), 5000)
+    return () => clearTimeout(t)
+  }, [unseen, insight?.id])
+
+  const label = unseen ? `Mimi has a new check-in: ${insight.headline}` : busy ? 'Mimi is looking over your day' : 'Open Mimi, your AI coach'
+  return (
+    <div className={`mimi-fab-wrap${lowered ? ' lowered' : ''}`}>
+      {peek && unseen && (
+        <button className="mimi-peek" onClick={() => setTab('coach')} tabIndex={-1} aria-hidden="true">
+          <span className="ellipsis">{insight.headline}</span>
+        </button>
+      )}
+      <button className={`mimi-fab${busy ? ' busy' : ''}${unseen ? ' unseen' : ''}`} onClick={() => setTab('coach')} aria-label={label}>
+        <PenguinFace size={40} />
+        {unseen && <span className="mimi-dot" aria-hidden="true" />}
+      </button>
+    </div>
+  )
+}
+
+/** Mimi's latest check-in, shown at the top of the Mimi section. */
+export default function MimiCheckin() {
+  const { today, profile, openSheet, openAdd, askCoach } = useApp()
+  const { enabled, insight, busy, dismiss } = useMimi()
+  const day = useDay(today)
+  if (!enabled || (!insight && !busy)) return null
 
   function act(kind) {
     switch (kind) {
       case 'food':
-      case 'protein': return openAdd()
+      case 'protein': return openAdd({ date: today })
       case 'water': return openSheet('water', { date: today, daily: day?.daily })
       case 'move': return openSheet('workout', { date: today })
       case 'weight': return openSheet('weight')
@@ -175,7 +247,7 @@ export default function MimiCheckin() {
   }
   const actionable = (k) => ['food', 'protein', 'water', 'move', 'weight', 'mood'].includes(k) || (k === 'dose' && glp1Plan(profile))
 
-  if (!show) {
+  if (!insight) {
     return (
       <div className="mimi-card loading" role="status">
         <PenguinFace size={34} />
@@ -189,7 +261,7 @@ export default function MimiCheckin() {
       <div className="mimi-head">
         <PenguinFace size={36} />
         <div className="grow">
-          <div className="eyebrow">Mimi · {timeLabel(insight.created_at)}</div>
+          <div className="eyebrow">Check-in · {timeLabel(insight.created_at)}</div>
           <div className="mimi-headline">{insight.headline}</div>
         </div>
         <button className="icon-btn" aria-label="Dismiss Mimi’s check-in" onClick={dismiss}>
@@ -201,7 +273,7 @@ export default function MimiCheckin() {
           const k = KIND[t.kind] || KIND.food
           const Tag = actionable(t.kind) ? 'button' : 'div'
           return (
-            <Tag key={i} className="mimi-tip" style={{ '--c': k.color }} onClick={actionable(t.kind) ? () => act(t.kind) : undefined}>
+            <Tag key={i} className="mimi-tip" style={{ '--c': k.color, '--i': i }} onClick={actionable(t.kind) ? () => act(t.kind) : undefined}>
               <span className="mimi-tip-icon" aria-hidden="true">
                 <Icon name={k.icon} strokeWidth={2.2} />
               </span>
@@ -211,7 +283,7 @@ export default function MimiCheckin() {
           )
         })}
       </div>
-      <button className="btn sm secondary" style={{ marginTop: 10 }} onClick={() => askCoach(`About your check-in (“${insight.headline}”): what should I do next?`)}>
+      <button className="btn sm secondary" style={{ marginTop: 12 }} onClick={() => askCoach(`About your check-in (“${insight.headline}”): what should I do next?`)}>
         Ask Mimi more
       </button>
     </section>

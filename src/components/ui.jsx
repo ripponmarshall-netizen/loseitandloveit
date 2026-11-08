@@ -52,6 +52,7 @@ const PATHS = {
   cup: 'M6 4h12l-1.5 15a1.5 1.5 0 0 1-1.5 1.4H9a1.5 1.5 0 0 1-1.5-1.4zM6.6 9h10.8',
   fork: 'M7 3v7a2 2 0 0 0 2 2M11 3v7a2 2 0 0 1-2 2M9 12v9M9 3v6M16.5 3C15 5 14.5 8 14.5 10.5c0 1 .5 1.5 1.5 1.5h1v9M17 3v18',
   heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
+  grid: 'M5.5 4h4A1.5 1.5 0 0 1 11 5.5v4A1.5 1.5 0 0 1 9.5 11h-4A1.5 1.5 0 0 1 4 9.5v-4A1.5 1.5 0 0 1 5.5 4zM14.5 4h4A1.5 1.5 0 0 1 20 5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4A1.5 1.5 0 0 1 13 9.5v-4A1.5 1.5 0 0 1 14.5 4zM5.5 13h4a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 9.5 20h-4A1.5 1.5 0 0 1 4 18.5v-4A1.5 1.5 0 0 1 5.5 13zM14.5 13h4a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a1.5 1.5 0 0 1-1.5-1.5v-4a1.5 1.5 0 0 1 1.5-1.5z',
   calendar: 'M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM4 10h16M8 4v4M16 4v4',
 }
 
@@ -141,7 +142,7 @@ export function Avatar({ profile, name, size = 60, className = '' }) {
 
 // ---------------------------------------------------------------- sheet
 
-const CLOSE_MS = 260
+const CLOSE_MS = 280
 
 /** Bottom sheet: slides up, swipe down on the header or tap outside to close. */
 export function Sheet({ title, onClose, children, action, tall = false }) {
@@ -151,16 +152,20 @@ export function Sheet({ title, onClose, children, action, tall = false }) {
   const closeRef = useRef(onClose)
   closeRef.current = onClose
 
+  const closingRef = useRef(false)
   const close = () => {
-    if (closing) return
+    if (closingRef.current) return
+    closingRef.current = true
     setClosing(true)
     setTimeout(() => closeRef.current(), CLOSE_MS)
   }
+  const animatedClose = useRef(close)
+  animatedClose.current = close
 
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e) => e.key === 'Escape' && closeRef.current()
+    const onKey = (e) => e.key === 'Escape' && animatedClose.current()
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
@@ -263,7 +268,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 50 }) {
 
 export function ListSection({ header, footer, children, big }) {
   return (
-    <section>
+    <section className="list-section">
       {header && <div className={`list-header${big ? ' big' : ''}`}>{header}</div>}
       <div className="list">{children}</div>
       {footer && <div className="list-footer">{footer}</div>}
@@ -337,7 +342,7 @@ export function MenuRow({ icon, color, label, sub, value, options, onChange }) {
 // ---------------------------------------------------------------- data display
 
 /** Activity-style ring with a green→mint gradient; orange when over. */
-export function Ring({ value, max, size = 140, stroke = 14, children }) {
+export function Ring({ value, max, size = 140, stroke = 14, color, children }) {
   const id = useId().replace(/:/g, '')
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
@@ -354,8 +359,8 @@ export function Ring({ value, max, size = 140, stroke = 14, children }) {
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
         <defs>
           <linearGradient id={`ring-${id}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={over ? 'var(--orange)' : 'var(--ring-a)'} />
-            <stop offset="1" stopColor={over ? 'var(--red)' : 'var(--ring-b)'} />
+            <stop offset="0" stopColor={color && !over ? color : over ? 'var(--orange)' : 'var(--ring-a)'} />
+            <stop offset="1" stopColor={color && !over ? color : over ? 'var(--red)' : 'var(--ring-b)'} />
           </linearGradient>
         </defs>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--fill)" strokeWidth={stroke} />

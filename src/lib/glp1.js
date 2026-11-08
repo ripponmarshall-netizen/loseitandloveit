@@ -34,26 +34,41 @@ export function doseStep(medId, dose) {
 
 /**
  * When the next dose is due.
- * doses: any order, each { log_date }. Returns
- *   { state: 'none' | 'taken' | 'due' | 'overdue' | 'upcoming', nextDate, daysUntil, takenToday, perDay }
+ * doses: any order, each { log_date }. startedOn: the plan's start date.
+ * With no doses logged, the start date counts as the first dose (people set
+ * the plan after their first jab, and the app shouldn't nag for it forever).
+ * Returns
+ *   { state: 'none' | 'taken' | 'due' | 'overdue' | 'upcoming', nextDate, daysUntil, takenToday, perDay, assumed }
  */
-export function doseStatus({ doses = [], frequency = 'weekly', today }) {
-  const sorted = [...doses].filter((d) => d?.log_date).sort((a, b) => (a.log_date < b.log_date ? 1 : -1))
+export function doseStatus({ doses = [], frequency = 'weekly', today, startedOn = null }) {
+  let sorted = [...doses].filter((d) => d?.log_date).sort((a, b) => (a.log_date < b.log_date ? 1 : -1))
   const perDay = frequency === 'twice_daily' ? 2 : 1
+  let assumed = false
+  if (!sorted.length && startedOn && startedOn <= today) {
+    if (frequency !== 'weekly') return { state: 'due', nextDate: today, daysUntil: 0, takenToday: 0, perDay, assumed: true }
+    sorted = [{ log_date: startedOn }]
+    assumed = true
+  }
   const takenToday = sorted.filter((d) => d.log_date === today).length
-  if (!sorted.length) return { state: 'none', nextDate: today, daysUntil: 0, takenToday: 0, perDay }
+  if (!sorted.length) return { state: 'none', nextDate: today, daysUntil: 0, takenToday: 0, perDay, assumed }
 
   if (frequency === 'weekly') {
     const last = sorted.find((d) => d.log_date <= today) || sorted[sorted.length - 1]
     const nextDate = addDays(last.log_date, 7)
     const daysUntil = daysBetween(today, nextDate)
-    if (last.log_date === today) return { state: 'taken', nextDate, daysUntil, takenToday, perDay }
+    if (last.log_date === today) return { state: 'taken', nextDate, daysUntil, takenToday, perDay, assumed }
     const state = daysUntil > 0 ? 'upcoming' : daysUntil === 0 ? 'due' : 'overdue'
-    return { state, nextDate, daysUntil, takenToday, perDay }
+    return { state, nextDate, daysUntil, takenToday, perDay, assumed }
   }
   // Daily and twice daily: due until today's doses are all logged.
-  if (takenToday >= perDay) return { state: 'taken', nextDate: addDays(today, 1), daysUntil: 1, takenToday, perDay }
-  return { state: 'due', nextDate: today, daysUntil: 0, takenToday, perDay }
+  if (takenToday >= perDay) return { state: 'taken', nextDate: addDays(today, 1), daysUntil: 1, takenToday, perDay, assumed }
+  return { state: 'due', nextDate: today, daysUntil: 0, takenToday, perDay, assumed }
+}
+
+/** doseStatus for a plan from glp1Plan(): uses the plan's frequency and start date. */
+export function planDoseStatus(plan, doses, today) {
+  if (!plan) return null
+  return doseStatus({ doses: doses || [], frequency: plan.frequency, today, startedOn: plan.startedOn })
 }
 
 /** Short label for the status, e.g. "Due today", "In 3 days", "2 days late". */

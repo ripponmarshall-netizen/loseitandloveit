@@ -6,6 +6,7 @@ import { buildRefs } from '../lib/foodSearch.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { glp1Plan } from '../lib/glp1.js'
 import { Avatar, Icon, MiniMarkdown, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
+import MimiCheckin, { useMimi } from './MimiCheckin.jsx'
 
 const GLP1_PROMPTS = [
   ['What should I eat on dose day?', 'var(--purple)'],
@@ -37,6 +38,12 @@ export default function Coach({ active = true }) {
   const abortRef = useRef()
   const inputRef = useRef()
   const onGlp1 = !!glp1Plan(app.profile)
+  const mimi = useMimi()
+
+  // Opening the Mimi section reads the latest check-in (clears the bubble's dot).
+  useEffect(() => {
+    if (active && mimi.unseen) mimi.markSeen()
+  }, [active, mimi])
 
   useEffect(() => {
     store
@@ -53,7 +60,7 @@ export default function Coach({ active = true }) {
     if (active) endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
   }, [messages, streaming, status, active])
 
-  // A question asked from Today: send it once the history has loaded
+  // A question asked from elsewhere (e.g. a check-in): send it once the history has loaded
   // (so it lands after earlier messages), or just focus the box.
   const ask = app.coachAsk
   useEffect(() => {
@@ -153,6 +160,8 @@ export default function Coach({ active = true }) {
           <button className="btn sm gray" onClick={clear}>Clear</button>
         )}
       </header>
+
+      <MimiCheckin />
 
       {messages === null ? (
         <div className="center" style={{ padding: 32, color: 'var(--text-3)' }}>

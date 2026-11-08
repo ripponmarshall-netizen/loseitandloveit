@@ -401,3 +401,57 @@ export function workoutSummary(workouts) {
   s.treadmillKm = Math.round(s.treadmillKm * 10) / 10
   return s
 }
+
+// ---------- Trend buckets (Progress charts) ----------
+
+/** Monday of the week containing iso (weeks start on Monday, as in Jamaica and the UK). */
+export function weekStart(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dow = (new Date(y, m - 1, d, 12).getDay() + 6) % 7 // 0 = Monday
+  return addDays(iso, -dow)
+}
+
+/**
+ * Group dated values into day, week or month buckets ending at endIso and
+ * average each one. points: [{ date: 'YYYY-MM-DD', value }]. Returns the last
+ * `count` buckets oldest first: [{ key, start, end, value, n }], value null
+ * when the bucket has no points (so charts can leave a gap).
+ */
+export function bucketAverages(points, granularity, endIso, count) {
+  const keyOf =
+    granularity === 'month' ? (iso) => `${iso.slice(0, 7)}-01` : granularity === 'week' ? weekStart : (iso) => iso
+  const buckets = []
+  let start = keyOf(endIso)
+  for (let i = 0; i < count; i++) {
+    let end
+    if (granularity === 'month') {
+      const [y, m] = start.split('-').map(Number)
+      const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+      end = addDays(next, -1)
+    } else end = granularity === 'week' ? addDays(start, 6) : start
+    buckets.unshift({ key: start, start, end, sum: 0, n: 0 })
+    if (granularity === 'month') {
+      const [y, m] = start.split('-').map(Number)
+      start = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
+    } else start = addDays(start, granularity === 'week' ? -7 : -1)
+  }
+  const byKey = new Map(buckets.map((b) => [b.key, b]))
+  for (const p of points) {
+    const v = Number(p?.value)
+    if (!p?.date || p.date > endIso || !Number.isFinite(v)) continue
+    const b = byKey.get(keyOf(p.date))
+    if (b) {
+      b.sum += v
+      b.n += 1
+    }
+  }
+  return buckets.map(({ key, start: s, end, sum, n }) => ({ key, start: s, end, n, value: n ? sum / n : null }))
+}
+
+/** Average, min and max of the non-null bucket values, plus the change first → last. */
+export function bucketStats(buckets) {
+  const vals = buckets.map((b) => b.value).filter((v) => v != null)
+  if (!vals.length) return null
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length
+  return { avg, min: Math.min(...vals), max: Math.max(...vals), first: vals[0], last: vals[vals.length - 1], change: vals[vals.length - 1] - vals[0], count: vals.length }
+}

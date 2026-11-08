@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dailyNudge, doseStatus, doseStatusLabel, doseStep, glp1Plan, suggestSite, summariseDailyLogs, waterTargetMl, formatWater } from '../src/lib/glp1.js'
+import { dailyNudge, doseStatus, planDoseStatus, doseStatusLabel, doseStep, glp1Plan, suggestSite, summariseDailyLogs, waterTargetMl, formatWater } from '../src/lib/glp1.js'
 
 test('weekly dose: due, upcoming, taken, overdue', () => {
   const doses = [{ log_date: '2026-11-01' }, { log_date: '2026-10-25' }]
@@ -21,6 +21,31 @@ test('no doses yet: prompts for the first one', () => {
   const s = doseStatus({ doses: [], frequency: 'weekly', today: '2026-11-08' })
   assert.equal(s.state, 'none')
   assert.equal(doseStatusLabel(s), 'Log first dose')
+})
+
+test('no doses logged but a start date: the start date counts as dose one', () => {
+  const s = doseStatus({ doses: [], frequency: 'weekly', today: '2026-11-08', startedOn: '2026-11-05' })
+  assert.equal(s.state, 'upcoming')
+  assert.equal(s.assumed, true)
+  assert.equal(s.nextDate, '2026-11-12')
+  assert.equal(doseStatusLabel(s), 'In 4 days')
+  assert.equal(doseStatus({ doses: [], frequency: 'weekly', today: '2026-11-05', startedOn: '2026-11-05' }).state, 'taken')
+  assert.equal(doseStatus({ doses: [], frequency: 'weekly', today: '2026-11-14', startedOn: '2026-11-05' }).state, 'overdue')
+  // A future start date doesn't count yet.
+  assert.equal(doseStatus({ doses: [], frequency: 'weekly', today: '2026-11-08', startedOn: '2026-11-20' }).state, 'none')
+  // Daily plans: due today, never "first dose".
+  const daily = doseStatus({ doses: [], frequency: 'daily', today: '2026-11-08', startedOn: '2026-11-01' })
+  assert.equal(daily.state, 'due')
+  // Real doses win over the start date.
+  const real = doseStatus({ doses: [{ log_date: '2026-11-07' }], frequency: 'weekly', today: '2026-11-08', startedOn: '2026-11-01' })
+  assert.equal(real.assumed, false)
+  assert.equal(real.nextDate, '2026-11-14')
+})
+
+test('planDoseStatus uses the plan frequency and start date', () => {
+  assert.equal(planDoseStatus(null, [], '2026-11-08'), null)
+  const plan = glp1Plan({ glp1_med: 'mounjaro', glp1_dose: 2.5, glp1_frequency: 'weekly', glp1_started_on: '2026-11-05' })
+  assert.equal(planDoseStatus(plan, [], '2026-11-08').nextDate, '2026-11-12')
 })
 
 test('twice daily needs two doses today', () => {

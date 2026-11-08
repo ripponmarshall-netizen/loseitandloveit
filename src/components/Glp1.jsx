@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { FREQUENCY_LABEL, GLP1_MEDS, INJECTION_SITES, MED_BY_ID, SITE_BY_ID } from '../data/glp1.js'
-import { doseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, suggestSite } from '../lib/glp1.js'
+import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, suggestSite } from '../lib/glp1.js'
 import { daysBetween, formatDayLabel, formatShortDate } from '../lib/dates.js'
 import { displayWeight, trendOn, weightValue, weightUnit } from '../lib/calc.js'
 import { Icon, ListRow, ListSection, Sheet, Switch } from './ui.jsx'
@@ -314,7 +314,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
 
 /** Set up or change the GLP-1 plan on the profile (Settings, Today, onboarding). */
 export function MedicationSheet({ onClose }) {
-  const { profile, saveProfile, toast, today } = useApp()
+  const { store, profile, saveProfile, toast, today, bumpData } = useApp()
   const plan = glp1Plan(profile)
   const [med, setMed] = useState(plan?.id || 'mounjaro')
   const [name, setName] = useState(plan?.id === 'other' ? plan.name : '')
@@ -322,7 +322,22 @@ export function MedicationSheet({ onClose }) {
   const [freq, setFreq] = useState(plan?.frequency || MED_BY_ID[plan?.id || 'mounjaro'].frequency)
   const [started, setStarted] = useState(plan?.startedOn || today)
   const [busy, setBusy] = useState(false)
+  // No doses logged yet: offer to record the start date as dose one, so the
+  // schedule, site rotation and history start from real data.
+  const [noDoses, setNoDoses] = useState(false)
+  const [logFirst, setLogFirst] = useState(true)
   const info = MED_BY_ID[med]
+
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listRecentDoses(1)
+      .then((rows) => !cancelled && setNoDoses(rows.length === 0))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [store])
 
   function changeMed(id) {
     setMed(id)
@@ -334,9 +349,24 @@ export function MedicationSheet({ onClose }) {
     setBusy(true)
     try {
       await saveProfile({ ...profile, ...patch })
+      if (patch.glp1_med && noDoses && logFirst && patch.glp1_started_on) {
+        await store.addDose({
+          log_date: patch.glp1_started_on,
+          taken_at: new Date(`${patch.glp1_started_on}T09:00`).toISOString(),
+          med: patch.glp1_med,
+          med_name: patch.glp1_name || info.label,
+          dose: patch.glp1_dose,
+          unit: patch.glp1_unit,
+          route: info.route,
+          site: null,
+          notes: 'First dose (from plan set-up)',
+        })
+        bumpData()
+      }
       toast(msg)
       onClose()
     } catch (e) {
+      bumpData()
       toast(e.message, 'error')
       setBusy(false)
     }
@@ -366,6 +396,17 @@ export function MedicationSheet({ onClose }) {
           <input className="input" type="date" max={today} value={started} onChange={(e) => setStarted(e.target.value)} />
         </label>
       </div>
+      {noDoses && (
+        <label className="list" style={{ display: 'block', marginBottom: 14 }}>
+          <span className="list-row">
+            <span className="label">
+              Log my first dose on {started ? formatDayLabel(started, today) : 'the start date'}
+              <span className="sub">Starts your dose history and schedule. Turn off if you haven’t taken it yet.</span>
+            </span>
+            <Switch checked={logFirst} onChange={setLogFirst} label="Log my first dose on the start date" />
+          </span>
+        </label>
+      )}
       <p className="list-footer" style={{ margin: '-4px 4px 14px' }}>
         {info.note} The coach uses this to tailor food, water and exercise advice. It never changes your dose: that’s for your prescriber.
       </p>
@@ -409,7 +450,7 @@ export function MedicationSheet({ onClose }) {
 
 /** GLP-1 overview on Progress: plan, next dose, weight since starting, recent doses. */
 export function Glp1Progress({ onEditDose, onSetup }) {
-  const { store, profile, series, today, units, dataVersion } = useApp()
+  const { store, profile, series, today, units, dataVersion, openSheet } = useApp()
   const plan = glp1Plan(profile)
   const [doses, setDoses] = useState(null)
   const [error, setError] = useState(null)
@@ -433,7 +474,7 @@ export function Glp1Progress({ onEditDose, onSetup }) {
     )
   }
 
-  const status = doseStatus({ doses: doses || [], frequency: plan.frequency, today })
+  const status = planDoseStatus(plan, doses, today)
   const startPt = plan.startedOn ? trendOn(series, plan.startedOn) || series.find((p) => p.date >= plan.startedOn) : null
   const last = series[series.length - 1]
   const change = startPt && last && last.date > startPt.date ? last.trend - startPt.trend : null
@@ -458,6 +499,15 @@ export function Glp1Progress({ onEditDose, onSetup }) {
       />
       {change != null && (
         <ListRow icon="trend" color="var(--green)" label="Since starting" sub={`Trend now ${displayWeight(last.trend, units)}`} value={signed(change)} />
+      )}
+      {status.assumed && doses && (
+        <ListRow
+          icon="plus"
+          color="var(--indigo)"
+          label="Add your first dose"
+          sub={`Counting from your start date (${formatShortDate(plan.startedOn)}) until you do`}
+          onClick={() => openSheet('dose', { date: plan.startedOn })}
+        />
       )}
       {error && <div className="list-row small danger-text">{error}</div>}
       {(doses || []).slice(0, 6).map((d) => (

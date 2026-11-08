@@ -1,24 +1,25 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
-import { displayWeight, entryTotals, exerciseAllowance, sumEntries } from '../lib/calc.js'
+import { displayWeight, entryTotals, exerciseAllowance, sumEntries, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
 import { MOOD_BY_V } from '../data/glp1.js'
-import { GLASS_ML, dailyNudge, doseStatus, doseStatusLabel, formatDose, formatWater, glp1Plan } from '../lib/glp1.js'
+import { GLASS_ML, dailyNudge, doseStatusLabel, formatDose, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
-import { Avatar, Icon, MacroBar, PenguinFace, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
+import { Avatar, Icon, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { ExerciseCard } from './Workouts.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
-import MimiCheckin from './MimiCheckin.jsx'
+import { Sparkline } from './Charts.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
 
 export default function Today() {
-  const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, toast, profile, setTab } = useApp()
+  const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, openProgress, toast, profile, setTab } = useApp()
   const day = useDay(date)
   const [editing, setEditing] = useState(null)
   const [copying, setCopying] = useState(false)
+  const [showExercise, setShowExercise] = useState(false)
   const entries = day?.entries ?? null
   const workouts = day?.workouts || []
   const daily = day?.daily || null
@@ -31,11 +32,14 @@ export default function Today() {
   const isToday = date === today
 
   const plan = glp1Plan(profile)
-  const dose = plan ? doseStatus({ doses: day?.doses || [], frequency: plan.frequency, today: date }) : null
+  const dose = plan && day ? planDoseStatus(plan, day.doses, date) : null
   const waterTarget = useWaterTarget()
   const water = useWater(date, daily)
   const mood = MOOD_BY_V[daily?.mood]
   const weighIn = weights.find((w) => w.log_date === date)
+  const trendPts = series.filter((p) => p.date <= date).slice(-21)
+  const lastTrend = trendPts[trendPts.length - 1]
+  const rate = weeklyRate(series.filter((p) => p.date <= date))
   const now = new Date()
   const nudge = isToday
     ? dailyNudge({
@@ -67,99 +71,140 @@ export default function Today() {
     }
   }
 
+  const signedRate =
+    rate == null ? null : `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(weightValue(rate, units)).toFixed(1)} ${weightUnit(units)}/wk`
+
+  // Small cards: weight, GLP-1 (if on one), water, mood. Exercise sits full width below.
+  const small = [
+    <Tile
+      key="weight"
+      icon="scale"
+      color="var(--indigo)"
+      label="Weight"
+      value={lastTrend ? displayWeight(lastTrend.trend, units) : weighIn ? displayWeight(Number(weighIn.weight_kg), units) : 'Weigh in'}
+      sub={lastTrend ? (signedRate ? `Trend · ${signedRate}` : 'Trend') : 'Morning is best'}
+      done={!!weighIn}
+      onClick={() => (series.length ? openProgress('weight') : openSheet('weight'))}
+      onPlus={() => openSheet('weight')}
+      plusLabel="Log a weigh-in"
+      footer={trendPts.length >= 2 ? <Sparkline values={trendPts.map((p) => weightValue(p.trend, units))} color="var(--indigo)" width={120} height={30} /> : null}
+    />,
+    plan && (
+      <Tile
+        key="glp1"
+        icon={plan.route === 'oral' ? 'pill' : 'syringe'}
+        color="var(--purple)"
+        label="GLP-1"
+        value={dose ? doseStatusLabel(dose) : '…'}
+        sub={`${plan.name} ${formatDose(plan.dose, plan.unit)}`}
+        alert={dose?.state === 'due' || dose?.state === 'overdue'}
+        done={dose?.state === 'taken'}
+        onClick={() => openSheet('dose', { date })}
+      />
+    ),
+    <Tile
+      key="water"
+      icon="drop"
+      color="var(--cyan)"
+      label="Water"
+      value={formatWater(water.ml)}
+      sub={`of ${formatWater(waterTarget)}`}
+      pct={water.ml / waterTarget}
+      onClick={() => openSheet('water', { date, daily })}
+      onPlus={() => water.add(GLASS_ML)}
+      plusLabel="Add a glass of water"
+    />,
+    <Tile
+      key="mood"
+      icon={mood ? null : 'smile'}
+      emoji={mood?.emoji}
+      color={mood?.color || 'var(--yellow)'}
+      label="Mood"
+      value={mood ? mood.label : 'Check in'}
+      sub={daily?.symptoms?.length ? `${daily.symptoms.length} symptom${daily.symptoms.length > 1 ? 's' : ''}` : 'How are you?'}
+      onClick={() => openSheet('mood', { date, daily })}
+    />,
+  ].filter(Boolean)
+
   return (
-    <div>
+    <div className="dashboard">
       <header className="page-head">
         <div className="grow">
-          <div className="eyebrow">{formatLongDate(date)}</div>
-          <h1>{formatDayLabel(date, today)}</h1>
+          <div className="eyebrow">{isToday ? formatLongDate(date) : `${formatDayLabel(date, today)} · ${formatLongDate(date)}`}</div>
+          <h1>Dashboard</h1>
         </div>
-        <div className="day-nav">
-          <button className="head-avatar" aria-label="Your profile and settings" onClick={() => setTab('settings')}>
-            <Avatar profile={profile} size={34} />
-          </button>
-          <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
-            <Icon name="left" />
-          </button>
-          {!isToday && (
-            <button className="btn sm secondary" onClick={() => setDate(today)}>Today</button>
-          )}
-          <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate(addDays(date, 1))}>
-            <Icon name="right" />
-          </button>
-        </div>
+        <button className="head-avatar" aria-label="Your profile and settings" onClick={() => setTab('settings')}>
+          <Avatar profile={profile} size={38} />
+        </button>
       </header>
 
-      <section className="card summary-card">
-        <div className="summary">
-          <Ring value={totals.calories} max={target}>
+      <div className="day-strip">
+        <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
+          <Icon name="left" />
+        </button>
+        <button className="day-strip-label" onClick={() => setDate(today)} disabled={isToday} aria-label={isToday ? 'Today' : 'Back to today'}>
+          {formatDayLabel(date, today)}
+          {!isToday && <span className="day-strip-back">Back to today</span>}
+        </button>
+        <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate(addDays(date, 1))}>
+          <Icon name="right" />
+        </button>
+      </div>
+
+      <section className="card hero-card rise" style={{ '--i': 0 }}>
+        <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label="Today’s nutrition breakdown">
+          <Ring value={totals.calories} max={target} size={148} stroke={14}>
             <span className="big num">{fmt(Math.abs(left))}</span>
             <span className="tiny muted">{left >= 0 ? 'kcal left' : 'kcal over'}</span>
           </Ring>
-          <div className="grow">
+          <div className="grow hero-stats">
             <div className="kv"><span className="k">Eaten</span><span className="v">{fmt(totals.calories)}</span></div>
             <div className="kv"><span className="k">Target</span><span className="v">{fmt(target)}</span></div>
             {burned > 0 && (
               <div className="kv">
                 <span className="k">Exercise</span>
-                <span className="v" style={{ color: 'var(--red)' }}>{allowance > 0 ? `+${fmt(allowance)}` : fmt(burned)}</span>
+                <span className="v" style={{ color: 'var(--orange)' }}>{allowance > 0 ? `+${fmt(allowance)}` : fmt(burned)}</span>
               </div>
             )}
           </div>
-        </div>
-        <button className="grid3 macros macros-btn" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label="Today’s nutrition breakdown">
-          <MacroBar label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
-          <MacroBar label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
-          <MacroBar label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
         </button>
       </section>
 
-      <div className="tiles">
-        <Tile
-          icon="drop"
-          color="var(--cyan)"
-          value={formatWater(water.ml)}
-          sub={`of ${formatWater(waterTarget)}`}
-          pct={water.ml / waterTarget}
-          label="Water"
-          onClick={() => openSheet('water', { date, daily })}
-          onPlus={() => water.add(GLASS_ML)}
-          plusLabel="Add a glass of water"
-        />
-        <Tile
-          icon={mood ? null : 'smile'}
-          emoji={mood?.emoji}
-          color={mood?.color || 'var(--yellow)'}
-          value={mood ? mood.label : 'Check in'}
-          sub={daily?.symptoms?.length ? `${daily.symptoms.length} symptom${daily.symptoms.length > 1 ? 's' : ''}` : 'Mood'}
-          label="Mood"
-          onClick={() => openSheet('mood', { date, daily })}
-        />
-        {plan ? (
-          <Tile
-            icon={plan.route === 'oral' ? 'pill' : 'syringe'}
-            color="var(--purple)"
-            value={doseStatusLabel(dose)}
-            sub={`${plan.name} ${formatDose(plan.dose, plan.unit)}`}
-            label="GLP-1"
-            alert={dose.state === 'due' || dose.state === 'overdue'}
-            done={dose.state === 'taken'}
-            onClick={() => openSheet('dose', { date })}
-          />
-        ) : (
-          <Tile
-            icon="scale"
-            color="var(--indigo)"
-            value={weighIn ? displayWeight(Number(weighIn.weight_kg), units) : 'Weigh in'}
-            sub={series.length ? `Trend ${displayWeight(series[series.length - 1].trend, units)}` : 'Morning is best'}
-            label="Weight"
-            done={!!weighIn}
-            onClick={() => openSheet('weight')}
-          />
-        )}
+      <button className="card macro-card rise" style={{ '--i': 1 }} onClick={() => openProgress('macros')} aria-label="Macros: open trends in Progress">
+        <div className="card-title">
+          <span>Macros</span>
+          <span className="card-link">Trends <Icon name="right" size={14} strokeWidth={2.4} /></span>
+        </div>
+        <div className="macro-rings">
+          <MacroRing label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
+          <MacroRing label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
+          <MacroRing label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
+        </div>
+      </button>
+
+      <div className="bento">
+        {small.map((t, i) => (
+          <div key={t.key} className="rise" style={{ '--i': i + 2 }}>{t}</div>
+        ))}
       </div>
 
-      {isToday && <MimiCheckin />}
+      <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 2 }}>
+        <button className="tile-main row-tile" onClick={() => (workouts.length ? setShowExercise(true) : openSheet('workout', { date }))} aria-label={workouts.length ? `Exercise: ${burned} kcal burned` : 'Log exercise'}>
+          <span className="tile-icon" aria-hidden="true"><Icon name="run" strokeWidth={2.2} /></span>
+          <span className="grow">
+            <span className="tile-label">Exercise</span>
+            <span className="tile-value">
+              {workouts.length ? `${fmt(burned)} kcal` : 'Not yet'}
+            </span>
+            <span className="tile-sub ellipsis">
+              {day?.workoutError ? day.workoutError : workouts.length ? `${workouts.length} session${workouts.length > 1 ? 's' : ''}${allowance > 0 ? ` · +${fmt(allowance)} to target` : ''}` : 'Treadmill or home workout'}
+            </span>
+          </span>
+        </button>
+        <button className="tile-plus" aria-label="Add workout" onClick={() => openSheet('workout', { date })}>
+          <Icon name="plus" strokeWidth={3} />
+        </button>
+      </div>
 
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
@@ -168,10 +213,8 @@ export default function Today() {
         </div>
       )}
 
-      <AskCoach />
-
-      <div className="list-header">
-        Food{totals.calories > 0 ? ` · ${fmt(totals.calories)} kcal` : ''}
+      <div className="list-header big">
+        Food<span className="list-header-note">{totals.calories > 0 ? `${fmt(totals.calories)} kcal` : ''}</span>
       </div>
       {entries === null ? (
         <div className="center" style={{ padding: 32, color: 'var(--text-3)' }}>
@@ -223,34 +266,60 @@ export default function Today() {
         </div>
       )}
 
-      <ExerciseCard
-        workouts={workouts}
-        error={day?.workoutError}
-        allowance={allowance}
-        onAdd={() => openSheet('workout', { date })}
-        onEdit={(w) => openSheet('workout', { date, workout: w })}
-      />
-
       {day?.checkinError && <p className="list-footer danger-text">{day.checkinError}</p>}
 
       {entries && entries.length === 0 && (
-        <p className="center" style={{ marginTop: 22 }}>
+        <p className="center" style={{ marginTop: 24 }}>
           <button className="btn sm gray" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
         </p>
       )}
 
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
+      {showExercise && (
+        <Sheet title={`Exercise${isToday ? '' : ` · ${formatDayLabel(date, today)}`}`} onClose={() => setShowExercise(false)}>
+          <ExerciseCard
+            workouts={workouts}
+            error={day?.workoutError}
+            allowance={allowance}
+            onAdd={() => {
+              setShowExercise(false)
+              openSheet('workout', { date })
+            }}
+            onEdit={(w) => {
+              setShowExercise(false)
+              openSheet('workout', { date, workout: w })
+            }}
+          />
+        </Sheet>
+      )}
     </div>
   )
 }
 
-/** One of the three "essentials" on Today. The + adds without opening anything. */
-function Tile({ icon, emoji, color, value, sub, label, pct, onClick, onPlus, plusLabel, alert, done }) {
+/** One macro as a small ring with grams eaten and the target underneath. */
+function MacroRing({ label, value, target, color }) {
+  const pct = target > 0 ? Math.round((value / target) * 100) : 0
+  return (
+    <div className="macro-ring" style={{ '--c': color }}>
+      <Ring value={value} max={target} size={64} stroke={7} color={color}>
+        <span className="macro-pct num">{pct}%</span>
+      </Ring>
+      <span className="macro-ring-label">{label}</span>
+      <span className="macro-ring-sub num">{Math.round(value)} / {target} g</span>
+    </div>
+  )
+}
+
+/** A concise Dashboard card. The + acts without opening anything. */
+function Tile({ icon, emoji, color, value, sub, label, pct, onClick, onPlus, plusLabel, alert, done, footer }) {
   return (
     <div className={`tile${alert ? ' alert' : ''}${done ? ' done' : ''}`} style={{ '--c': color }}>
       <button className="tile-main" onClick={onClick} aria-label={`${label}: ${value}, ${sub}`}>
-        <span className="tile-icon" aria-hidden="true">
-          {emoji ? <span className="tile-emoji">{emoji}</span> : <Icon name={icon} strokeWidth={2.2} />}
+        <span className="tile-top">
+          <span className="tile-icon" aria-hidden="true">
+            {emoji ? <span className="tile-emoji">{emoji}</span> : <Icon name={icon} strokeWidth={2.2} />}
+          </span>
+          <span className="tile-label">{label}</span>
         </span>
         <span className="tile-value">{value}</span>
         <span className="tile-sub ellipsis">{sub}</span>
@@ -259,62 +328,12 @@ function Tile({ icon, emoji, color, value, sub, label, pct, onClick, onPlus, plu
             <i style={{ width: `${Math.min(100, Math.round(pct * 100))}%` }} />
           </span>
         )}
+        {footer && <span className="tile-footer">{footer}</span>}
       </button>
       {onPlus && (
         <button className="tile-plus" aria-label={plusLabel} onClick={onPlus}>
           <Icon name="plus" strokeWidth={3} />
         </button>
-      )}
-    </div>
-  )
-}
-
-/** "Ask Mimi anything": one tap from Today to an answer. */
-function AskCoach() {
-  const { askCoach, profile } = useApp()
-  const [q, setQ] = useState('')
-  const [focused, setFocused] = useState(false)
-  const ideas = glp1Plan(profile)
-    ? ['What should I eat on dose day?', 'Help with nausea', 'Am I getting enough protein?']
-    : ['What should I eat tonight?', 'Review my week', 'High-protein Jamaican breakfast']
-  const send = (text) => {
-    askCoach(text)
-    setQ('')
-  }
-  return (
-    <div className="ask-wrap">
-      <form
-        className="ask-bar"
-        onSubmit={(e) => {
-          e.preventDefault()
-          send(q)
-        }}
-      >
-        <button type="button" className="ask-face" aria-label="Open Mimi" onClick={() => send('')}>
-          <PenguinFace size={36} />
-        </button>
-        <input
-          className="ask-input"
-          placeholder="Ask Mimi anything…"
-          value={q}
-          enterKeyHint="send"
-          onChange={(e) => setQ(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setTimeout(() => setFocused(false), 150)}
-          aria-label="Ask Mimi"
-        />
-        <button className="send-btn" disabled={!q.trim()} aria-label="Ask">
-          <Icon name="up" strokeWidth={2.6} />
-        </button>
-      </form>
-      {focused && !q && (
-        <div className="chips" style={{ marginTop: 10 }}>
-          {ideas.map((t) => (
-            <button key={t} type="button" className="chip tinted" style={{ '--c': 'var(--indigo)' }} onMouseDown={(e) => e.preventDefault()} onClick={() => send(t)}>
-              {t}
-            </button>
-          ))}
-        </div>
       )}
     </div>
   )

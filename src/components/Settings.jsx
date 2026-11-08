@@ -188,7 +188,7 @@ export default function Settings() {
 
       <ListSection
         header="GLP-1 medicine"
-        footer={plan ? 'Doses, injection sites and side effects are logged from Today. Mimi tailors food, water and exercise advice to your medicine.' : 'Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda and more: log doses and injection sites, and get coaching that fits.'}
+        footer={plan ? 'Doses, injection sites and side effects are logged from the Dashboard. Mimi tailors food, water and exercise advice to your medicine.' : 'Ozempic, Wegovy, Mounjaro, Zepbound, Saxenda and more: log doses and injection sites, and get coaching that fits.'}
       >
         <ListRow
           icon="syringe"

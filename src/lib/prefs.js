@@ -33,5 +33,5 @@ export function applyTheme(theme) {
   if (theme === 'light' || theme === 'dark') root.dataset.theme = theme
   else delete root.dataset.theme
   const dark = theme === 'dark' || (theme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches)
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#000000' : '#ffffff'))
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', dark ? '#000000' : '#f2f2f7'))
 }
