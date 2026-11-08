@@ -34,26 +34,41 @@ export function doseStep(medId, dose) {
 
 /**
  * When the next dose is due.
- * doses: any order, each { log_date }. Returns
- *   { state: 'none' | 'taken' | 'due' | 'overdue' | 'upcoming', nextDate, daysUntil, takenToday, perDay }
+ * doses: any order, each { log_date }. startedOn: the plan's start date.
+ * With no doses logged, the start date counts as the first dose (people set
+ * the plan after their first jab, and the app shouldn't nag for it forever).
+ * Returns
+ *   { state: 'none' | 'taken' | 'due' | 'overdue' | 'upcoming', nextDate, daysUntil, takenToday, perDay, assumed }
  */
-export function doseStatus({ doses = [], frequency = 'weekly', today }) {
-  const sorted = [...doses].filter((d) => d?.log_date).sort((a, b) => (a.log_date < b.log_date ? 1 : -1))
+export function doseStatus({ doses = [], frequency = 'weekly', today, startedOn = null }) {
+  let sorted = [...doses].filter((d) => d?.log_date).sort((a, b) => (a.log_date < b.log_date ? 1 : -1))
   const perDay = frequency === 'twice_daily' ? 2 : 1
+  let assumed = false
+  if (!sorted.length && startedOn && startedOn <= today) {
+    if (frequency !== 'weekly') return { state: 'due', nextDate: today, daysUntil: 0, takenToday: 0, perDay, assumed: true }
+    sorted = [{ log_date: startedOn }]
+    assumed = true
+  }
   const takenToday = sorted.filter((d) => d.log_date === today).length
-  if (!sorted.length) return { state: 'none', nextDate: today, daysUntil: 0, takenToday: 0, perDay }
+  if (!sorted.length) return { state: 'none', nextDate: today, daysUntil: 0, takenToday: 0, perDay, assumed }
 
   if (frequency === 'weekly') {
     const last = sorted.find((d) => d.log_date <= today) || sorted[sorted.length - 1]
     const nextDate = addDays(last.log_date, 7)
     const daysUntil = daysBetween(today, nextDate)
-    if (last.log_date === today) return { state: 'taken', nextDate, daysUntil, takenToday, perDay }
+    if (last.log_date === today) return { state: 'taken', nextDate, daysUntil, takenToday, perDay, assumed }
     const state = daysUntil > 0 ? 'upcoming' : daysUntil === 0 ? 'due' : 'overdue'
-    return { state, nextDate, daysUntil, takenToday, perDay }
+    return { state, nextDate, daysUntil, takenToday, perDay, assumed }
   }
   // Daily and twice daily: due until today's doses are all logged.
-  if (takenToday >= perDay) return { state: 'taken', nextDate: addDays(today, 1), daysUntil: 1, takenToday, perDay }
-  return { state: 'due', nextDate: today, daysUntil: 0, takenToday, perDay }
+  if (takenToday >= perDay) return { state: 'taken', nextDate: addDays(today, 1), daysUntil: 1, takenToday, perDay, assumed }
+  return { state: 'due', nextDate: today, daysUntil: 0, takenToday, perDay, assumed }
+}
+
+/** doseStatus for a plan from glp1Plan(): uses the plan's frequency and start date. */
+export function planDoseStatus(plan, doses, today) {
+  if (!plan) return null
+  return doseStatus({ doses: doses || [], frequency: plan.frequency, today, startedOn: plan.startedOn })
 }
 
 /** Short label for the status, e.g. "Due today", "In 3 days", "2 days late". */
@@ -168,4 +183,43 @@ export function summariseDailyLogs(logs = []) {
     waterMl: water.length ? Math.round(avg(water)) : null,
     symptoms: Object.entries(counts).sort((a, b) => b[1] - a[1]),
   }
+}
+
+// ---------- Dose trend (Progress chart) ----------
+
+/**
+ * The dose you're on each day from `from` to `to`, for a trend line: each
+ * dose holds until the next one, and stops after a long gap (a missed run of
+ * doses shouldn't look like you were still on it). With no doses logged, the
+ * plan's start date and dose stand in as dose one, as in doseStatus.
+ * Returns { levels: [{ date, value }], taken: [{ date, value }] } where
+ * `taken` is the days a dose was actually logged.
+ */
+export function doseLevels({ doses = [], from, to, frequency = 'weekly', plan = null }) {
+  let rows = doses.filter((d) => d?.log_date && Number(d.dose) > 0)
+  if (!rows.length && plan?.startedOn && plan.dose && plan.startedOn <= to) {
+    rows = [{ log_date: plan.startedOn, dose: plan.dose, unit: plan.unit }]
+  }
+  if (!rows.length) return { levels: [], taken: [] }
+  // Keep to one unit (mg or mcg): the one the newest dose uses.
+  rows = [...rows].sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0))
+  const unit = rows[rows.length - 1].unit
+  if (unit) rows = rows.filter((d) => !d.unit || d.unit === unit)
+
+  // Highest dose on each logged day.
+  const byDay = new Map()
+  for (const d of rows) byDay.set(d.log_date, Math.max(byDay.get(d.log_date) || 0, Number(d.dose)))
+  const days = [...byDay.keys()]
+  const maxGap = frequency === 'weekly' ? 13 : 3
+
+  const levels = []
+  let i = -1
+  for (let day = from; day <= to; day = addDays(day, 1)) {
+    while (i + 1 < days.length && days[i + 1] <= day) i++
+    if (i < 0) continue
+    if (daysBetween(days[i], day) > maxGap) continue
+    levels.push({ date: day, value: byDay.get(days[i]) })
+  }
+  const taken = days.filter((d) => d >= from && d <= to).map((d) => ({ date: d, value: byDay.get(d) }))
+  return { levels, taken }
 }

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MOOD_BY_V } from '../data/glp1.js'
-import { BOTTLE_ML, GLASS_ML, doseStatus, doseStatusLabel, formatWater, glp1Plan } from '../lib/glp1.js'
+import { BOTTLE_ML, GLASS_ML, planDoseStatus, doseStatusLabel, formatWater, glp1Plan } from '../lib/glp1.js'
 import { guessMeal, parseQuickLog, suggestLogActions } from '../lib/quicklog.js'
 import { lbToKg } from '../lib/calc.js'
 import { useDay } from '../lib/useDay.js'
@@ -33,7 +33,7 @@ export default function LogSheet({ date, onClose }) {
   const isToday = date === today
   const hour = isToday ? new Date().getHours() + new Date().getMinutes() / 60 : 20
 
-  const dose = plan ? doseStatus({ doses: day?.doses || [], frequency: plan.frequency, today: date }) : null
+  const dose = planDoseStatus(plan, day?.doses, date)
   const mealsLogged = useMemo(() => Object.fromEntries((day?.entries || []).map((e) => [e.meal, true])), [day])
   const actions = suggestLogActions({
     hour,

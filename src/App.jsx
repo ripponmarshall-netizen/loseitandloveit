@@ -16,6 +16,7 @@ import { MealBreakdownSheet } from './components/MealBreakdown.jsx'
 import { WorkoutSheet } from './components/Workouts.jsx'
 import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
+import { MimiBubble, MimiProvider } from './components/MimiCheckin.jsx'
 import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
@@ -58,7 +59,13 @@ const SHEETS = {
  */
 function useAutoHideTabBar(enabled, resetKey) {
   const [hidden, setHidden] = useState(false)
-  useEffect(() => setHidden(false), [resetKey])
+  const holdUntil = useRef(0)
+  // Switching tabs (and the smooth scroll that can follow, e.g. Dashboard →
+  // a Progress chart) must never hide the bar: only the user's own scrolling does.
+  useEffect(() => {
+    setHidden(false)
+    holdUntil.current = Date.now() + 1200
+  }, [resetKey])
   useEffect(() => {
     if (!enabled) {
       setHidden(false)
@@ -70,6 +77,10 @@ function useAutoHideTabBar(enabled, resetKey) {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const y = window.scrollY
+        if (Date.now() < holdUntil.current) {
+          lastY = y
+          return
+        }
         const atBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 24
         if (y < 40 || atBottom) setHidden(false)
         else if (y > lastY + 6) setHidden(true)
@@ -98,6 +109,7 @@ export default function App() {
   const [coachAsk, setCoachAsk] = useState(null) // { text, id } handed to the Coach tab
   const [dataVersion, setDataVersion] = useState(0)
   const [toastMsg, setToastMsg] = useState(null)
+  const [progressFocus, setProgressFocus] = useState(null) // { section, id } from a Dashboard card
   const [clock, setClock] = useState(() => Date.now())
   const [prefs, setPrefsState] = useState(readPrefs)
   // Tabs stay mounted once visited, so a coach reply keeps streaming and
@@ -173,7 +185,11 @@ export default function App() {
   const toast = useCallback((msg, kind = 'info') => {
     clearTimeout(toastTimer.current)
     setToastMsg({ msg, kind, id: Date.now() })
-    toastTimer.current = setTimeout(() => setToastMsg(null), kind === 'error' ? 5000 : 2500)
+    // Slide out, then unmount (it used to vanish mid-frame).
+    toastTimer.current = setTimeout(() => {
+      setToastMsg((t) => t && { ...t, leaving: true })
+      toastTimer.current = setTimeout(() => setToastMsg(null), 260)
+    }, kind === 'error' ? 5000 : 2500)
   }, [])
 
   const reloadWeights = useCallback(async () => {
@@ -245,6 +261,7 @@ export default function App() {
     setSelectedDate(null)
     setSheet(null)
     setCoachAsk(null)
+    setProgressFocus(null)
   }, [localMode])
 
   const openSheet = useCallback((type, props = {}) => setSheet({ type, props, id: Date.now() }), [])
@@ -253,6 +270,13 @@ export default function App() {
     (text) => {
       setCoachAsk({ text: String(text || '').trim(), id: Date.now() })
       goTab('coach')
+    },
+    [goTab],
+  )
+  const openProgress = useCallback(
+    (section) => {
+      setProgressFocus({ section, id: Date.now() })
+      goTab('progress')
     },
     [goTab],
   )
@@ -287,6 +311,8 @@ export default function App() {
     clearCoachAsk: () => setCoachAsk(null),
     signOut,
     setTab: goTab,
+    openProgress,
+    progressFocus,
     prefs,
     setPrefs,
   }
@@ -308,13 +334,14 @@ export default function App() {
       </div>
     )
     body = (
-      <>
+      <MimiProvider>
         {['today', 'progress', 'coach', 'settings'].map(show)}
+        {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={tabbarHidden} />}
         {/* Touching the bottom edge brings a hidden tab bar back. */}
         {tabbarHidden && <div className="tabbar-reveal" onTouchStart={() => setTabbarHidden(false)} onClick={() => setTabbarHidden(false)} aria-hidden="true" />}
         <nav className={`tabbar${tabbarHidden ? ' hidden' : ''}`} aria-label="Main">
           <div className="tabbar-inner">
-            <TabBtn id="today" icon="today" label="Today" tab={tab} setTab={goTab} />
+            <TabBtn id="today" icon="grid" label="Dashboard" tab={tab} setTab={goTab} />
             <TabBtn id="progress" icon="trend" label="Progress" tab={tab} setTab={goTab} />
             <button className="tab-add" aria-label="Log food, drink, water, exercise, mood or a dose" onClick={() => openSheet('log', { date })}>
               <Icon name="plus" strokeWidth={2.8} />
@@ -327,7 +354,7 @@ export default function App() {
           const S = SHEETS[sheet.type]
           return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />
         })()}
-      </>
+      </MimiProvider>
     )
   }
 
@@ -337,7 +364,7 @@ export default function App() {
       {toastMsg && (
         <div
           key={toastMsg.id}
-          className={`toast${toastMsg.kind === 'error' ? ' error' : ''}`}
+          className={`toast${toastMsg.kind === 'error' ? ' error' : ''}${toastMsg.leaving ? ' leaving' : ''}`}
           role={toastMsg.kind === 'error' ? 'alert' : 'status'}
         >
           {toastMsg.msg}

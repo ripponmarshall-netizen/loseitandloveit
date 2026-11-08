@@ -22,7 +22,7 @@ export function workoutDetail(w, units) {
   return [`${Math.round(w.duration_min)} min`, a?.label, w.intensity].filter(Boolean).join(' · ')
 }
 
-/** Section on the Today screen: the day's workouts plus an Add button. */
+/** The day's workouts plus an Add button (in the Dashboard's Exercise sheet). */
 export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
   const { units } = useApp()
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
@@ -43,7 +43,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
             <span className="entry-kcal">{w.calories_burned}</span>
           </button>
         ))}
-        <button className="list-row meal-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
+        <button className="list-row meal-row add-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
           <span className="dot" />
           <span className="label">{workouts.length ? 'Add another workout' : 'Treadmill or home workout'}</span>
           <span className="meal-add" aria-hidden="true">

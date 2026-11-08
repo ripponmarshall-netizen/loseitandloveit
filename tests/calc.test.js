@@ -254,3 +254,57 @@ test('macroBreakdown: empty meal and no targets', () => {
   assert.equal(b.ofDay.calories, null)
   assert.deepEqual(b.items, [])
 })
+
+test('weekStart is the Monday of the week', async () => {
+  const { weekStart } = await import('../src/lib/calc.js')
+  assert.equal(weekStart('2026-11-08'), '2026-11-02') // Sunday → Monday before
+  assert.equal(weekStart('2026-11-09'), '2026-11-09') // Monday
+  assert.equal(weekStart('2026-11-01'), '2026-10-26')
+})
+
+test('bucketAverages: daily, weekly and monthly averages ending today', async () => {
+  const { bucketAverages, bucketStats } = await import('../src/lib/calc.js')
+  const pts = [
+    { date: '2026-11-08', value: 100 },
+    { date: '2026-11-07', value: 200 },
+    { date: '2026-11-02', value: 300 },
+    { date: '2026-10-31', value: 50 },
+    { date: '2026-11-09', value: 999 }, // after the end date: ignored
+    { date: '2026-11-06', value: 'x' }, // not a number: ignored
+  ]
+  const days = bucketAverages(pts, 'day', '2026-11-08', 3)
+  assert.deepEqual(days.map((b) => b.key), ['2026-11-06', '2026-11-07', '2026-11-08'])
+  assert.deepEqual(days.map((b) => b.value), [null, 200, 100])
+
+  const weeks = bucketAverages(pts, 'week', '2026-11-08', 2)
+  assert.deepEqual(weeks.map((b) => b.key), ['2026-10-26', '2026-11-02'])
+  assert.equal(weeks[1].end, '2026-11-08')
+  assert.equal(weeks[1].value, 200) // (100 + 200 + 300) / 3
+  assert.equal(weeks[0].value, 50)
+
+  const months = bucketAverages(pts, 'month', '2026-11-08', 3)
+  assert.deepEqual(months.map((b) => b.key), ['2026-09-01', '2026-10-01', '2026-11-01'])
+  assert.equal(months[1].end, '2026-10-31')
+  assert.equal(months[2].value, 200)
+  assert.equal(months[0].value, null)
+
+  // Month stepping crosses the year boundary.
+  assert.deepEqual(bucketAverages([], 'month', '2026-01-15', 2).map((b) => b.key), ['2025-12-01', '2026-01-01'])
+
+  const s = bucketStats(weeks)
+  assert.equal(s.avg, 125)
+  assert.equal(s.change, 150)
+  assert.equal(bucketStats(bucketAverages([], 'day', '2026-11-08', 3)), null)
+})
+
+test('bucketAverages with agg "last" keeps the latest value in each bucket', async () => {
+  const { bucketAverages } = await import('../src/lib/calc.js')
+  const pts = [
+    { date: '2026-11-02', value: 2.5 },
+    { date: '2026-11-05', value: 5 },
+    { date: '2026-11-03', value: 2.5 },
+  ]
+  const [wk] = bucketAverages(pts, 'week', '2026-11-08', 1, 'last')
+  assert.equal(wk.value, 5)
+  assert.equal(bucketAverages(pts, 'week', '2026-11-08', 1)[0].value, 10 / 3)
+})

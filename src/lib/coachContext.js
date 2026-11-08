@@ -1,7 +1,7 @@
 import { addDays, daysBetween, lastNDates } from './dates.js'
 import { ageFromBirthYear, adaptiveTdee, dailyTotals, entryTotals, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
 import { FREQUENCY_LABEL, MOOD_BY_V, SYMPTOM_BY_ID, SITE_BY_ID } from '../data/glp1.js'
-import { doseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
+import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
 
 // The compact snapshot of the user's data sent with each coach message.
 // Keep it small: it is re-sent every turn and billed as input tokens.
@@ -103,7 +103,7 @@ export async function buildCoachContext({ store, profile, series, targets, today
 }
 
 function glp1Context({ plan, doses, series, today }) {
-  const status = doseStatus({ doses, frequency: plan.frequency, today })
+  const status = planDoseStatus(plan, doses, today)
   const step = doseStep(plan.id, plan.dose)
   const start = plan.startedOn ? trendOn(series, plan.startedOn) || series.find((p) => p.date >= plan.startedOn) : null
   const last = series[series.length - 1]
@@ -118,7 +118,8 @@ function glp1Context({ plan, doses, series, today }) {
     weeks_on_medicine: plan.startedOn ? Math.floor(daysBetween(plan.startedOn, today) / 7) : undefined,
     trend_change_since_start_kg: start && last ? Math.round((last.trend - start.trend) * 10) / 10 : undefined,
     next_dose: doseStatusLabel(status),
-    days_since_last_dose: doses[0] ? daysBetween(doses[0].log_date, today) : undefined,
+    days_since_last_dose: doses[0] ? daysBetween(doses[0].log_date, today) : plan.startedOn ? daysBetween(plan.startedOn, today) : undefined,
+    doses_logged_in_app: doses.length ? undefined : 'none yet; schedule assumes the first dose was on the start date',
     recent_doses: doses.slice(0, 6).map((d) => ({
       date: d.log_date,
       dose: formatDose(d.dose, d.unit),
