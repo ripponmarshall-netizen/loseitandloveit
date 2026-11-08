@@ -51,3 +51,10 @@ export function formatDayLabel(iso, todayIso) {
 export function formatShortDate(iso) {
   return SHORT_FMT.format(parseISODate(iso))
 }
+
+const MONTH_YEAR_FMT = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' })
+
+// Goal dates can be years away: "12 Mar" this year, "Mar 2028" otherwise.
+export function formatEta(iso, todayIso) {
+  return iso.slice(0, 4) === todayIso.slice(0, 4) ? formatShortDate(iso) : MONTH_YEAR_FMT.format(parseISODate(iso))
+}

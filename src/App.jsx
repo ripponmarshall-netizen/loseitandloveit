@@ -128,11 +128,12 @@ export default function App() {
 
   const saveProfile = useCallback(
     async (p) => {
-      const saved = await store.saveProfile(p)
+      const { warning, ...saved } = await store.saveProfile(p)
       setProfile(saved)
-      return saved
+      if (warning) toast(warning, 'error')
+      return { ...saved, warning }
     },
-    [store],
+    [store, toast],
   )
 
   const series = useMemo(() => trendSeries(weights), [weights])

@@ -27,6 +27,7 @@ The Supabase project `loseitandloveit` already exists, and its URL and publishab
 Supabase Dashboard → **SQL Editor** → New query → paste each file in order and **Run** it. Each one is safe to re-run.
 1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql): core tables
 2. [`supabase/migrations/0002_workouts.sql`](supabase/migrations/0002_workouts.sql): workouts and the exercise eat-back setting
+3. [`supabase/migrations/0003_health_conditions.sql`](supabase/migrations/0003_health_conditions.sql): health conditions (PCOS etc.) and weigh-in notes
 
 ### 2. Auth (2 min)
 Dashboard → **Authentication → URL Configuration**:

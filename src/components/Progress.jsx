@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
-import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
+import { adaptiveTdee, dailyTotals, displayWeight, hasCondition, kmhToMph, milestones, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
+import { addDays, formatEta, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
 import { Segmented } from './ui.jsx'
+import { WeightSheet, weightDelta } from './Weight.jsx'
 
 export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
@@ -12,14 +13,18 @@ export default function Progress() {
   const [workouts, setWorkouts] = useState([])
 
   useEffect(() => {
+    let cancelled = false
     store
       .listEntries(addDays(today, -89), today)
-      .then((rows) => setDaily(dailyTotals(rows)))
-      .catch((e) => toast(e.message, 'error'))
+      .then((rows) => !cancelled && setDaily(dailyTotals(rows)))
+      .catch((e) => !cancelled && toast(e.message, 'error'))
     store
       .listWorkouts(addDays(today, -27), today)
-      .then(setWorkouts)
-      .catch(() => setWorkouts([]))
+      .then((rows) => !cancelled && setWorkouts(rows))
+      .catch(() => !cancelled && setWorkouts([]))
+    return () => {
+      cancelled = true
+    }
   }, [store, today, dataVersion, toast])
 
   const last = series[series.length - 1]
@@ -34,6 +39,7 @@ export default function Progress() {
   const avgWeek = loggedWeek.length ? Math.round(loggedWeek.reduce((s, d) => s + daily[d].calories, 0) / loggedWeek.length) : null
 
   const fromDate = range === 'all' ? '0000-01-01' : addDays(today, -Number(range) + 1)
+  const toGoal = last && goalKg ? last.trend - goalKg : null
   const signed = (kg) => {
     const v = weightValue(kg, units)
     return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} ${weightUnit(units)}`
@@ -57,9 +63,13 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 12 }}>
         <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
         <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
+        <Stat
+          label="To goal"
+          value={toGoal == null ? '—' : toGoal <= 0 ? 'Reached' : `${weightValue(toGoal, units).toFixed(1)} ${weightUnit(units)}`}
+          sub={toGoal > 0 ? 'to go' : undefined}
+        />
         <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
-        <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
+        <Stat label="Goal ETA" value={eta ? formatEta(eta, today) : '—'} />
         <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
       </div>
 
@@ -73,7 +83,9 @@ export default function Progress() {
         <WeightChart series={series} goalKg={goalKg} units={units} fromDate={fromDate} toDate={today} />
       </section>
 
-      <LogWeight />
+      <WeighIns weights={weights} />
+
+      <Milestones startKg={startKg} currentKg={last?.trend} units={units} pcos={hasCondition(profile, 'pcos')} />
 
       <section className="card">
         <h2>Calories, last 14 days</h2>
@@ -112,10 +124,6 @@ export default function Progress() {
         )}
       </section>
 
-      <section className="card">
-        <h2>Weigh-ins</h2>
-        <WeightList weights={weights} />
-      </section>
     </div>
   )
 }
@@ -129,7 +137,7 @@ function ExerciseSummary({ workouts, today, units }) {
       <h2>Exercise, last 7 days</h2>
       <div className="stats" style={{ marginBottom: 8 }}>
         <Stat label="Sessions" value={week.sessions} />
-        <Stat label="Minutes" value={week.minutes} />
+        <Stat label="Minutes" value={week.minutes} sub="aim 150+" />
         <Stat label="Burned" value={week.kcal} sub="net kcal" />
         <Stat label="Strength" value={`${week.strength}/2+`} sub="sessions" />
         <Stat label="Treadmill" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
@@ -152,71 +160,68 @@ function Stat({ label, value, sub }) {
   )
 }
 
-function LogWeight() {
-  const { store, today, units, reloadWeights, toast } = useApp()
-  const [date, setDate] = useState(today)
-  const [val, setVal] = useState('')
-  const [busy, setBusy] = useState(false)
-  async function save(e) {
-    e.preventDefault()
-    const kg = inputToKg(val, units)
-    if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
-    setBusy(true)
-    try {
-      await store.upsertWeight({ log_date: date, weight_kg: Math.round(kg * 100) / 100 })
-      await reloadWeights()
-      setVal('')
-      toast('Weight saved')
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
+function Milestones({ startKg, currentKg, units, pcos }) {
+  const list = milestones(startKg, currentKg)
+  if (!list.length) return null
   return (
-    <form className="card" onSubmit={save}>
-      <h2>Log weight</h2>
-      <div className="row">
-        <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: 1.3 }} aria-label="Date" />
-        <input className="input" inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} style={{ flex: 1 }} aria-label="Weight" />
-        <button className="btn" disabled={busy || !val}>Save</button>
-      </div>
-    </form>
+    <section className="card">
+      <h2>Health milestones</h2>
+      {list.map((m) => (
+        <div key={m.pct} className="macro">
+          <div className="row between small">
+            <span>
+              {m.pct}% lost · {displayWeight(m.targetKg, units)}
+            </span>
+            <span className="num muted">{m.reached ? 'Done ✓' : `${Math.round(m.progress * 100)}%`}</span>
+          </div>
+          <div className="bar">
+            <i style={{ width: `${m.progress * 100}%`, background: m.reached ? 'var(--ok)' : 'var(--brand)' }} />
+          </div>
+        </div>
+      ))}
+      <p className="tiny muted" style={{ margin: 0 }}>
+        {pcos
+          ? 'With PCOS, losing 5–10% of your starting weight can bring back regular cycles, help fertility and lower diabetes risk, even if the goal is still far off.'
+          : 'Losing 5–10% of your starting weight already lowers blood pressure and blood sugar, even if the goal is still far off.'}
+      </p>
+    </section>
   )
 }
 
-function WeightList({ weights }) {
-  const { store, units, reloadWeights, toast } = useApp()
+function WeighIns({ weights }) {
+  const { units, today } = useApp()
   const [showAll, setShowAll] = useState(false)
+  const [sheet, setSheet] = useState(null) // { weight } to edit, {} to add
   const list = [...weights].reverse()
   const shown = showAll ? list : list.slice(0, 7)
-  async function remove(id) {
-    try {
-      await store.deleteWeight(id)
-      await reloadWeights()
-    } catch (e) {
-      toast(e.message, 'error')
-    }
-  }
-  if (!list.length) return <p className="small muted">No weigh-ins yet.</p>
   return (
-    <div>
-      {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
-          <span>{formatShortDate(w.log_date)}</span>
-          <span className="row">
+    <section className="card">
+      <div className="meal-head">
+        <h2 style={{ textTransform: 'none' }}>Weigh-ins</h2>
+        <button className="btn soft sm" onClick={() => setSheet({})}>+ Log weight</button>
+      </div>
+      {!list.length && <p className="small muted" style={{ margin: 0 }}>No weigh-ins yet. Log one for any date, including past days.</p>}
+      {shown.map((w, i) => {
+        const prev = list[i + 1]
+        return (
+          <button key={w.id} className="entry" onClick={() => setSheet({ weight: w })} aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}`}>
+            <div className="grow">
+              <div>{w.log_date === today ? 'Today' : formatShortDate(w.log_date)}</div>
+              {w.note && <div className="tiny muted ellipsis">{w.note}</div>}
+            </div>
+            {prev && <span className="tiny muted num">{weightDelta(w.weight_kg, prev.weight_kg, units)}</span>}
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, fontSize: 16 }} onClick={() => remove(w.id)}>
-              🗑
-            </button>
-          </span>
-        </div>
-      ))}
+            <span className="muted" aria-hidden="true">›</span>
+          </button>
+        )
+      })}
       {list.length > 7 && (
-        <button className="link small" onClick={() => setShowAll((s) => !s)}>
+        <button className="link small" style={{ marginTop: 8 }} onClick={() => setShowAll((s) => !s)}>
           {showAll ? 'Show less' : `Show all ${list.length}`}
         </button>
       )}
-    </div>
+      {list.length > 0 && <p className="tiny muted" style={{ margin: '8px 0 0' }}>Tap a weigh-in to change its date, weight or note.</p>}
+      {sheet && <WeightSheet weight={sheet.weight} onClose={() => setSheet(null)} />}
+    </section>
   )
 }

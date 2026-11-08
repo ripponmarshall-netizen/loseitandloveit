@@ -1,23 +1,39 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 export function Sheet({ title, onClose, children }) {
+  const [closing, setClosing] = useState(false)
+  const timer = useRef()
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  // Backdrop, ✕ and Escape slide the sheet out before unmounting.
+  const close = useCallback(() => {
+    if (timer.current) return
+    if (reducedMotion()) return closeRef.current()
+    setClosing(true)
+    timer.current = setTimeout(() => closeRef.current(), 180)
+  }, [])
+
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e) => e.key === 'Escape' && onClose()
+    const onKey = (e) => e.key === 'Escape' && close()
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
       window.removeEventListener('keydown', onKey)
+      clearTimeout(timer.current)
     }
-  }, [onClose])
+  }, [close])
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className={`sheet-backdrop ${closing ? 'closing' : ''}`} onClick={close}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-handle" />
         <div className="sheet-head">
           <h2>{title}</h2>
-          <button className="icon-btn" aria-label="Close" onClick={onClose}>✕</button>
+          <button type="button" className="icon-btn" aria-label="Close" onClick={close}>✕</button>
         </div>
         {children}
       </div>

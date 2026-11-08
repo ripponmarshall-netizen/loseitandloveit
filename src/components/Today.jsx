@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
-import { entryTotals, exerciseAllowance, inputToKg, sumEntries, weightUnit } from '../lib/calc.js'
+import { entryTotals, exerciseAllowance, sumEntries } from '../lib/calc.js'
 import { addDays, formatDayLabel } from '../lib/dates.js'
 import { MacroBar, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { ExerciseCard, WorkoutSheet } from './Workouts.jsx'
-
+import { WeighInCard } from './Weight.jsx'
 
 export default function Today() {
-  const { store, date, setDate, today, targets, weights, dataVersion, bumpData, openAdd, toast, profile } = useApp()
+  const { store, date, setDate, today, targets, dataVersion, bumpData, openAdd, toast, profile } = useApp()
   const [entries, setEntries] = useState(null)
   const [editing, setEditing] = useState(null)
   const [workouts, setWorkouts] = useState([])
@@ -54,7 +54,6 @@ export default function Today() {
   const allowance = exerciseAllowance(burned, profile.exercise_eatback_pct)
   const target = (targets?.calories || 0) + allowance
   const left = target - totals.calories
-  const weighedToday = weights.some((w) => w.log_date === date)
 
   async function copyYesterday() {
     try {
@@ -108,7 +107,7 @@ export default function Today() {
         </div>
       </section>
 
-      {date === today && !weighedToday && <QuickWeight units={profile.units} />}
+      <WeighInCard date={date} />
 
       {entries === null ? (
         <div className="center" style={{ padding: 24 }}>
@@ -169,34 +168,6 @@ export default function Today() {
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
       {workoutSheet && <WorkoutSheet date={date} workout={workoutSheet.workout} onClose={() => setWorkoutSheet(null)} />}
     </div>
-  )
-}
-
-function QuickWeight({ units }) {
-  const { store, today, reloadWeights, toast } = useApp()
-  const [val, setVal] = useState('')
-  const [busy, setBusy] = useState(false)
-  async function save(e) {
-    e.preventDefault()
-    const kg = inputToKg(val, units)
-    if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
-    setBusy(true)
-    try {
-      await store.upsertWeight({ log_date: today, weight_kg: Math.round(kg * 100) / 100 })
-      await reloadWeights()
-      toast('Weight saved')
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form className="card row" onSubmit={save}>
-      <span className="grow small">⚖️ Morning weigh-in</span>
-      <input className="input" style={{ width: 96 }} inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} aria-label="Weight" />
-      <button className="btn sm" disabled={busy || !val}>Save</button>
-    </form>
   )
 }
 

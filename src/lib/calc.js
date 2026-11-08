@@ -18,6 +18,34 @@ export const CALORIE_FLOOR = { female: 1200, male: 1500 }
 // Never plan to lose more than this fraction of body weight per week.
 export const MAX_WEEKLY_LOSS_FRACTION = 0.01
 
+// ---------- Health conditions ----------
+//
+// Self-reported conditions that change the guidance. Stored as text[] on the
+// profile (migration 0003). Keys must match the database check constraint.
+export const CONDITIONS = {
+  pcos: { label: 'PCOS (polycystic ovary syndrome)', short: 'PCOS', female: true },
+  insulin_resistance: { label: 'Insulin resistance or prediabetes', short: 'Insulin resistance' },
+  type2_diabetes: { label: 'Type 2 diabetes', short: 'Type 2 diabetes' },
+  hypothyroidism: { label: 'Underactive thyroid (hypothyroidism)', short: 'Hypothyroidism' },
+  hypertension: { label: 'High blood pressure', short: 'High blood pressure' },
+}
+
+// Conditions where carb quality and amount matter most for blood sugar.
+const INSULIN_RELATED = ['pcos', 'insulin_resistance', 'type2_diabetes']
+
+// International Evidence-based Guideline for PCOS (2023): a 500–750 kcal/day
+// deficit for weight loss. We cap the planned deficit at the top of that range.
+export const PCOS_MAX_DEFICIT = 750
+
+export function cleanConditions(list, sex) {
+  const arr = Array.isArray(list) ? list : []
+  return [...new Set(arr)].filter((c) => CONDITIONS[c] && !(CONDITIONS[c].female && sex === 'male'))
+}
+
+export function hasCondition(profile, key) {
+  return cleanConditions(profile?.conditions, profile?.sex).includes(key)
+}
+
 export function ageFromBirthYear(birthYear, now = new Date()) {
   if (!birthYear) return null
   return now.getFullYear() - Number(birthYear)
@@ -66,7 +94,17 @@ export function computeTargets(profile, currentWeightKg) {
     warnings.push(`Weekly loss capped at ${maxRate.toFixed(2)} kg (1% of body weight).`)
   }
 
-  const deficit = (rate * KCAL_PER_KG) / 7
+  const conditions = cleanConditions(profile.conditions, profile.sex)
+  const pcos = conditions.includes('pcos')
+  const carbConscious = conditions.some((c) => INSULIN_RELATED.includes(c))
+  const notes = []
+
+  let deficit = (rate * KCAL_PER_KG) / 7
+  if (pcos && deficit > PCOS_MAX_DEFICIT) {
+    deficit = PCOS_MAX_DEFICIT
+    rate = (deficit * 7) / KCAL_PER_KG
+    warnings.push(`PCOS: deficit capped at ${PCOS_MAX_DEFICIT} kcal/day (about ${rate.toFixed(2)} kg/week), the top of the PCOS guideline range.`)
+  }
   let calories = tdee - deficit
   const floor = CALORIE_FLOOR[profile.sex] ?? CALORIE_FLOOR.female
   if (calories < floor) {
@@ -89,8 +127,33 @@ export function computeTargets(profile, currentWeightKg) {
     ? Number(profile.protein_target_override)
     : Math.min(1.8 * refWeight, (calories * 0.4) / 4)
   protein = Math.round(protein)
-  const fat = Math.round((calories * 0.28) / 9)
-  const carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
+  let fat = Math.round((calories * 0.28) / 9)
+  let carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
+
+  // Carb-conscious split for PCOS / insulin resistance / type 2 diabetes:
+  // carbs at most 40% of calories, the spare energy goes to fat (up to 35%).
+  // Consensus practice, not proven better for weight loss: carb QUALITY
+  // (fibre, low GI) matters more than the exact split.
+  if (carbConscious) {
+    const maxCarbs = Math.round((calories * 0.4) / 4)
+    if (carbs > maxCarbs) {
+      carbs = maxCarbs
+      const maxFat = Math.round((calories * 0.35) / 9)
+      fat = Math.min(maxFat, Math.max(fat, Math.round((calories - protein * 4 - carbs * 4) / 9)))
+      carbs = Math.max(0, Math.round((calories - protein * 4 - fat * 9) / 4))
+    }
+  }
+
+  if (pcos) {
+    notes.push('PCOS: losing just 5–10% of your weight can improve cycles, fertility and blood sugar. That is the first milestone.')
+    notes.push('PCOS: no single diet is best. Aim for fibre and low-GI carbs, protein at every meal, and strength training twice a week.')
+  }
+  if (conditions.includes('type2_diabetes')) {
+    warnings.push('Diabetes: if you take insulin or gliclazide-type tablets, check with your doctor before cutting calories or carbs (risk of lows).')
+  }
+  if (conditions.includes('hypertension')) {
+    notes.push('Blood pressure: watch salt from saltfish, seasoning cubes, soup mixes and processed meat.')
+  }
 
   return {
     bmr: Math.round(bmrVal),
@@ -103,7 +166,25 @@ export function computeTargets(profile, currentWeightKg) {
     deficit: Math.round(tdee - calories),
     overridden,
     warnings,
+    notes,
+    conditions,
+    split: carbConscious ? 'carb-conscious' : 'standard',
   }
+}
+
+// ---------- Milestones ----------
+
+// 5% and 10% of starting weight: the losses with proven health benefits
+// (blood pressure, blood sugar; for PCOS, cycles and fertility too).
+export function milestones(startKg, currentKg) {
+  const start = Number(startKg)
+  if (!start) return []
+  const now = Number(currentKg) || start
+  return [5, 10].map((pct) => {
+    const target = start * (1 - pct / 100)
+    const lost = Math.max(0, start - now)
+    return { pct, targetKg: target, reached: now <= target, progress: Math.min(1, lost / (start - target)) }
+  })
 }
 
 // ---------- Food entries ----------
@@ -164,7 +245,7 @@ export function trendSeries(weights) {
       trend = trend + a * (kg - trend)
     }
     prevDate = w.log_date
-    out.push({ date: w.log_date, weight: kg, trend: Math.round(trend * 100) / 100, id: w.id })
+    out.push({ date: w.log_date, weight: kg, trend: Math.round(trend * 100) / 100, id: w.id, note: w.note || null })
   }
   return out
 }
@@ -270,11 +351,22 @@ export function weightUnit(units) {
   return units === 'imperial' ? 'lb' : 'kg'
 }
 
+// Accepts "185.5" and "185,5" (some iPhone regions show a comma on the decimal pad).
+export function parseDecimal(value) {
+  if (value == null) return NaN
+  const s = String(value).trim().replace(/\s/g, '').replace(',', '.')
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(s)) return NaN
+  return Number(s)
+}
+
 export function inputToKg(value, units) {
-  const n = Number(value)
+  const n = parseDecimal(value)
   if (!n) return null
   return units === 'imperial' ? lbToKg(n) : n
 }
+
+// Realistic adult range, matching the database check (30–350 kg).
+export const isValidWeightKg = (kg) => Number.isFinite(kg) && kg >= 30 && kg <= 350
 
 // ---------- Exercise ----------
 //

@@ -4,13 +4,22 @@
 // Screens only ever call the functions returned here.
 
 import { supabase } from './supabase.js'
+import { cleanConditions } from './calc.js'
 
 const ENTRY_FIELDS = 'id,log_date,meal,name,serving,servings,calories,protein_g,carbs_g,fat_g,source,food_id,created_at'
 const PROFILE_FIELDS = [
   'display_name', 'sex', 'birth_year', 'height_cm', 'start_weight_kg', 'goal_weight_kg',
   'activity_level', 'weekly_rate_kg', 'units', 'day_start_hour',
   'calorie_target_override', 'protein_target_override', 'coach_notes', 'exercise_eatback_pct',
+  'conditions',
 ]
+const WEIGHT_FIELDS = 'id,log_date,weight_kg,note'
+
+// Columns added by later migrations, and which file adds them.
+const OPTIONAL_PROFILE_COLUMNS = {
+  exercise_eatback_pct: '0002_workouts.sql',
+  conditions: '0003_health_conditions.sql',
+}
 const WORKOUT_FIELDS =
   'id,log_date,kind,name,duration_min,speed_kmh,incline_pct,distance_km,mode,activity,intensity,exercises,calories_burned,calories_source,notes,created_at'
 
@@ -52,8 +61,19 @@ function workoutError(error) {
 function pickProfile(p) {
   const out = {}
   for (const k of PROFILE_FIELDS) if (k in p) out[k] = p[k] === '' ? null : p[k]
+  if ('conditions' in out) out.conditions = cleanConditions(out.conditions, out.sex ?? p.sex)
   return out
 }
+
+function cleanWeight({ log_date, weight_kg, note }) {
+  const kg = Math.round(Number(weight_kg) * 100) / 100
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(log_date || ''))) throw new Error('Pick a date for the weigh-in.')
+  if (!(kg >= 30 && kg <= 350)) throw new Error('Enter a realistic weight.')
+  const n = note == null ? '' : String(note).trim().slice(0, 300)
+  return { log_date, weight_kg: kg, note: n || null }
+}
+
+const duplicateWeighIn = (date) => new Error(`You already have a weigh-in on ${date}. Edit or delete that one instead.`)
 
 function cleanEntry(e) {
   return {
@@ -122,13 +142,23 @@ export function createCloudStore(userId) {
     },
     async saveProfile(p) {
       const row = { id: userId, ...pickProfile(p) }
+      const skipped = []
       let res = await sb.from('profiles').upsert(row).select('*').single()
-      if (res.error && /exercise_eatback_pct/.test(res.error.message)) {
-        // Migration 0002 not applied yet: save everything else.
-        delete row.exercise_eatback_pct
+      // A later migration isn't applied yet: save everything else, then say so.
+      for (let i = 0; i < 3 && res.error; i++) {
+        const col = Object.keys(OPTIONAL_PROFILE_COLUMNS).find((c) => c in row && res.error.message.includes(c))
+        if (!col) break
+        delete row[col]
+        skipped.push(col)
         res = await sb.from('profiles').upsert(row).select('*').single()
       }
-      return throwIf(res)
+      const saved = throwIf(res)
+      const lost = skipped.filter((c) => c !== 'conditions' || (p.conditions || []).length)
+      if (lost.length) {
+        const files = [...new Set(lost.map((c) => OPTIONAL_PROFILE_COLUMNS[c]))].join(' and ')
+        saved.warning = `Saved, except ${lost.join(' and ')}: run supabase/migrations/${files} in the Supabase SQL Editor.`
+      }
+      return saved
     },
 
     async listEntries(from, to) {
@@ -171,16 +201,22 @@ export function createCloudStore(userId) {
     },
 
     async listWeights() {
-      return throwIf(
-        await sb.from('weights').select('id,log_date,weight_kg,note').order('log_date'),
-      )
+      return throwIf(await sb.from('weights').select(WEIGHT_FIELDS).order('log_date'))
     },
-    async upsertWeight({ log_date, weight_kg, note = null }) {
+    // One weigh-in per day: logging the same date again replaces it.
+    async upsertWeight(w) {
       return throwIf(
         await sb.from('weights')
-          .upsert({ user_id: userId, log_date, weight_kg, note }, { onConflict: 'user_id,log_date' })
-          .select('id,log_date,weight_kg,note').single(),
+          .upsert({ user_id: userId, ...cleanWeight(w) }, { onConflict: 'user_id,log_date' })
+          .select(WEIGHT_FIELDS).single(),
       )
+    },
+    async updateWeight(id, w) {
+      const row = cleanWeight(w)
+      const { data, error } = await sb.from('weights').update(row).eq('id', id).select(WEIGHT_FIELDS).single()
+      if (error?.code === '23505') throw duplicateWeighIn(row.log_date)
+      if (error) throw new Error(error.message)
+      return data
     },
     async deleteWeight(id) {
       throwIf(await sb.from('weights').delete().eq('id', id))
@@ -343,15 +379,25 @@ export function createLocalStore() {
     async listWeights() {
       return [...db.weights].sort((a, b) => (a.log_date < b.log_date ? -1 : 1))
     },
-    async upsertWeight({ log_date, weight_kg, note = null }) {
-      let w = db.weights.find((x) => x.log_date === log_date)
-      if (w) Object.assign(w, { weight_kg, note })
+    async upsertWeight(input) {
+      const row = cleanWeight(input)
+      let w = db.weights.find((x) => x.log_date === row.log_date)
+      if (w) Object.assign(w, row)
       else {
-        w = { id: uid(), log_date, weight_kg, note }
+        w = { id: uid(), ...row }
         db.weights.push(w)
       }
       save()
-      return w
+      return { ...w }
+    },
+    async updateWeight(id, input) {
+      const row = cleanWeight(input)
+      const w = db.weights.find((x) => x.id === id)
+      if (!w) throw new Error('Weigh-in not found')
+      if (db.weights.some((x) => x.id !== id && x.log_date === row.log_date)) throw duplicateWeighIn(row.log_date)
+      Object.assign(w, row)
+      save()
+      return { ...w }
     },
     async deleteWeight(id) {
       db.weights = db.weights.filter((x) => x.id !== id)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ACTIVITY, cmToFtIn, computeTargets, ftInToCm, kgToLb, lbToKg } from '../lib/calc.js'
+import { ACTIVITY, CONDITIONS, cleanConditions, cmToFtIn, computeTargets, ftInToCm, kgToLb, lbToKg, parseDecimal } from '../lib/calc.js'
 import { Segmented } from './ui.jsx'
 
 const PACES = {
@@ -34,11 +34,15 @@ function toForm(p) {
     calorie_target_override: p.calorie_target_override ? String(p.calorie_target_override) : '',
     protein_target_override: p.protein_target_override ? String(p.protein_target_override) : '',
     exercise_eatback_pct: String(p.exercise_eatback_pct ?? 0),
+    conditions: Array.isArray(p.conditions) ? p.conditions : [],
   }
 }
 
 function fromForm(f) {
-  const toKg = (v) => (v ? r1(f.units === 'imperial' ? lbToKg(Number(v)) : Number(v)) : null)
+  const toKg = (v) => {
+    const n = parseDecimal(v)
+    return n ? r1(f.units === 'imperial' ? lbToKg(n) : n) : null
+  }
   const height = f.units === 'imperial' ? (f.ft ? r1(ftInToCm(f.ft, f.inch || 0)) : null) : f.height_cm ? Number(f.height_cm) : null
   return {
     display_name: f.display_name.trim() || null,
@@ -55,14 +59,17 @@ function fromForm(f) {
     calorie_target_override: f.calorie_target_override ? Number(f.calorie_target_override) : null,
     protein_target_override: f.protein_target_override ? Number(f.protein_target_override) : null,
     exercise_eatback_pct: Number(f.exercise_eatback_pct) || 0,
+    conditions: cleanConditions(f.conditions, f.sex),
   }
 }
 
-export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, submitLabel = 'Save', advanced = false }) {
+export default function ProfileForm({ initial = {}, currentWeightKg, weightNote, onSubmit, submitLabel = 'Save', advanced = false }) {
   const [f, setF] = useState(() => toForm(initial))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
+  const toggleCondition = (key) => (e) =>
+    setF((s) => ({ ...s, conditions: e.target.checked ? [...s.conditions, key] : s.conditions.filter((c) => c !== key) }))
 
   const switchUnits = (units) => {
     if (units === f.units) return
@@ -152,6 +159,28 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
             <input className="input" inputMode="decimal" value={f.goal_weight} onChange={set('goal_weight')} />
           </label>
         </div>
+        {weightNote}
+      </div>
+
+      <div className="card">
+        <h3>Health (optional)</h3>
+        <p className="tiny muted" style={{ marginTop: 0 }}>
+          Tick anything a doctor has diagnosed. It adjusts your targets and how the coach advises you. Stored privately with your profile.
+        </p>
+        {Object.entries(CONDITIONS)
+          .filter(([, c]) => !(c.female && f.sex === 'male'))
+          .map(([key, c]) => (
+            <label key={key} className="check-row">
+              <input type="checkbox" checked={f.conditions.includes(key)} onChange={toggleCondition(key)} />
+              <span>{c.label}</span>
+            </label>
+          ))}
+        {f.conditions.includes('pcos') && f.sex !== 'male' && (
+          <p className="tiny muted" style={{ margin: '8px 0 0' }}>
+            PCOS mode follows the 2023 international PCOS guideline: a gentler deficit (max 750 kcal/day), fewer and better carbs, protein at
+            every meal, strength training twice a week, and 5–10% weight loss as the first milestone.
+          </p>
+        )}
       </div>
 
       <div className="card">
@@ -231,9 +260,17 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           <p className="small muted" style={{ marginTop: 4 }}>
             Maintenance ≈ {preview.tdee} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
           </p>
+          {preview.split === 'carb-conscious' && (
+            <p className="small muted" style={{ marginTop: 0 }}>Carb-conscious split: carbs capped at 40% of calories.</p>
+          )}
           {preview.warnings.map((w) => (
-            <p key={w} className="small" style={{ color: '#b45309' }}>
+            <p key={w} className="small warn-text">
               {w}
+            </p>
+          ))}
+          {preview.notes.map((n) => (
+            <p key={n} className="small muted">
+              {n}
             </p>
           ))}
           <p className="tiny muted" style={{ margin: 0 }}>

@@ -104,6 +104,9 @@ p { margin: 0 0 8px; }
 }
 @media (prefers-color-scheme: dark) { .btn { color: #052e2a; } }
 .btn:disabled { opacity: 0.5; cursor: default; }
+.btn, .chip, .nav .add, .entry, .food-item { transition: transform 0.08s ease, background-color 0.15s ease; }
+.btn:not(:disabled):active, .chip:active, .nav .add:active { transform: scale(0.97); }
+.entry:active { background: var(--line); }
 .btn.block { width: 100%; }
 .btn.ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
 .btn.soft { background: var(--brand-soft); color: var(--brand); }
@@ -130,6 +133,14 @@ label.field > span { display: block; font-size: 13px; color: var(--muted); margi
   outline: none;
 }
 .input:focus { border-color: var(--brand); }
+/* iOS Safari: date inputs ignore width and centre their text unless reset */
+input[type='date'].input { -webkit-appearance: none; appearance: none; display: block; text-align: left; }
+input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
+.big-input { font-size: 22px; font-weight: 700; }
+.check-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 15px; cursor: pointer; }
+.check-row input { width: 22px; height: 22px; flex: none; margin: 0; }
+.warn-text { color: #b45309; }
+@media (prefers-color-scheme: dark) { .warn-text { color: #fbbf24; } }
 textarea.input { resize: vertical; min-height: 80px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
@@ -146,6 +157,7 @@ textarea.input { resize: vertical; min-height: 80px; }
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
+.chip.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); font-weight: 600; }
 .chip {
   flex: none; border: 1px solid var(--line); background: var(--card); border-radius: 999px;
   padding: 7px 12px; font-size: 14px; cursor: pointer; white-space: nowrap;
@@ -190,6 +202,10 @@ textarea.input { resize: vertical; min-height: 80px; }
 .sheet-head h2 { margin: 0; }
 @keyframes up { from { transform: translateY(40px); opacity: 0.6; } to { transform: none; opacity: 1; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.sheet-backdrop.closing { animation: fade-out 0.18s ease forwards; }
+.sheet-backdrop.closing .sheet { animation: down 0.18s ease forwards; }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes down { to { transform: translateY(60px); opacity: 0; } }
 
 /* Toast */
 .toast {
@@ -197,7 +213,9 @@ textarea.input { resize: vertical; min-height: 80px; }
   bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
   max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
+  animation: toast-in 0.2s ease;
 }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 .toast.error { background: var(--danger); color: #fff; }
 
 /* Today */
@@ -219,6 +237,7 @@ textarea.input { resize: vertical; min-height: 80px; }
   cursor: pointer; background: none; border-left: 0; border-right: 0; border-bottom: 0; width: 100%; text-align: left;
 }
 .entry:first-of-type { border-top: 0; }
+.weigh-card { display: flex; align-items: center; gap: 12px; width: 100%; color: var(--text); cursor: pointer; text-align: left; }
 .entry .kcal { font-weight: 700; white-space: nowrap; }
 .tag { font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 
@@ -267,3 +286,8 @@ textarea.input { resize: vertical; min-height: 80px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .photo-preview { width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: spin 0.8s linear infinite !important; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}

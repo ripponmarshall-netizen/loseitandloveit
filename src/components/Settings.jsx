@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { supabase } from '../lib/supabase.js'
-import { entryTotals } from '../lib/calc.js'
+import { displayWeight, entryTotals } from '../lib/calc.js'
+import { formatShortDate } from '../lib/dates.js'
 import { APP_VERSION } from '../config.js'
 import ProfileForm from './ProfileForm.jsx'
 
@@ -32,7 +33,7 @@ const csvCell = (v) => {
 }
 
 export default function Settings() {
-  const { store, mode, session, profile, saveProfile, series, toast, signOut, today, bumpData, reloadWeights } = useApp()
+  const { store, mode, session, profile, saveProfile, series, weights, units, toast, signOut, today, bumpData, reloadWeights, setTab } = useApp()
   const [usage, setUsage] = useState(null)
   const importRef = useRef()
 
@@ -41,9 +42,35 @@ export default function Settings() {
   }, [store, mode, today])
 
   async function onSave(values) {
-    await saveProfile(values)
-    toast('Saved')
+    // The first weigh-in is created from the starting weight at sign-up. If
+    // that one still matches the old starting weight, keep the two in step,
+    // otherwise changing the starting weight looks like it did nothing.
+    const oldStart = Number(profile.start_weight_kg)
+    const first = weights[0]
+    const syncFirst =
+      first && values.start_weight_kg && Math.abs(values.start_weight_kg - oldStart) >= 0.05 && Math.abs(Number(first.weight_kg) - oldStart) < 0.06
+    const saved = await saveProfile(values)
+    if (syncFirst) {
+      try {
+        await store.updateWeight(first.id, { log_date: first.log_date, weight_kg: values.start_weight_kg, note: first.note })
+        await reloadWeights()
+      } catch (e) {
+        toast(e.message, 'error')
+        return
+      }
+    }
+    if (!saved.warning) toast(syncFirst ? `Saved. First weigh-in (${formatShortDate(first.log_date)}) updated too.` : 'Saved')
   }
+
+  const latest = weights[weights.length - 1]
+  const weightNote = latest ? (
+    <p className="small muted" style={{ margin: 0 }}>
+      Your <strong>current</strong> weight comes from weigh-ins (latest {displayWeight(Number(latest.weight_kg), units)} on {formatShortDate(latest.log_date)}).{' '}
+      <button type="button" className="link small" onClick={() => setTab('progress')}>
+        Log or edit weigh-ins ›
+      </button>
+    </p>
+  ) : null
 
   async function exportJson() {
     try {
@@ -121,6 +148,7 @@ export default function Settings() {
         key={profile.updated_at || 'p'}
         initial={profile}
         currentWeightKg={series.length ? series[series.length - 1].trend : null}
+        weightNote={weightNote}
         onSubmit={onSave}
         submitLabel="Save changes"
         advanced
