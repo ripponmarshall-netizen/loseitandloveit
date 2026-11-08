@@ -9,7 +9,6 @@ import {
   trendSeries,
   weeklyRate,
   adaptiveTdee,
-  adaptiveCalorieTarget,
   inputToKg,
   projectGoalDate,
   cmToFtIn,
@@ -187,17 +186,6 @@ test('weight input accepts a comma decimal and blanks', () => {
   assert.equal(inputToKg('abc', 'metric'), null)
 })
 
-test('adaptive target keeps the planned pace and does not ratchet down', () => {
-  // 0.5 kg/week = 550 kcal/day deficit
-  assert.equal(adaptiveCalorieTarget(2600, 0.5, 'male'), 2050)
-  // Same inputs after adopting it: same answer (the old code subtracted a growing gap)
-  assert.equal(adaptiveCalorieTarget(2600, 0.5, 'male'), 2050)
-  // Never below the safety floor
-  assert.equal(adaptiveCalorieTarget(1600, 1, 'female'), 1200)
-  assert.equal(adaptiveCalorieTarget(1800, 1, 'male'), 1500)
-  assert.equal(adaptiveCalorieTarget(null, 0.5, 'male'), null)
-})
-
 test('adaptive TDEE ignores a weigh-in from long before the window', () => {
   const end = '2026-10-31'
   const start = addDays(end, -20)
@@ -209,4 +197,60 @@ test('adaptive TDEE ignores a weigh-in from long before the window', () => {
   const res = adaptiveTdee({ daily, series: trendSeries(weights), endDate: end })
   assert.ok(res, 'should still estimate')
   assert.ok(res.spanDays <= 21, `span ${res.spanDays} should stay inside the window`)
+})
+
+test('adaptive target uses the planned deficit, so re-applying it does not drift', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t1 = computeTargets(baseProfile, 100)
+  const adaptive = { tdee: 2600 }
+  const first = adaptiveTarget(adaptive, t1)
+  const t2 = computeTargets({ ...baseProfile, calorie_target_override: first }, 100)
+  assert.equal(adaptiveTarget(adaptive, t2), first)
+  assert.ok(Math.abs(first - (2600 - 550)) <= 10, `first ${first}`)
+})
+
+test('adaptive target never goes below the floor', async () => {
+  const { adaptiveTarget } = await import('../src/lib/calc.js')
+  const t = computeTargets({ ...baseProfile, sex: 'female' }, 100)
+  assert.equal(adaptiveTarget({ tdee: 1300 }, t), 1200)
+})
+
+test('manual target: no "raised to the minimum" warning', () => {
+  const t = computeTargets({ ...baseProfile, sex: 'female', height_cm: 150, start_weight_kg: 55, goal_weight_kg: 50, activity_level: 'sedentary', calorie_target_override: 1400 }, 55)
+  assert.equal(t.calories, 1400)
+  assert.ok(!t.warnings.some((w) => /raised/.test(w)), t.warnings.join())
+})
+
+// ---------- Meal breakdown ----------
+import { macroBreakdown, wholePercents } from '../src/lib/calc.js'
+
+test('wholePercents always sums to 100 and handles zeros', () => {
+  assert.deepEqual(wholePercents([1, 1, 1]), [34, 33, 33])
+  assert.equal(wholePercents([10, 20, 33.3]).reduce((s, v) => s + v, 0), 100)
+  assert.deepEqual(wholePercents([0, 0]), [0, 0])
+  assert.deepEqual(wholePercents([5, -3]), [100, 0])
+})
+
+test('macroBreakdown: calories by macro, share of day and foods sorted', () => {
+  const entries = [
+    { id: 'a', name: 'Ackee and saltfish', servings: 1, calories: 380, protein_g: 22, carbs_g: 8, fat_g: 29 },
+    { id: 'b', name: 'Fried dumpling', servings: 2, calories: 170, protein_g: 3, carbs_g: 22, fat_g: 8 },
+  ]
+  const b = macroBreakdown(entries, { calories: 2000, protein: 150, carbs: 200, fat: 60 })
+  assert.equal(b.totals.calories, 720)
+  assert.deepEqual(b.kcalFrom, { protein: 112, carbs: 208, fat: 405 })
+  assert.equal(b.split.protein + b.split.carbs + b.split.fat, 100)
+  assert.equal(b.split.fat, 56)
+  assert.equal(b.ofDay.calories, 36)
+  assert.equal(b.ofDay.protein, 19)
+  assert.deepEqual(b.items.map((i) => i.id), ['a', 'b'])
+  assert.equal(b.items[0].share + b.items[1].share, 100)
+})
+
+test('macroBreakdown: empty meal and no targets', () => {
+  const b = macroBreakdown([], null)
+  assert.equal(b.totals.calories, 0)
+  assert.deepEqual(b.split, { protein: 0, carbs: 0, fat: 0 })
+  assert.equal(b.ofDay.calories, null)
+  assert.deepEqual(b.items, [])
 })

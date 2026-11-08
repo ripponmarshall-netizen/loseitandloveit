@@ -69,16 +69,14 @@ export function computeTargets(profile, currentWeightKg) {
   const deficit = (rate * KCAL_PER_KG) / 7
   let calories = tdee - deficit
   const floor = CALORIE_FLOOR[profile.sex] ?? CALORIE_FLOOR.female
-  if (calories < floor) {
+  const overridden = !!profile.calorie_target_override
+  if (overridden) {
+    // A manual target replaces the formula, so the floor warning is about it alone.
+    calories = Number(profile.calorie_target_override)
+    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
+  } else if (calories < floor) {
     calories = floor
     warnings.push(`Target raised to the ${floor} kcal minimum. Loss will be slower than planned.`)
-  }
-
-  let overridden = false
-  if (profile.calorie_target_override) {
-    calories = Number(profile.calorie_target_override)
-    overridden = true
-    if (calories < floor) warnings.push(`Your manual target is below ${floor} kcal. Check with a doctor first.`)
   }
   calories = Math.round(calories / 10) * 10
 
@@ -100,6 +98,8 @@ export function computeTargets(profile, currentWeightKg) {
     carbs,
     fat,
     plannedWeeklyLossKg: Number(rate.toFixed(2)),
+    plannedDeficit: Math.round(deficit),
+    floor,
     deficit: Math.round(tdee - calories),
     overridden,
     warnings,
@@ -130,6 +130,50 @@ export function sumEntries(entries) {
     t.fat += x.fat
   }
   return { calories: Math.round(t.calories), protein: r1(t.protein), carbs: r1(t.carbs), fat: r1(t.fat) }
+}
+
+// Split whole percentages so they always add up to exactly 100 (largest remainder).
+export function wholePercents(values) {
+  const total = values.reduce((s, v) => s + Math.max(0, Number(v) || 0), 0)
+  if (total <= 0) return values.map(() => 0)
+  const raw = values.map((v) => (Math.max(0, Number(v) || 0) / total) * 100)
+  const out = raw.map(Math.floor)
+  let left = 100 - out.reduce((s, v) => s + v, 0)
+  const order = raw.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0])
+  for (const [, i] of order) {
+    if (left <= 0) break
+    out[i] += 1
+    left -= 1
+  }
+  return out
+}
+
+/**
+ * Nutrition breakdown for a meal (or a whole day): totals, where the calories
+ * come from (protein and carbs 4 kcal/g, fat 9 kcal/g), each macro's share,
+ * how much of the daily targets it covers, and each food's share of the calories.
+ */
+export function macroBreakdown(entries = [], targets = null) {
+  const totals = sumEntries(entries)
+  const kcalFrom = { protein: totals.protein * 4, carbs: totals.carbs * 4, fat: totals.fat * 9 }
+  const [protein, carbs, fat] = wholePercents([kcalFrom.protein, kcalFrom.carbs, kcalFrom.fat])
+  const ofTarget = (v, t) => (t > 0 ? Math.round((v / t) * 100) : null)
+  const items = entries
+    .map((e) => ({ id: e.id, name: e.name, ...entryTotals(e) }))
+    .sort((a, b) => b.calories - a.calories)
+  const itemShares = wholePercents(items.map((i) => i.calories))
+  return {
+    totals,
+    kcalFrom: { protein: Math.round(kcalFrom.protein), carbs: Math.round(kcalFrom.carbs), fat: Math.round(kcalFrom.fat) },
+    split: { protein, carbs, fat },
+    ofDay: {
+      calories: ofTarget(totals.calories, targets?.calories),
+      protein: ofTarget(totals.protein, targets?.protein),
+      carbs: ofTarget(totals.carbs, targets?.carbs),
+      fat: ofTarget(totals.fat, targets?.fat),
+    },
+    items: items.map((it, i) => ({ ...it, share: itemShares[i] })),
+  }
 }
 
 // { 'YYYY-MM-DD': totals } for a list of entries
@@ -246,15 +290,15 @@ export function adaptiveTdee({ daily, series, endDate, windowDays = 21 }) {
 }
 
 /**
- * Calorie target built on measured maintenance, keeping the planned pace.
- * Uses the planned weekly loss rather than (formula TDEE − current target),
- * so adopting it twice gives the same number instead of ratcheting down.
+ * A calorie target built on measured maintenance: adaptive TDEE minus the
+ * deficit for the chosen pace (not minus the gap to the current target,
+ * which would shrink the target again every time it is applied).
+ * Never below the safety floor. Returns null when there is nothing to suggest.
  */
-export function adaptiveCalorieTarget(adaptiveKcal, plannedWeeklyLossKg, sex) {
-  if (!adaptiveKcal) return null
-  const deficit = (Math.max(0, Number(plannedWeeklyLossKg) || 0) * KCAL_PER_KG) / 7
-  const floor = CALORIE_FLOOR[sex] ?? CALORIE_FLOOR.female
-  return Math.max(floor, Math.round((adaptiveKcal - deficit) / 10) * 10)
+export function adaptiveTarget(adaptive, targets) {
+  if (!adaptive?.tdee || !targets) return null
+  const raw = adaptive.tdee - Math.max(0, targets.plannedDeficit ?? 0)
+  return Math.max(targets.floor ?? CALORIE_FLOOR.female, Math.round(raw / 10) * 10)
 }
 
 // ---------- Units ----------
