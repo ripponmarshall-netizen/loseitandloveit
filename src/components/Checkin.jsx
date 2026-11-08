@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { APPETITE, ENERGY, MOODS, SYMPTOMS } from '../data/glp1.js'
 import { BOTTLE_ML, GLASS_ML, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
-import { inputToKg, weightUnit } from '../lib/calc.js'
-import { formatDayLabel } from '../lib/dates.js'
+import { displayWeight, inputToKg, isValidWeightKg, weightUnit, weightValue } from '../lib/calc.js'
+import { addDays, formatDayLabel } from '../lib/dates.js'
 import { Icon, Segmented, Sheet } from './ui.jsx'
 
 /** The day's water goal from the profile and trend weight. */
@@ -181,41 +181,124 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
   )
 }
 
-export function WeightSheet({ initialValue, onClose }) {
-  const { store, today, units, reloadWeights, toast } = useApp()
-  const [date, setDate] = useState(today)
-  const [val, setVal] = useState(initialValue != null ? String(initialValue) : '')
+const r1 = (n) => Math.round(n * 10) / 10
+
+// "−1.2 lb" style change between two weights in kg.
+export function weightDelta(kg, prevKg, units) {
+  if (prevKg == null) return null
+  const v = weightValue(Number(kg) - Number(prevKg), units)
+  if (Math.abs(v) < 0.05) return `±0 ${weightUnit(units)}`
+  return `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} ${weightUnit(units)}`
+}
+
+/**
+ * Log a weigh-in on any day up to today, or edit an existing one: its date,
+ * weight and note. `weight` = the weigh-in to edit; `date` = default day.
+ */
+export function WeightSheet({ weight, date: initialDate, initialValue, onClose }) {
+  const { store, today, units, weights, reloadWeights, toast } = useApp()
+  const editing = Boolean(weight)
+  const [date, setDate] = useState(weight?.log_date || (initialDate && initialDate <= today ? initialDate : today))
+  const [val, setVal] = useState(
+    weight ? String(r1(weightValue(Number(weight.weight_kg), units))) : initialValue != null ? String(initialValue) : '',
+  )
+  const [note, setNote] = useState(weight?.note || '')
   const [busy, setBusy] = useState(false)
-  async function save(e) {
-    e.preventDefault()
-    const kg = inputToKg(val, units)
-    if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
+
+  const kg = inputToKg(val, units)
+  const future = date > today
+  const clash = weights.find((w) => w.log_date === date && w.id !== weight?.id)
+  const valid = Boolean(date) && !future && kg != null && isValidWeightKg(kg) && !(editing && clash)
+  const prev = [...weights].reverse().find((w) => w.log_date < date && w.id !== weight?.id)
+
+  async function run(fn, msg) {
     setBusy(true)
     try {
-      await store.upsertWeight({ log_date: date, weight_kg: Math.round(kg * 100) / 100 })
+      await fn()
       await reloadWeights()
-      toast('Weight saved')
+      toast(msg)
       onClose()
-    } catch (err) {
-      toast(err.message, 'error')
+    } catch (e) {
+      toast(e.message, 'error')
       setBusy(false)
     }
   }
+
+  function save(e) {
+    e.preventDefault()
+    if (!valid) return
+    const row = { log_date: date, weight_kg: kg, note }
+    run(() => (editing ? store.updateWeight(weight.id, row) : store.upsertWeight(row)), editing ? 'Weigh-in updated' : 'Weight saved')
+  }
+
+  function remove() {
+    if (!window.confirm(`Delete the weigh-in for ${formatDayLabel(weight.log_date, today)}?`)) return
+    run(() => store.deleteWeight(weight.id), 'Weigh-in deleted')
+  }
+
+  const quick = [
+    [today, 'Today'],
+    [addDays(today, -1), 'Yesterday'],
+    [addDays(today, -2), formatDayLabel(addDays(today, -2), today)],
+  ]
+
   return (
-    <Sheet title="Weigh-in" onClose={onClose}>
+    <Sheet title={editing ? 'Edit weigh-in' : 'Weigh-in'} onClose={onClose}>
       <form onSubmit={save}>
-        <div className="grid2">
-          <label className="field">
-            <span>Weight ({weightUnit(units)})</span>
-            <input className="input" inputMode="decimal" autoFocus value={val} onChange={(e) => setVal(e.target.value)} placeholder={weightUnit(units)} />
-          </label>
-          <label className="field">
-            <span>Date</span>
-            <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
+        <label className="field">
+          <span>Weight ({weightUnit(units)})</span>
+          <input
+            className="input weight-input num"
+            inputMode="decimal"
+            autoFocus={!editing}
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder={units === 'imperial' ? 'e.g. 185.4' : 'e.g. 84.1'}
+          />
+          {val && kg == null && <small className="danger-text">Numbers only, e.g. 185.4</small>}
+          {val && kg != null && !isValidWeightKg(kg) && <small className="danger-text">That doesn’t look like a realistic adult weight.</small>}
+          {prev && kg != null && isValidWeightKg(kg) && (
+            <small className="muted">
+              {weightDelta(kg, prev.weight_kg, units)} vs {formatDayLabel(prev.log_date, today).toLowerCase()} ({displayWeight(Number(prev.weight_kg), units)})
+            </small>
+          )}
+        </label>
+
+        <label className="field">
+          <span>Date</span>
+          <input className="input date-input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+        <div className="chip-wrap" style={{ margin: '-6px 0 14px' }}>
+          {quick.map(([d, label]) => (
+            <button key={d} type="button" className={`chip${date === d ? ' tinted' : ''}`} aria-pressed={date === d} onClick={() => setDate(d)}>
+              {label}
+            </button>
+          ))}
         </div>
-        <p className="list-footer" style={{ margin: '-4px 4px 14px' }}>Morning, after the toilet, before food. The trend matters more than any one day.</p>
-        <button className="btn block" disabled={busy || !val}>Save</button>
+        {future && <p className="small danger-text">That date is in the future.</p>}
+
+        <label className="field">
+          <span>Note (optional)</span>
+          <input className="input" maxLength={300} placeholder="After night shift, salty dinner, period week…" value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+
+        {clash && (
+          <p className={`small ${editing ? 'danger-text' : 'muted'}`}>
+            {editing
+              ? `You already have ${displayWeight(Number(clash.weight_kg), units)} on that day. Pick another date or edit that one.`
+              : `This replaces ${displayWeight(Number(clash.weight_kg), units)} already logged that day.`}
+          </p>
+        )}
+
+        <button className="btn block" disabled={busy || !valid}>
+          {editing ? 'Save changes' : clash ? 'Replace weigh-in' : 'Save'}
+        </button>
+        {editing && (
+          <button type="button" className="btn destructive block" style={{ marginTop: 10 }} disabled={busy} onClick={remove}>
+            Delete weigh-in
+          </button>
+        )}
+        <p className="list-footer" style={{ margin: '12px 4px 0' }}>One weigh-in per day. Morning, after the toilet, before food. The trend matters more than any one day.</p>
       </form>
     </Sheet>
   )

@@ -55,7 +55,7 @@ export default function LogSheet({ date, onClose }) {
       case 'water': return openSheet('water', { date, daily: day?.daily })
       case 'exercise': return openSheet('workout', { date, preset: extra.preset })
       case 'mood': return openSheet('mood', { date, daily: day?.daily, initialMood: extra.mood })
-      case 'weight': return openSheet('weight', { initialValue: extra.value })
+      case 'weight': return openSheet('weight', { date, initialValue: extra.value })
       case 'dose': return plan || extra.med ? openSheet('dose', { date, preset: extra }) : openSheet('medication')
       default:
     }

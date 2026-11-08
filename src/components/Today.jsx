@@ -84,9 +84,9 @@ export default function Today() {
       value={lastTrend ? displayWeight(lastTrend.trend, units) : weighIn ? displayWeight(Number(weighIn.weight_kg), units) : 'Weigh in'}
       sub={lastTrend ? (signedRate ? `Trend · ${signedRate}` : 'Trend') : 'Morning is best'}
       done={!!weighIn}
-      onClick={() => (series.length ? openProgress('weight') : openSheet('weight'))}
-      onPlus={() => openSheet('weight')}
-      plusLabel="Log a weigh-in"
+      onClick={() => (series.length ? openProgress('weight') : openSheet('weight', { date }))}
+      onPlus={() => openSheet('weight', weighIn ? { weight: weighIn } : { date })}
+      plusLabel={weighIn ? 'Edit this weigh-in' : 'Log a weigh-in'}
       footer={trendPts.length >= 2 ? <Sparkline values={trendPts.map((p) => weightValue(p.trend, units))} color="var(--indigo)" width={120} height={30} /> : null}
     />,
     plan && (

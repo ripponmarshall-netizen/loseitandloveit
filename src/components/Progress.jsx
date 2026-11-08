@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
-  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, inputToKg, kmhToMph,
-  projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
+  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, hasCondition, kmhToMph,
+  milestones, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
 } from '../lib/calc.js'
 import { MOOD_BY_V, SYMPTOM_BY_ID } from '../data/glp1.js'
 import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } from '../lib/glp1.js'
 import { Glp1Progress } from './Glp1.jsx'
-import { useWaterTarget } from './Checkin.jsx'
-import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
+import { useWaterTarget, weightDelta } from './Checkin.jsx'
+import { addDays, formatEta, formatShortDate, lastNDates } from '../lib/dates.js'
 import { Sparkline, TrendChart } from './Charts.jsx'
 import { Icon, Segmented } from './ui.jsx'
 
@@ -103,9 +103,14 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 18 }}>
         <Stat label="Trend" color="var(--blue)" value={last ? displayWeight(last.trend, units) : '—'} />
         <Stat label="Since start" color="var(--green)" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" color="var(--teal)" value={last && goalKg ? signed(goalKg - last.trend) : '—'} />
+        <Stat
+          label="To goal"
+          color="var(--teal)"
+          value={!last || !goalKg ? '—' : last.trend <= goalKg ? 'Reached' : `${weightValue(last.trend - goalKg, units).toFixed(1)} ${weightUnit(units)}`}
+          sub={last && goalKg && last.trend > goalKg ? 'to go' : undefined}
+        />
         <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} />
-        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatShortDate(eta) : '—'} />
+        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} />
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek && targets ? `of ${targets.calories.toLocaleString('en-GB')} kcal` : 'no full days'} />
       </div>
 
@@ -113,7 +118,9 @@ export default function Progress() {
       <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} />
       <DoseTrend open={open.dose} onToggle={() => toggle('dose')} />
 
-      <LogWeight />
+      <WeighIns weights={weights} />
+
+      <Milestones startKg={startKg} currentKg={last?.trend} units={units} pcos={hasCondition(profile, 'pcos')} />
 
       <ExerciseSummary workouts={workouts} today={today} units={units} />
 
@@ -150,10 +157,6 @@ export default function Progress() {
         )}
       </section>
 
-      <section className="card">
-        <h2>Weigh-ins</h2>
-        <WeightList weights={weights} />
-      </section>
     </div>
   )
 }
@@ -477,73 +480,74 @@ function Stat({ label, value, sub, color, inner }) {
   )
 }
 
-function LogWeight() {
-  const { store, today, units, reloadWeights, toast } = useApp()
-  const [date, setDate] = useState(today)
-  const [val, setVal] = useState('')
-  const [busy, setBusy] = useState(false)
-  async function save(e) {
-    e.preventDefault()
-    const kg = inputToKg(val, units)
-    if (!date || date > today) return toast('Pick a date up to today', 'error')
-    if (!kg || kg < 30 || kg > 350) return toast('Enter a realistic weight', 'error')
-    setBusy(true)
-    try {
-      await store.upsertWeight({ log_date: date, weight_kg: Math.round(kg * 100) / 100 })
-      await reloadWeights()
-      setVal('')
-      toast('Weight saved')
-    } catch (err) {
-      toast(err.message, 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form className="card" onSubmit={save}>
-      <h2>Log weight</h2>
-      <div className="row">
-        <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: 1.3 }} aria-label="Date" />
-        <input className="input" inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} style={{ flex: 1 }} aria-label="Weight" />
-        <button className="btn" disabled={busy || !val} style={{ minHeight: 46 }}>Save</button>
-      </div>
-    </form>
-  )
-}
-
-function WeightList({ weights }) {
-  const { store, units, reloadWeights, toast } = useApp()
+function WeighIns({ weights }) {
+  const { units, today, openSheet } = useApp()
   const [showAll, setShowAll] = useState(false)
   const list = [...weights].reverse()
-  const shown = showAll ? list : list.slice(0, 7)
-  async function remove(w) {
-    if (!window.confirm(`Delete the ${formatShortDate(w.log_date)} weigh-in (${displayWeight(Number(w.weight_kg), units)})?`)) return
-    try {
-      await store.deleteWeight(w.id)
-      await reloadWeights()
-    } catch (e) {
-      toast(e.message, 'error')
-    }
-  }
-  if (!list.length) return <p className="small muted">No weigh-ins yet.</p>
+  const shown = showAll ? list : list.slice(0, 5)
   return (
-    <div>
-      {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '6px 0', borderTop: '0.5px solid var(--sep)' }}>
-          <span>{formatShortDate(w.log_date)}</span>
-          <span className="row">
+    <section className="card" id="weigh-ins">
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <h2 style={{ margin: 0 }}>Weigh-ins</h2>
+        <button className="btn secondary sm" onClick={() => openSheet('weight')}>+ Log</button>
+      </div>
+      {!list.length && <p className="small muted" style={{ margin: 0 }}>No weigh-ins yet. You can log one for any day, including past days.</p>}
+      {shown.map((w, i) => {
+        const prev = list[i + 1]
+        return (
+          <button
+            key={w.id}
+            className="list-row weigh-row tap"
+            style={{ padding: '10px 2px', width: '100%', background: 'none', border: 0, textAlign: 'left', color: 'var(--text)' }}
+            onClick={() => openSheet('weight', { weight: w })}
+            aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}`}
+          >
+            <span className="label">
+              {w.log_date === today ? 'Today' : formatShortDate(w.log_date)}
+              {w.note && <span className="sub ellipsis">{w.note}</span>}
+            </span>
+            {prev && <span className="delta num">{weightDelta(w.weight_kg, prev.weight_kg, units)}</span>}
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, color: 'var(--red)' }} onClick={() => remove(w)}>
-              <Icon name="trash" size={18} />
-            </button>
-          </span>
-        </div>
-      ))}
-      {list.length > 7 && (
-        <button className="link small" onClick={() => setShowAll((s) => !s)}>
+            <svg className="chev" viewBox="0 0 8 14" aria-hidden="true" style={{ width: 8, height: 14, marginLeft: 8, color: 'var(--text-3, var(--text-2))' }}>
+              <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )
+      })}
+      {list.length > 5 && (
+        <button className="link small" style={{ marginTop: 6 }} onClick={() => setShowAll((s) => !s)}>
           {showAll ? 'Show less' : `Show all ${list.length}`}
         </button>
       )}
-    </div>
+      {list.length > 0 && <p className="tiny muted" style={{ margin: '8px 0 0' }}>Tap a weigh-in to change its weight, date or note, or delete it.</p>}
+    </section>
+  )
+}
+
+function Milestones({ startKg, currentKg, units, pcos }) {
+  const list = milestones(startKg, currentKg)
+  if (!list.length) return null
+  return (
+    <section className="card">
+      <h2>Health milestones</h2>
+      {list.map((m) => (
+        <div key={m.pct} className="milestone">
+          <div className="row between small">
+            <span>
+              {m.pct}% lost · {displayWeight(m.targetKg, units)}
+            </span>
+            <span className="num muted">{m.reached ? 'Done ✓' : `${Math.round(m.progress * 100)}%`}</span>
+          </div>
+          <div className="bar" style={{ height: 8, borderRadius: 4, background: 'var(--fill)', overflow: 'hidden', marginTop: 4 }}>
+            <i style={{ display: 'block', height: '100%', width: `${m.progress * 100}%`, background: m.reached ? 'var(--green)' : 'var(--indigo)', borderRadius: 4, transition: 'width 0.4s ease' }} />
+          </div>
+        </div>
+      ))}
+      <p className="tiny muted" style={{ margin: '10px 0 0' }}>
+        {pcos
+          ? 'With PCOS, losing 5–10% of your starting weight can bring back regular cycles, help fertility and lower diabetes risk, even while the goal is still far off.'
+          : 'Losing 5–10% of your starting weight already lowers blood pressure and blood sugar, even while the goal is still far off.'}
+      </p>
+    </section>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ACTIVITY, computeTargets } from '../lib/calc.js'
+import { ACTIVITY, CONDITIONS, computeTargets } from '../lib/calc.js'
 import { PACES, convertUnits, fromForm, toForm } from '../lib/profileForm.js'
 import { Segmented } from './ui.jsx'
 
@@ -9,7 +9,7 @@ export function useProfileForm(initial) {
   const [f, setF] = useState(() => toForm(initial))
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
   const switchUnits = (units) => setF((s) => convertUnits(s, units))
-  return { f, set, switchUnits, values: fromForm(f) }
+  return { f, set, setF, switchUnits, values: fromForm(f) }
 }
 
 export const EATBACK_OPTIONS = [
@@ -77,9 +77,38 @@ export function BodyFields({ form, hasWeighIns }) {
       <label className="field">
         <span>{hasWeighIns ? 'Starting weight' : 'Current weight'} ({wUnit})</span>
         <input className="input" inputMode="decimal" value={f.start_weight} onChange={set('start_weight')} />
-        {hasWeighIns && <small className="tiny muted">Your targets use your trend weight from weigh-ins, not this number.</small>}
+        {hasWeighIns && (
+          <small className="tiny muted">
+            Your targets use your trend weight from weigh-ins, not this number. To fix a weigh-in, tap it under Progress → Weigh-ins.
+          </small>
+        )}
       </label>
     </>
+  )
+}
+
+/** Doctor-diagnosed conditions that change targets and coaching. PCOS only for women. */
+export function HealthFields({ form }) {
+  const { f } = form
+  const toggle = (key) => (e) =>
+    form.setF((s) => ({ ...s, conditions: e.target.checked ? [...s.conditions, key] : s.conditions.filter((c) => c !== key) }))
+  return (
+    <div className="field">
+      <span>Health conditions (optional)</span>
+      {Object.entries(CONDITIONS)
+        .filter(([, c]) => !(c.female && f.sex === 'male'))
+        .map(([key, c]) => (
+          <label key={key} className="check-row">
+            <input type="checkbox" checked={f.conditions.includes(key)} onChange={toggle(key)} />
+            <span>{c.label}</span>
+          </label>
+        ))}
+      <small className="tiny muted">
+        {f.conditions.includes('pcos') && f.sex !== 'male'
+          ? 'PCOS mode follows the 2023 international PCOS guideline: a gentler deficit (750 kcal a day at most), fewer and better carbs, protein at every meal, strength training twice a week, and 5–10% loss as the first milestone.'
+          : 'Tick anything a doctor has diagnosed. It adjusts your targets and how Mimi coaches you.'}
+      </small>
+    </div>
   )
 }
 
@@ -191,8 +220,14 @@ export function TargetPreview({ values, currentWeightKg }) {
         <span style={{ color: 'var(--fat)', fontWeight: 600 }}>F {preview.fat} g</span>
         <span className="muted">Maintenance ≈ {preview.tdee}</span>
       </div>
+      {preview.split === 'carb-conscious' && (
+        <p className="small muted" style={{ margin: '4px 0' }}>Carb-conscious split: carbs at most 40% of calories.</p>
+      )}
       {preview.warnings.map((w) => (
         <p key={w} className="small" style={{ color: 'var(--orange)', margin: '4px 0' }}>{w}</p>
+      ))}
+      {preview.notes.map((n) => (
+        <p key={n} className="small muted" style={{ margin: '4px 0' }}>{n}</p>
       ))}
       <p className="tiny muted" style={{ margin: 0 }}>
         Formula-based starting point (Mifflin-St Jeor). After 2–3 weeks of logging, Progress shows your real maintenance.

@@ -1,5 +1,5 @@
 // Profile <-> form conversion and validation. Pure, so it is unit-tested.
-import { cmToFtIn, ftInToCm, kgToLb, lbToKg } from './calc.js'
+import { cleanConditions, cmToFtIn, ftInToCm, kgToLb, lbToKg } from './calc.js'
 
 export const PACES = {
   metric: [0.25, 0.5, 0.75, 1].map((kg) => [kg, `${kg} kg a week`]),
@@ -33,6 +33,7 @@ export function toForm(p = {}) {
     calorie_target_override: p.calorie_target_override ? String(p.calorie_target_override) : '',
     protein_target_override: p.protein_target_override ? String(p.protein_target_override) : '',
     exercise_eatback_pct: String(p.exercise_eatback_pct ?? 0),
+    conditions: Array.isArray(p.conditions) ? p.conditions : [],
   }
 }
 
@@ -55,6 +56,7 @@ export function fromForm(f) {
     calorie_target_override: f.calorie_target_override ? Number(f.calorie_target_override) : null,
     protein_target_override: f.protein_target_override ? Number(f.protein_target_override) : null,
     exercise_eatback_pct: Number(f.exercise_eatback_pct) || 0,
+    conditions: cleanConditions(f.conditions, f.sex),
   }
 }
 
