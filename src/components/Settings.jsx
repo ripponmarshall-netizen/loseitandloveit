@@ -31,6 +31,10 @@ const csvCell = (v) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+// Already running from the home screen: no need to explain how to install.
+const installed =
+  typeof window !== 'undefined' && (window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches)
+
 export default function Settings() {
   const { store, mode, session, profile, saveProfile, series, toast, signOut, today, bumpData, reloadWeights } = useApp()
   const [usage, setUsage] = useState(null)
@@ -116,7 +120,7 @@ export default function Settings() {
         {mode === 'cloud' && <ChangePassword />}
       </section>
 
-      <h3 style={{ margin: '18px 4px 8px' }}>Profile &amp; targets</h3>
+      <h3 className="section-title">Profile &amp; targets</h3>
       <ProfileForm
         key={profile.updated_at || 'p'}
         initial={profile}
@@ -141,7 +145,7 @@ export default function Settings() {
         <h3>Your data</h3>
         <div className="stack">
           <button className="btn soft block" onClick={exportJson}>Export everything (JSON backup)</button>
-          <button className="btn soft block" onClick={exportCsv}>Export food log (CSV for Sheets/Excel)</button>
+          <button className="btn soft block" onClick={exportCsv}>Export food log (CSV)</button>
           <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importJson} />
           <button className="btn ghost block" onClick={() => importRef.current.click()}>Import JSON backup</button>
           {mode === 'local' && (
@@ -150,12 +154,14 @@ export default function Settings() {
         </div>
       </section>
 
-      <section className="card">
-        <h3>Install on iPhone</h3>
-        <p className="small" style={{ margin: 0 }}>
-          In Safari tap <strong>Share</strong> → <strong>Add to Home Screen</strong>. It then opens full-screen like an app and works offline for viewing.
-        </p>
-      </section>
+      {!installed && (
+        <section className="card">
+          <h3>Install on iPhone</h3>
+          <p className="small" style={{ margin: 0 }}>
+            In Safari tap <strong>Share</strong> → <strong>Add to Home Screen</strong>. It then opens full-screen like an app and works offline for viewing.
+          </p>
+        </section>
+      )}
 
       <p className="tiny muted center">
         v{APP_VERSION} · Estimates, not medical advice. Talk to your doctor before big diet changes, especially with diabetes, blood pressure

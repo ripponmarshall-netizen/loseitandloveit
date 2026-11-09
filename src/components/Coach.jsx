@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { streamCoach } from '../lib/ai.js'
 import { buildCoachContext } from '../lib/coachContext.js'
-import { MiniMarkdown, Spinner } from './ui.jsx'
+import { Icon, Loading, MiniMarkdown, Spinner } from './ui.jsx'
 
 const PROMPTS = [
   'Review my last 7 days',
@@ -20,8 +20,11 @@ export default function Coach() {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(null) // text while a reply is arriving
   const [busy, setBusy] = useState(false)
-  const endRef = useRef()
   const abortRef = useRef()
+  const inputRef = useRef()
+  // Follow new text only while the user is at the bottom, so scrolling up
+  // to re-read an earlier answer isn't yanked back down mid-reply.
+  const stickRef = useRef(true)
 
   useEffect(() => {
     store
@@ -35,8 +38,26 @@ export default function Coach() {
   }, [store, toast])
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    const onScroll = () => {
+      const el = document.documentElement
+      stickRef.current = el.scrollHeight - (window.scrollY + window.innerHeight) < 140
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Scroll the page itself to the bottom: the layout already leaves room for
+  // the fixed composer and nav, so the last message sits just above them.
+  useEffect(() => {
+    if (stickRef.current) window.scrollTo(0, document.documentElement.scrollHeight)
   }, [messages, streaming])
+
+  function grow() {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight + 2, 120)}px`
+  }
 
   if (mode !== 'cloud') {
     return (
@@ -54,6 +75,8 @@ export default function Coach() {
     const question = text.trim()
     if (!question || busy) return
     setInput('')
+    requestAnimationFrame(grow)
+    stickRef.current = true
     setBusy(true)
     const prior = (messages || []).slice(-20).map(({ role, content }) => ({ role, content }))
     try {
@@ -100,7 +123,7 @@ export default function Coach() {
   }
 
   return (
-    <div style={{ paddingBottom: 72 }}>
+    <div>
       <div className="row between">
         <h1>Coach</h1>
         {messages?.length > 0 && (
@@ -111,9 +134,7 @@ export default function Coach() {
       </div>
 
       {messages === null ? (
-        <div className="center">
-          <Spinner />
-        </div>
+        <Loading />
       ) : (
         <div className="chat">
           {messages.length === 0 && (
@@ -139,11 +160,14 @@ export default function Coach() {
                   <span className="typing" />
                 </>
               ) : (
-                <span className="muted small">Thinking…</span>
+                <span className="typing-dots" aria-label="Coach is thinking">
+                  <i />
+                  <i />
+                  <i />
+                </span>
               )}
             </div>
           )}
-          <div ref={endRef} />
         </div>
       )}
 
@@ -156,6 +180,7 @@ export default function Coach() {
           ))}
         </div>
       )}
+      <div className="coach-pad" />
 
       <form
         className="composer"
@@ -166,11 +191,16 @@ export default function Coach() {
       >
         <div className="composer-inner">
           <textarea
+            ref={inputRef}
             className="input grow"
             rows={1}
             placeholder="Ask your coach…"
+            aria-label="Message to your coach"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value)
+              grow()
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(pointer: fine)').matches) {
                 e.preventDefault()
@@ -179,7 +209,7 @@ export default function Coach() {
             }}
           />
           <button className="btn" disabled={busy || !input.trim()} aria-label="Send">
-            {busy ? <Spinner /> : '↑'}
+            {busy ? <Spinner /> : <Icon name="send" size={22} stroke={2.4} />}
           </button>
         </div>
       </form>

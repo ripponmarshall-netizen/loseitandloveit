@@ -3,8 +3,8 @@ import { useApp } from '../appContext.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { estimateMeal, photoToBase64 } from '../lib/ai.js'
 import { formatDayLabel } from '../lib/dates.js'
-import { Segmented, Sheet, Spinner, Stepper } from './ui.jsx'
-import { MEALS } from '../lib/meals.js'
+import { Icon, Segmented, Sheet, Spinner, Stepper } from './ui.jsx'
+import { MEALS, MEAL_LABEL } from '../lib/meals.js'
 
 const MEAL_OPTS = MEALS.map((m) => [m, m === 'snack' ? 'Snack' : m[0].toUpperCase() + m.slice(1)])
 
@@ -17,10 +17,11 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, onCl
   return (
     <Sheet title={title} onClose={onClose}>
       <div style={{ marginBottom: 10 }}>
-        <Segmented value={meal} onChange={setMeal} options={MEAL_OPTS} />
+        <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
       </div>
       <div style={{ marginBottom: 12 }}>
         <Segmented
+          label="How to add"
           value={tab}
           onChange={setTab}
           options={[
@@ -122,7 +123,8 @@ function SearchTab({ date, meal, onDone }) {
         placeholder="Search: ackee, patty, rice…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        autoFocus
+        aria-label="Search foods"
+        enterKeyHint="search"
       />
       {sections.map(([label, list]) =>
         list.length ? (
@@ -134,7 +136,7 @@ function SearchTab({ date, meal, onDone }) {
                   <div className="ellipsis">{f.name}</div>
                   <div className="tiny muted ellipsis">{f.serving || '1 serving'}</div>
                 </div>
-                <span className="num small">{Math.round(f.calories)} kcal</span>
+                <span className="num small" style={{ whiteSpace: 'nowrap' }}>{Math.round(f.calories)} kcal</span>
               </button>
             ))}
           </div>
@@ -178,6 +180,7 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
   }
 
   async function remove() {
+    if (!window.confirm(`Remove ${food.name} from My foods? Your past log entries stay.`)) return
     try {
       await store.deleteFood(food.id)
       toast('Removed from My foods')
@@ -189,7 +192,9 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
 
   return (
     <div>
-      <button className="link small" onClick={onBack}>‹ Back to list</button>
+      <button className="link small row" style={{ gap: 2 }} onClick={onBack}>
+        <Icon name="left" size={16} stroke={2.4} /> Back to list
+      </button>
       <h2 style={{ marginTop: 10 }}>{food.name}</h2>
       <p className="small muted">
         Per {food.serving || 'serving'}: {Math.round(food.calories)} kcal · P {food.protein_g} · C {food.carbs_g} · F {food.fat_g}
@@ -198,11 +203,11 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
         <Stepper value={servings} onChange={setServings} />
         <div style={{ textAlign: 'right' }}>
           <div className="small muted">Total</div>
-          <strong className="num" style={{ fontSize: 24 }}>{Math.round(food.calories * n)} kcal</strong>
+          <strong className="num" style={{ fontSize: 24 }}>{Math.round(food.calories * n).toLocaleString('en-GB')} kcal</strong>
         </div>
       </div>
       <button className="btn block" disabled={busy || !n} onClick={submit}>
-        Add to {meal}
+        Add to {MEAL_LABEL[meal]}
       </button>
       {isMine && (
         <button className="btn danger block" style={{ marginTop: 10 }} onClick={remove}>
@@ -309,7 +314,7 @@ function AiTab({ date, meal, onDone }) {
       {photo && (
         <div style={{ position: 'relative' }}>
           <img className="photo-preview" src={photo.preview} alt="Meal" />
-          <button className="btn sm" style={{ position: 'absolute', top: 8, right: 8 }} onClick={() => setPhoto(null)}>
+          <button className="btn sm" style={{ position: 'absolute', top: 8, right: 8, background: 'rgb(0 0 0 / 0.6)', color: '#fff' }} onClick={() => setPhoto(null)}>
             Remove
           </button>
         </div>
@@ -334,7 +339,7 @@ function AiTab({ date, meal, onDone }) {
           {result.items.map((it) => (
             <div key={it.key} className="card flat" style={{ padding: 12, opacity: it.on ? 1 : 0.5 }}>
               <div className="row" style={{ marginBottom: 6 }}>
-                <input type="checkbox" checked={it.on} onChange={(e) => update(it.key, 'on', e.target.checked)} aria-label="Include" style={{ width: 22, height: 22 }} />
+                <input type="checkbox" checked={it.on} onChange={(e) => update(it.key, 'on', e.target.checked)} aria-label={`Include ${it.name}`} style={{ width: 22, height: 22 }} />
                 <input className="input grow" value={it.name} onChange={(e) => update(it.key, 'name', e.target.value)} aria-label="Name" />
               </div>
               <div className="row small muted" style={{ marginBottom: 6 }}>
@@ -351,12 +356,12 @@ function AiTab({ date, meal, onDone }) {
           ))}
           {result.items.length > 0 && (
             <>
-              <label className="row small" style={{ margin: '4px 0 12px' }}>
-                <input type="checkbox" checked={saveToMine} onChange={(e) => setSaveToMine(e.target.checked)} style={{ width: 20, height: 20 }} />
+              <label className="check small" style={{ margin: '0 0 8px' }}>
+                <input type="checkbox" checked={saveToMine} onChange={(e) => setSaveToMine(e.target.checked)} />
                 Also save these to My foods
               </label>
               <button className="btn block" disabled={busy || !chosen.length} onClick={submit}>
-                Add {chosen.length} item{chosen.length === 1 ? '' : 's'} · {chosenKcal} kcal
+                Add {chosen.length} item{chosen.length === 1 ? '' : 's'} · {chosenKcal.toLocaleString('en-GB')} kcal
               </button>
             </>
           )}
@@ -412,12 +417,12 @@ function QuickTab({ date, meal, onDone }) {
         <label className="field"><span>Carbs g</span><input className="input" inputMode="decimal" value={f.carbs_g} onChange={set('carbs_g')} /></label>
         <label className="field"><span>Fat g</span><input className="input" inputMode="decimal" value={f.fat_g} onChange={set('fat_g')} /></label>
       </div>
-      <label className="row small" style={{ marginBottom: 12 }}>
-        <input type="checkbox" checked={saveToMine} onChange={(e) => setSaveToMine(e.target.checked)} style={{ width: 20, height: 20 }} />
+      <label className="check small" style={{ marginBottom: 8 }}>
+        <input type="checkbox" checked={saveToMine} onChange={(e) => setSaveToMine(e.target.checked)} />
         Save to My foods for next time
       </label>
       <button className="btn block" disabled={busy || !f.calories}>
-        Add to {meal}
+        Add to {MEAL_LABEL[meal]}
       </button>
     </form>
   )

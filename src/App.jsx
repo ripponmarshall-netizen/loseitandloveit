@@ -11,7 +11,7 @@ import Progress from './components/Progress.jsx'
 import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
-import { Spinner } from './components/ui.jsx'
+import { Icon, Loading } from './components/ui.jsx'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -87,11 +87,17 @@ export default function App() {
     return null
   }, [localMode, userId])
 
-  const toast = useCallback((msg, kind = 'info') => {
+  // toast('Saved') · toast(err.message, 'error') · toast('Deleted', 'info', { label: 'Undo', run })
+  const toast = useCallback((msg, kind = 'info', action = null) => {
     clearTimeout(toastTimer.current)
-    setToastMsg({ msg, kind })
-    toastTimer.current = setTimeout(() => setToastMsg(null), kind === 'error' ? 5000 : 2500)
+    setToastMsg({ msg, kind, action, id: Date.now() })
+    toastTimer.current = setTimeout(() => setToastMsg(null), action ? 5000 : kind === 'error' ? 5000 : 2500)
   }, [])
+
+  // Each tab starts at the top, like a native tab bar.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [tab])
 
   const reloadWeights = useCallback(async () => {
     if (!store) return
@@ -177,42 +183,43 @@ export default function App() {
     toast,
     dataVersion,
     bumpData: () => setDataVersion((v) => v + 1),
-    openAdd: (opts = {}) => setAddFor({ date, meal: opts.meal || guessMeal(), tab: opts.tab }),
+    // From Today, add to the day being viewed; from any other tab, add to today.
+    openAdd: (opts = {}) => setAddFor({ date: tab === 'today' ? date : today, meal: opts.meal || guessMeal(), tab: opts.tab }),
     signOut,
     setTab,
   }
 
   let body
   if (!authReady && !localMode) {
-    body = (
-      <div className="center" style={{ marginTop: '30vh' }}>
-        <Spinner />
-      </div>
-    )
+    body = <Loading page />
   } else if (!store) {
     body = <Auth onUseLocal={enterLocalMode} />
   } else if (profile === undefined) {
+    body = <Loading page />
+  } else if (profile === null) {
     body = (
-      <div className="center" style={{ marginTop: '30vh' }}>
-        <Spinner />
+      <div className="screen">
+        <Onboarding />
       </div>
     )
-  } else if (profile === null) {
-    body = <Onboarding />
   } else {
     body = (
       <>
-        {tab === 'today' && <Today />}
-        {tab === 'progress' && <Progress />}
-        {tab === 'coach' && <Coach />}
-        {tab === 'settings' && <Settings />}
+        <div className="screen" key={tab}>
+          {tab === 'today' && <Today />}
+          {tab === 'progress' && <Progress />}
+          {tab === 'coach' && <Coach />}
+          {tab === 'settings' && <Settings />}
+        </div>
         <nav className="nav" aria-label="Main">
           <div className="nav-inner">
-            <NavBtn id="today" icon="🍽️" label="Today" tab={tab} setTab={setTab} />
-            <NavBtn id="progress" icon="📉" label="Progress" tab={tab} setTab={setTab} />
-            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>＋</button>
-            <NavBtn id="coach" icon="💬" label="Coach" tab={tab} setTab={setTab} />
-            <NavBtn id="settings" icon="⚙️" label="Settings" tab={tab} setTab={setTab} />
+            <NavBtn id="today" icon="today" label="Today" tab={tab} setTab={setTab} />
+            <NavBtn id="progress" icon="progress" label="Progress" tab={tab} setTab={setTab} />
+            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>
+              <Icon name="plus" size={28} stroke={2.6} />
+            </button>
+            <NavBtn id="coach" icon="coach" label="Coach" tab={tab} setTab={setTab} />
+            <NavBtn id="settings" icon="settings" label="Settings" tab={tab} setTab={setTab} />
           </div>
         </nav>
         {addFor && <AddFood {...addFor} onClose={() => setAddFor(null)} />}
@@ -223,11 +230,25 @@ export default function App() {
   return (
     <AppCtx.Provider value={ctx}>
       <main className="app">{body}</main>
-      {toastMsg && (
-        <div className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
-          {toastMsg.msg}
-        </div>
-      )}
+      {/* Always mounted so screen readers announce each new message. */}
+      <div className={`toast-region${tab === 'coach' && profile ? ' raised' : ''}`} role="status" aria-live="polite">
+        {toastMsg && (
+          <div key={toastMsg.id} className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`}>
+            <span>{toastMsg.msg}</span>
+            {toastMsg.action && (
+              <button
+                type="button"
+                onClick={() => {
+                  setToastMsg(null)
+                  toastMsg.action.run()
+                }}
+              >
+                {toastMsg.action.label}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </AppCtx.Provider>
   )
 }
@@ -235,7 +256,7 @@ export default function App() {
 function NavBtn({ id, icon, label, tab, setTab }) {
   return (
     <button className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      <span className="ico" aria-hidden="true">{icon}</span>
+      <Icon name={icon} size={24} stroke={tab === id ? 2.3 : 1.9} />
       {label}
     </button>
   )

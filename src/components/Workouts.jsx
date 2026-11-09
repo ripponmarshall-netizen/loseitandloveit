@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { HOME_ACTIVITIES, estimateWorkoutKcal, kmhToMph, mphToKmh } from '../lib/calc.js'
 import { formatDayLabel } from '../lib/dates.js'
 import { HOME_PRESETS, TREADMILL_PRESETS } from '../data/workouts.js'
-import { Segmented, Sheet } from './ui.jsx'
+import { Icon, Segmented, Sheet } from './ui.jsx'
 
 const r1 = (n) => Math.round(n * 10) / 10
 const INTENSITY = [
@@ -31,7 +31,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
       <div className="meal-head">
         <h2>Exercise</h2>
         <div className="row">
-          {burned > 0 && <span className="small muted num">−{burned} kcal</span>}
+          {burned > 0 && <span className="small muted num">−{burned.toLocaleString('en-GB')} kcal</span>}
           <button className="btn soft sm" onClick={onAdd} aria-label="Add workout">+ Add</button>
         </div>
       </div>
@@ -46,9 +46,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
           <span className="kcal num">{w.calories_burned}</span>
         </button>
       ))}
-      {!error && workouts.length === 0 && (
-        <p className="small muted" style={{ margin: 0 }}>Treadmill or home workout? Log it here.</p>
-      )}
+      {!error && workouts.length === 0 && <p className="empty-hint">Treadmill or home workout? Log it here.</p>}
       {burned > 0 && (
         <p className="tiny muted" style={{ margin: '6px 0 0' }}>
           {allowance > 0
@@ -171,12 +169,12 @@ export function WorkoutSheet({ date, workout, onClose }) {
   const setExercise = (i, k, v) =>
     setF((s) => ({ ...s, exercises: s.exercises.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }))
 
-  async function run(fn, msg) {
+  async function run(fn, msg, action) {
     setBusy(true)
     try {
       await fn()
       bumpData()
-      toast(msg)
+      toast(msg, 'info', action)
       onClose()
     } catch (e) {
       toast(e.message, 'error')
@@ -185,7 +183,19 @@ export function WorkoutSheet({ date, workout, onClose }) {
   }
 
   const { estimate, ...toSave } = record
-  const valid = minutes > 0 && (f.kind === 'home' || speedKmh > 0)
+  const needsSpeed = f.kind === 'treadmill' && !(speedKmh > 0)
+  const valid = minutes > 0 && !needsSpeed
+  const undoDelete = workout && {
+    label: 'Undo',
+    run: async () => {
+      try {
+        await store.addWorkout(workout)
+        bumpData()
+      } catch (e) {
+        toast(e.message, 'error')
+      }
+    },
+  }
 
   return (
     <Sheet title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
@@ -194,6 +204,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
           <Segmented
             value={f.kind}
             onChange={(k) => setF((s) => ({ ...emptyForm(k), notes: s.notes }))}
+            label="Workout type"
             options={[
               ['treadmill', '🏃 Treadmill'],
               ['home', '🏠 Home workout'],
@@ -280,8 +291,8 @@ export function WorkoutSheet({ date, workout, onClose }) {
               <input className="input grow" placeholder="Exercise" value={x.name} onChange={(e) => setExercise(i, 'name', e.target.value)} aria-label="Exercise name" />
               <input className="input" style={{ width: 56 }} inputMode="numeric" placeholder="sets" value={x.sets} onChange={(e) => setExercise(i, 'sets', e.target.value)} aria-label="Sets" />
               <input className="input" style={{ width: 84 }} placeholder="reps" value={x.reps} onChange={(e) => setExercise(i, 'reps', e.target.value)} aria-label="Reps" />
-              <button type="button" className="icon-btn" aria-label="Remove exercise" onClick={() => setF((s) => ({ ...s, exercises: s.exercises.filter((_, j) => j !== i) }))}>
-                ✕
+              <button type="button" className="icon-btn sm" aria-label="Remove exercise" onClick={() => setF((s) => ({ ...s, exercises: s.exercises.filter((_, j) => j !== i) }))}>
+                <Icon name="close" size={18} />
               </button>
             </div>
           ))}
@@ -294,7 +305,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
       <div className="card flat" style={{ background: 'var(--brand-soft)', padding: 12 }}>
         <div className="row between">
           <span className="small">Estimated burn</span>
-          <strong className="num">{estimate} kcal</strong>
+          {needsSpeed ? <span className="small muted">Enter a speed</span> : <strong className="num">{estimate} kcal</strong>}
         </div>
         <label className="field" style={{ margin: '8px 0 0' }}>
           <span>Use your own number instead (optional)</span>
@@ -319,7 +330,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
           {workout ? 'Save' : 'Log workout'}
         </button>
         {workout && (
-          <button className="btn danger block" disabled={busy} onClick={() => run(() => store.deleteWorkout(workout.id), 'Workout deleted')}>
+          <button className="btn danger block" disabled={busy} onClick={() => run(() => store.deleteWorkout(workout.id), 'Workout deleted', undoDelete)}>
             Delete
           </button>
         )}

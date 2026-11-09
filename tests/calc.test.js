@@ -10,6 +10,8 @@ import {
   weeklyRate,
   adaptiveTdee,
   projectGoalDate,
+  adaptiveTarget,
+  validateProfile,
   cmToFtIn,
   ftInToCm,
   kgToLb,
@@ -62,6 +64,35 @@ test('targets: manual override wins', () => {
   const t = computeTargets({ ...baseProfile, calorie_target_override: 2100 }, 100)
   assert.equal(t.calories, 2100)
   assert.equal(t.overridden, true)
+})
+
+test('adaptive target uses the pace, so adopting it twice does not compound', () => {
+  const t = computeTargets(baseProfile, 100)
+  const first = adaptiveTarget(2600, t)
+  assert.equal(first, Math.round((2600 - t.plannedDeficit) / 10) * 10)
+  // After adopting it as an override, the suggestion must not move.
+  const t2 = computeTargets({ ...baseProfile, calorie_target_override: first }, 100)
+  assert.equal(t2.plannedDeficit, t.plannedDeficit)
+  assert.equal(adaptiveTarget(2600, t2), first)
+})
+
+test('adaptive target never goes below the safety floor', () => {
+  const t = computeTargets(baseProfile, 100)
+  assert.equal(adaptiveTarget(1600, t), 1500)
+  assert.equal(adaptiveTarget(null, t), null)
+})
+
+test('profile validation catches unit mix-ups and missing fields', () => {
+  const ok = { height_cm: 178, birth_year: 1990, start_weight_kg: 100, goal_weight_kg: 85 }
+  const now = new Date(2026, 10, 9)
+  assert.equal(validateProfile(ok, now), null)
+  assert.match(validateProfile({ ...ok, height_cm: null }, now), /Fill in/)
+  assert.match(validateProfile({ ...ok, birth_year: 2015 }, now), /adults/)
+  assert.match(validateProfile({ ...ok, birth_year: 90 }, now), /four-digit/)
+  assert.match(validateProfile({ ...ok, height_cm: 70 }, now), /Height/)
+  assert.match(validateProfile({ ...ok, start_weight_kg: 500 }, now), /Current weight/)
+  assert.match(validateProfile({ ...ok, calorie_target_override: 500 }, now), /800/)
+  assert.equal(validateProfile({ ...ok, calorie_target_override: 1800, protein_target_override: 150 }, now), null)
 })
 
 test('entry totals multiply by servings', () => {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ACTIVITY, cmToFtIn, computeTargets, ftInToCm, kgToLb, lbToKg } from '../lib/calc.js'
+import { ACTIVITY, cmToFtIn, computeTargets, ftInToCm, kgToLb, lbToKg, validateProfile } from '../lib/calc.js'
 import { Segmented } from './ui.jsx'
 
 const PACES = {
@@ -77,18 +77,14 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
     [JSON.stringify(values), currentWeightKg],
   )
   const wUnit = f.units === 'imperial' ? 'lb' : 'kg'
-  const thisYear = new Date().getFullYear()
 
   async function submit(e) {
     e.preventDefault()
     setErr(null)
     const v = fromForm(f)
-    if (!v.height_cm || !v.birth_year || !v.start_weight_kg || !v.goal_weight_kg) {
-      setErr('Fill in height, birth year, current weight and goal weight.')
-      return
-    }
-    if (v.birth_year > thisYear - 18) {
-      setErr('This app is for adults (18+). Please talk to a doctor about weight goals for teens.')
+    const problem = validateProfile(v)
+    if (problem) {
+      setErr(problem)
       return
     }
     setBusy(true)
@@ -110,11 +106,11 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         </label>
         <label className="field">
           <span>Units</span>
-          <Segmented value={f.units} onChange={switchUnits} options={[['imperial', 'lb · ft/in'], ['metric', 'kg · cm']]} />
+          <Segmented label="Units" value={f.units} onChange={switchUnits} options={[['imperial', 'lb · ft/in'], ['metric', 'kg · cm']]} />
         </label>
         <div className="grid2">
           <label className="field">
-            <span>Sex (for the BMR formula)</span>
+            <span>Sex</span>
             <select className="input" value={f.sex} onChange={set('sex')}>
               <option value="male">Male</option>
               <option value="female">Female</option>
@@ -122,7 +118,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           </label>
           <label className="field">
             <span>Birth year</span>
-            <input className="input" inputMode="numeric" placeholder="1990" value={f.birth_year} onChange={set('birth_year')} />
+            <input className="input" inputMode="numeric" maxLength={4} placeholder="1990" value={f.birth_year} onChange={set('birth_year')} />
           </label>
         </div>
         {f.units === 'imperial' ? (
@@ -132,7 +128,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
               <input className="input" inputMode="numeric" value={f.ft} onChange={set('ft')} />
             </label>
             <label className="field">
-              <span>(in)</span>
+              <span>Height (in)</span>
               <input className="input" inputMode="numeric" value={f.inch} onChange={set('inch')} />
             </label>
           </div>
@@ -144,7 +140,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         )}
         <div className="grid2">
           <label className="field">
-            <span>{currentWeightKg ? 'Starting weight' : 'Current weight'} ({wUnit})</span>
+            <span>{currentWeightKg ? 'Start weight' : 'Current weight'} ({wUnit})</span>
             <input className="input" inputMode="decimal" value={f.start_weight} onChange={set('start_weight')} />
           </label>
           <label className="field">
@@ -160,10 +156,11 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           <select className="input" value={f.activity_level} onChange={set('activity_level')}>
             {Object.entries(ACTIVITY).map(([k, a]) => (
               <option key={k} value={k}>
-                {a.label}: {a.desc}
+                {a.label}
               </option>
             ))}
           </select>
+          <small className="muted tiny">{ACTIVITY[f.activity_level]?.desc}. If unsure, pick the lower one: Progress corrects it later.</small>
         </label>
         <label className="field">
           <span>Pace</span>
@@ -178,7 +175,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         <label className="field">
           <span>Eat back exercise calories</span>
           <select className="input" value={f.exercise_eatback_pct} onChange={set('exercise_eatback_pct')}>
-            <option value="0">No: my activity level already includes training</option>
+            <option value="0">None (activity level covers it)</option>
             <option value="25">25% of what I burn</option>
             <option value="50">50% of what I burn</option>
             <option value="100">100% of what I burn</option>
@@ -211,11 +208,11 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         {advanced && (
           <div className="grid2">
             <label className="field">
-              <span>Calorie target override</span>
+              <span>Calorie override</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.calorie_target_override} onChange={set('calorie_target_override')} />
             </label>
             <label className="field">
-              <span>Protein target override (g)</span>
+              <span>Protein override (g)</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.protein_target_override} onChange={set('protein_target_override')} />
             </label>
           </div>
@@ -226,13 +223,13 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         <div className="card flat" style={{ background: 'var(--brand-soft)' }}>
           <div className="row between">
             <strong>Daily target</strong>
-            <strong className="num">{preview.calories} kcal</strong>
+            <strong className="num">{preview.calories.toLocaleString('en-GB')} kcal</strong>
           </div>
           <p className="small muted" style={{ marginTop: 4 }}>
-            Maintenance ≈ {preview.tdee} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
+            Maintenance ≈ {preview.tdee.toLocaleString('en-GB')} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
           </p>
           {preview.warnings.map((w) => (
-            <p key={w} className="small" style={{ color: '#b45309' }}>
+            <p key={w} className="small warn-text">
               {w}
             </p>
           ))}

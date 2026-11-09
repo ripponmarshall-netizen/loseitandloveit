@@ -101,9 +101,47 @@ export function computeTargets(profile, currentWeightKg) {
     fat,
     plannedWeeklyLossKg: Number(rate.toFixed(2)),
     deficit: Math.round(tdee - calories),
+    // Deficit implied by the chosen pace alone, ignoring overrides and the floor.
+    plannedDeficit: Math.round(deficit),
+    floor,
     overridden,
     warnings,
   }
+}
+
+/**
+ * Calorie target based on measured (adaptive) maintenance: measured TDEE
+ * minus the deficit for the chosen pace, never below the safety floor.
+ * Uses the pace, not the current target, so adopting it twice gives the
+ * same number instead of compounding the deficit.
+ */
+export function adaptiveTarget(adaptiveTdeeKcal, targets) {
+  if (!adaptiveTdeeKcal || !targets) return null
+  const raw = adaptiveTdeeKcal - Math.max(0, targets.plannedDeficit || 0)
+  return Math.round(Math.max(targets.floor || 0, raw) / 10) * 10
+}
+
+/**
+ * Check profile values (kg/cm) before saving. Returns an error message or null.
+ * Ranges match the database check constraints.
+ */
+export function validateProfile(v, now = new Date()) {
+  const year = now.getFullYear()
+  if (!v.height_cm || !v.birth_year || !v.start_weight_kg || !v.goal_weight_kg) {
+    return 'Fill in height, birth year, current weight and goal weight.'
+  }
+  if (v.birth_year < 1900 || v.birth_year > year) return 'Enter a four-digit birth year, e.g. 1990.'
+  if (v.birth_year > year - 18) return 'This app is for adults (18+). Please talk to a doctor about weight goals for teens.'
+  if (v.height_cm < 100 || v.height_cm > 250) return 'Height looks off. Check the number and the units.'
+  if (v.start_weight_kg < 30 || v.start_weight_kg > 350) return 'Current weight looks off. Check the number and the units.'
+  if (v.goal_weight_kg < 30 || v.goal_weight_kg > 350) return 'Goal weight looks off. Check the number and the units.'
+  if (v.calorie_target_override != null && (v.calorie_target_override < 800 || v.calorie_target_override > 6000)) {
+    return 'Calorie override must be between 800 and 6000, or blank for auto.'
+  }
+  if (v.protein_target_override != null && (v.protein_target_override < 20 || v.protein_target_override > 400)) {
+    return 'Protein override must be between 20 and 400 g, or blank for auto.'
+  }
+  return null
 }
 
 // ---------- Food entries ----------

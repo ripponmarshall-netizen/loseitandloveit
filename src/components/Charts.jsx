@@ -58,7 +58,7 @@ export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
         {pts.map((p) => (
           <circle key={p.date} cx={x(p.date)} cy={y(conv(p.weight))} r="2.6" fill="var(--muted)" fillOpacity="0.7" />
         ))}
-        <path d={trendPath} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path key={`${fromDate}-${pts.length}`} className="draw" pathLength="1" d={trendPath} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
         <text x={PAD.l} y={H - 6}>{formatShortDate(pts[0].date)}</text>
         <text x={W - PAD.r} y={H - 6} textAnchor="end">{formatShortDate(pts[pts.length - 1].date)}</text>
       </svg>
@@ -69,7 +69,7 @@ export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
   )
 }
 
-export function CalorieBars({ dates, daily, target }) {
+export function CalorieBars({ dates, daily, target, today }) {
   const vals = dates.map((d) => daily[d]?.calories || 0)
   const max = Math.max(target * 1.3, ...vals, 1)
   const H2 = 140
@@ -84,13 +84,18 @@ export function CalorieBars({ dates, daily, target }) {
           return (
             <g key={d}>
               <rect
+                className={v ? 'grow-up' : undefined}
+                style={v ? { animationDelay: `${i * 25}ms` } : undefined}
                 x={PAD.l + i * bw + bw * 0.15}
                 y={v ? y(v) : y(0) - 2}
                 width={bw * 0.7}
                 height={v ? y(0) - y(v) : 2}
                 rx="3"
                 fill={!v ? 'var(--line)' : over ? 'var(--accent)' : 'var(--brand)'}
-              />
+                fillOpacity={d === today ? 0.45 : 1}
+              >
+                <title>{`${formatShortDate(d)}: ${v ? `${v.toLocaleString('en-GB')} kcal` : 'nothing logged'}`}</title>
+              </rect>
               {(i === 0 || i === dates.length - 1 || i % 7 === 6) && (
                 <text x={PAD.l + i * bw + bw / 2} y={H2 - 6} textAnchor="middle">{formatShortDate(d).split(' ')[0]}</text>
               )}

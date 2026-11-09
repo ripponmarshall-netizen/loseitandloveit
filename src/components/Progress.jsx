@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
+import { adaptiveTarget, adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
-import { Segmented } from './ui.jsx'
+import { Icon, Segmented } from './ui.jsx'
+
+const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-GB')
 
 export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
@@ -38,13 +40,17 @@ export default function Progress() {
     const v = weightValue(kg, units)
     return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} ${weightUnit(units)}`
   }
+  const toGo = last && goalKg ? Math.max(0, last.trend - goalKg) : null
+  const suggested = adaptive ? adaptiveTarget(adaptive.tdee, targets) : null
 
   async function adoptAdaptive() {
-    const plannedDeficit = targets.tdee - targets.calories
-    const newTarget = Math.round((adaptive.tdee - Math.max(0, plannedDeficit)) / 10) * 10
+    const before = profile.calorie_target_override ?? null
     try {
-      await saveProfile({ ...profile, calorie_target_override: newTarget })
-      toast(`Target set to ${newTarget} kcal`)
+      await saveProfile({ ...profile, calorie_target_override: suggested })
+      toast(`Target set to ${fmt(suggested)} kcal`, 'info', {
+        label: 'Undo',
+        run: () => saveProfile({ ...profile, calorie_target_override: before }).catch((e) => toast(e.message, 'error')),
+      })
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -57,17 +63,17 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 12 }}>
         <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
         <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
+        <Stat label="To go" value={toGo == null ? '—' : toGo === 0 ? 'Done 🎉' : displayWeight(toGo, units)} />
         <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
         <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
-        <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
+        <Stat label="7-day avg" value={avgWeek ? fmt(avgWeek) : '—'} sub={avgWeek ? `of ${fmt(targets.calories)} kcal` : 'no full days'} />
       </div>
 
       <section className="card">
         <div className="row between" style={{ marginBottom: 8 }}>
           <h2 style={{ margin: 0 }}>Weight</h2>
           <div style={{ width: 170 }}>
-            <Segmented value={range} onChange={setRange} options={[['30', '30d'], ['90', '90d'], ['all', 'All']]} />
+            <Segmented label="Chart range" value={range} onChange={setRange} options={[['30', '30d'], ['90', '90d'], ['all', 'All']]} />
           </div>
         </div>
         <WeightChart series={series} goalKg={goalKg} units={units} fromDate={fromDate} toDate={today} />
@@ -77,8 +83,8 @@ export default function Progress() {
 
       <section className="card">
         <h2>Calories, last 14 days</h2>
-        <CalorieBars dates={lastNDates(today, 14)} daily={daily} target={targets.calories} />
-        <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target.</p>
+        <CalorieBars dates={lastNDates(today, 14)} daily={daily} target={targets.calories} today={today} />
+        <p className="tiny muted" style={{ margin: 0 }}>Grey = nothing logged. Orange = over target. Today is faded until the day is done.</p>
       </section>
 
       <ExerciseSummary workouts={workouts} today={today} units={units} />
@@ -88,17 +94,20 @@ export default function Progress() {
         {adaptive ? (
           <>
             <p>
-              About <strong className="num">{adaptive.tdee} kcal/day</strong>{' '}
+              About <strong className="num">{fmt(adaptive.tdee)} kcal/day</strong>{' '}
               <span className="tag">{adaptive.confidence} confidence</span>
             </p>
             <p className="small muted">
-              You averaged {adaptive.avgIntake} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
-              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets.tdee} kcal.
+              You averaged {fmt(adaptive.avgIntake)} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
+              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {fmt(targets.tdee)} kcal.
             </p>
-            {Math.abs(adaptive.tdee - targets.tdee) >= 150 && (
+            {Math.abs(adaptive.tdee - targets.tdee) >= 150 && suggested !== targets.calories && (
               <button className="btn soft sm" onClick={adoptAdaptive}>
-                Base my target on this ({Math.round((adaptive.tdee - Math.max(0, targets.tdee - targets.calories)) / 10) * 10} kcal)
+                Base my target on this ({fmt(suggested)} kcal)
               </button>
+            )}
+            {suggested === targets.calories && (
+              <p className="small" style={{ color: 'var(--ok)' }}>✓ Your target already uses this.</p>
             )}
             <p className="tiny muted" style={{ marginTop: 8, marginBottom: 0 }}>
               Only as accurate as your logging. Days with under 500 kcal logged are ignored as incomplete.
@@ -130,8 +139,8 @@ function ExerciseSummary({ workouts, today, units }) {
       <div className="stats" style={{ marginBottom: 8 }}>
         <Stat label="Sessions" value={week.sessions} />
         <Stat label="Minutes" value={week.minutes} />
-        <Stat label="Burned" value={week.kcal} sub="net kcal" />
-        <Stat label="Strength" value={`${week.strength}/2+`} sub="sessions" />
+        <Stat label="Burned" value={fmt(week.kcal)} sub="net kcal" />
+        <Stat label="Strength" value={week.strength} sub="aim for 2+" />
         <Stat label="Treadmill" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
         <Stat label="28 days" value={month.sessions} sub={`${month.minutes} min`} />
       </div>
@@ -177,8 +186,8 @@ function LogWeight() {
     <form className="card" onSubmit={save}>
       <h2>Log weight</h2>
       <div className="row">
-        <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: 1.3 }} aria-label="Date" />
-        <input className="input" inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} style={{ flex: 1 }} aria-label="Weight" />
+        <input className="input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value || today)} style={{ flex: 1.4 }} aria-label="Date" />
+        <input className="input" inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label={`Weight in ${weightUnit(units)}`} />
         <button className="btn" disabled={busy || !val}>Save</button>
       </div>
     </form>
@@ -190,10 +199,21 @@ function WeightList({ weights }) {
   const [showAll, setShowAll] = useState(false)
   const list = [...weights].reverse()
   const shown = showAll ? list : list.slice(0, 7)
-  async function remove(id) {
+  async function remove(w) {
     try {
-      await store.deleteWeight(id)
+      await store.deleteWeight(w.id)
       await reloadWeights()
+      toast(`Deleted ${formatShortDate(w.log_date)} weigh-in`, 'info', {
+        label: 'Undo',
+        run: async () => {
+          try {
+            await store.upsertWeight({ log_date: w.log_date, weight_kg: Number(w.weight_kg), note: w.note ?? null })
+            await reloadWeights()
+          } catch (e) {
+            toast(e.message, 'error')
+          }
+        },
+      })
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -202,12 +222,12 @@ function WeightList({ weights }) {
   return (
     <div>
       {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+        <div key={w.id} className="weigh-row">
           <span>{formatShortDate(w.log_date)}</span>
           <span className="row">
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, fontSize: 16 }} onClick={() => remove(w.id)}>
-              🗑
+            <button className="icon-btn sm" aria-label={`Delete ${formatShortDate(w.log_date)} weigh-in`} onClick={() => remove(w)}>
+              <Icon name="trash" size={18} stroke={1.8} />
             </button>
           </span>
         </div>
