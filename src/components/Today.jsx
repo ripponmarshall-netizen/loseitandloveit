@@ -61,9 +61,19 @@ export default function Today() {
     try {
       const prev = await store.listEntries(addDays(date, -1), addDays(date, -1))
       if (!prev.length) return toast('Nothing logged the day before.')
-      await store.addEntries(prev.map((e) => ({ ...e, log_date: date })))
+      const added = await store.addEntries(prev.map((e) => ({ ...e, log_date: date })))
       bumpData()
-      toast(`Copied ${prev.length} item${prev.length > 1 ? 's' : ''}`)
+      toast(`Copied ${prev.length} item${prev.length > 1 ? 's' : ''}`, 'info', {
+        label: 'Undo',
+        run: async () => {
+          try {
+            for (const e of added || []) await store.deleteEntry(e.id)
+            bumpData()
+          } catch (err) {
+            toast(err.message, 'error')
+          }
+        },
+      })
     } catch (e) {
       toast(e.message, 'error')
     } finally {
@@ -125,6 +135,34 @@ export default function Today() {
       onClick={() => openSheet('mood', { date, daily })}
     />,
   ].filter(Boolean)
+
+  const exercise = {
+    onClick: () => (workouts.length ? setShowExercise(true) : openSheet('workout', { date })),
+    value: workouts.length ? `${fmt(burned)} kcal` : 'Not yet',
+    sub: day?.workoutError
+      ? day.workoutError
+      : workouts.length
+        ? `${workouts.length} session${workouts.length > 1 ? 's' : ''}${allowance > 0 ? ` · +${fmt(allowance)} to target` : ''}`
+        : 'Treadmill or home workout',
+  }
+  // With an odd number of small cards the last row would be half empty, so
+  // Exercise joins the grid as a small card; otherwise it sits full width below.
+  const exerciseInGrid = small.length % 2 === 1
+  if (exerciseInGrid) {
+    small.push(
+      <Tile
+        key="exercise"
+        icon="run"
+        color="var(--red)"
+        label="Exercise"
+        value={exercise.value}
+        sub={!day?.workoutError && allowance > 0 ? `+${fmt(allowance)} to target` : exercise.sub}
+        onClick={exercise.onClick}
+        onPlus={() => openSheet('workout', { date })}
+        plusLabel="Add workout"
+      />,
+    )
+  }
 
   return (
     <div className="dashboard">
@@ -188,23 +226,21 @@ export default function Today() {
         ))}
       </div>
 
-      <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 2 }}>
-        <button className="tile-main row-tile" onClick={() => (workouts.length ? setShowExercise(true) : openSheet('workout', { date }))} aria-label={workouts.length ? `Exercise: ${burned} kcal burned` : 'Log exercise'}>
-          <span className="tile-icon" aria-hidden="true"><Icon name="run" strokeWidth={2.2} /></span>
-          <span className="grow">
-            <span className="tile-label">Exercise</span>
-            <span className="tile-value">
-              {workouts.length ? `${fmt(burned)} kcal` : 'Not yet'}
+      {!exerciseInGrid && (
+        <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 2 }}>
+          <button className="tile-main row-tile" onClick={exercise.onClick} aria-label={workouts.length ? `Exercise: ${burned} kcal burned` : 'Log exercise'}>
+            <span className="tile-icon" aria-hidden="true"><Icon name="run" strokeWidth={2.2} /></span>
+            <span className="grow">
+              <span className="tile-label">Exercise</span>
+              <span className="tile-value">{exercise.value}</span>
+              <span className="tile-sub ellipsis">{exercise.sub}</span>
             </span>
-            <span className="tile-sub ellipsis">
-              {day?.workoutError ? day.workoutError : workouts.length ? `${workouts.length} session${workouts.length > 1 ? 's' : ''}${allowance > 0 ? ` · +${fmt(allowance)} to target` : ''}` : 'Treadmill or home workout'}
-            </span>
-          </span>
-        </button>
-        <button className="tile-plus" aria-label="Add workout" onClick={() => openSheet('workout', { date })}>
-          <Icon name="plus" strokeWidth={3} />
-        </button>
-      </div>
+          </button>
+          <button className="tile-plus" aria-label="Add workout" onClick={() => openSheet('workout', { date })}>
+            <Icon name="plus" strokeWidth={3} />
+          </button>
+        </div>
+      )}
 
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
@@ -354,17 +390,30 @@ function EditEntry({ entry, onClose }) {
   const set = (k) => (ev) => setE((s) => ({ ...s, [k]: ev.target.value }))
   const totals = entryTotals(e)
 
-  async function run(fn, msg) {
+  async function run(fn, msg, action) {
     setBusy(true)
     try {
       await fn()
       bumpData()
-      toast(msg)
+      toast(msg, 'info', action)
       onClose()
     } catch (err) {
       toast(err.message, 'error')
       setBusy(false)
     }
+  }
+
+  // Deleting is one tap, so it can be undone: re-add the same entry.
+  const undoDelete = {
+    label: 'Undo',
+    run: async () => {
+      try {
+        await store.addEntries([entry])
+        bumpData()
+      } catch (err) {
+        toast(err.message, 'error')
+      }
+    },
   }
 
   const patch = () => ({
@@ -419,7 +468,7 @@ function EditEntry({ entry, onClose }) {
         <button className="btn secondary block" disabled={busy} onClick={() => run(() => store.saveFood({ ...patch(), serving: entry.serving }), 'Saved to My foods')}>
           Save to My foods
         </button>
-        <button className="btn destructive block" disabled={busy} onClick={() => run(() => store.deleteEntry(entry.id), 'Deleted')}>Delete</button>
+        <button className="btn destructive block" disabled={busy} onClick={() => run(() => store.deleteEntry(entry.id), `Deleted ${entry.name}`, undoDelete)}>Delete</button>
       </div>
     </Sheet>
   )

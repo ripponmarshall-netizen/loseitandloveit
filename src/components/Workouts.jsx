@@ -181,12 +181,12 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
   const setExercise = (i, k, v) =>
     setF((s) => ({ ...s, exercises: s.exercises.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }))
 
-  async function run(fn, msg) {
+  async function run(fn, msg, action) {
     setBusy(true)
     try {
       await fn()
       bumpData()
-      toast(msg)
+      toast(msg, 'info', action)
       onClose()
     } catch (e) {
       toast(e.message, 'error')
@@ -204,7 +204,19 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
           : f.kind === 'treadmill' && record.distance_km > 100 ? 'Distance looks too long (max 100 km).'
             : f.manualKcal !== '' && (Number.isNaN(Number(f.manualKcal)) || Number(f.manualKcal) < 0 || Number(f.manualKcal) > 5000) ? 'Your own number should be 0–5000 kcal.'
               : null
-  const valid = !problem && minutes > 0 && (f.kind === 'home' || speedKmh > 0)
+  const needsSpeed = f.kind === 'treadmill' && !(speedKmh > 0)
+  const valid = !problem && minutes > 0 && !needsSpeed
+  const undoDelete = workout && {
+    label: 'Undo',
+    run: async () => {
+      try {
+        await store.addWorkout(workout)
+        bumpData()
+      } catch (e) {
+        toast(e.message, 'error')
+      }
+    },
+  }
 
   return (
     <Sheet title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
@@ -313,7 +325,11 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
       <div className="card tinted" style={{ '--c': 'var(--red)', padding: 14 }}>
         <div className="row between">
           <span className="small">Estimated burn</span>
-          <strong className="num" style={{ color: 'var(--red)' }}>{estimate} kcal</strong>
+          {needsSpeed ? (
+            <span className="small muted">Enter a speed</span>
+          ) : (
+            <strong className="num" style={{ color: 'var(--red)' }}>{estimate} kcal</strong>
+          )}
         </div>
         <label className="field" style={{ margin: '8px 0 0' }}>
           <span>Use your own number instead (optional)</span>
@@ -341,7 +357,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
           {workout ? 'Save' : 'Log workout'}
         </button>
         {workout && (
-          <button className="btn destructive block" disabled={busy} onClick={() => run(() => store.deleteWorkout(workout.id), 'Workout deleted')}>
+          <button className="btn destructive block" disabled={busy} onClick={() => run(() => store.deleteWorkout(workout.id), 'Workout deleted', undoDelete)}>
             Delete
           </button>
         )}

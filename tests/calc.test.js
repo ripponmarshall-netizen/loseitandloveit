@@ -15,7 +15,7 @@ import {
   ftInToCm,
   kgToLb,
 } from '../src/lib/calc.js'
-import { logicalToday, addDays, daysBetween, lastNDates } from '../src/lib/dates.js'
+import { logicalToday, addDays, daysBetween, lastNDates, formatEta, formatTimeUntil } from '../src/lib/dates.js'
 
 const year = new Date().getFullYear()
 const baseProfile = {
@@ -307,4 +307,15 @@ test('bucketAverages with agg "last" keeps the latest value in each bucket', asy
   const [wk] = bucketAverages(pts, 'week', '2026-11-08', 1, 'last')
   assert.equal(wk.value, 5)
   assert.equal(bucketAverages(pts, 'week', '2026-11-08', 1)[0].value, 10 / 3)
+})
+
+test('goal ETA fits a small tile and says how far away it is', () => {
+  assert.equal(formatEta('2026-12-20', '2026-11-09'), '20 Dec')
+  assert.equal(formatEta('2027-05-20', '2026-11-09'), 'May ’27')
+  assert.equal(formatTimeUntil('2026-11-12', '2026-11-09'), 'in 3 days')
+  assert.equal(formatTimeUntil('2026-11-10', '2026-11-09'), 'in 1 day')
+  assert.equal(formatTimeUntil('2026-12-20', '2026-11-09'), 'in 6 weeks')
+  assert.equal(formatTimeUntil('2027-09-01', '2026-11-09'), 'in 10 months')
+  assert.equal(formatTimeUntil('2029-11-09', '2026-11-09'), 'in 3 years')
+  assert.equal(formatTimeUntil('2026-11-09', '2026-11-09'), 'now')
 })

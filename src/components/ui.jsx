@@ -399,20 +399,22 @@ export function MacroBar({ label, value, target, color }) {
   )
 }
 
-// Tiny, safe renderer for coach replies: paragraphs, "- " bullets, **bold**.
-// Builds React elements (no innerHTML), so model output can't inject markup.
+// Tiny, safe renderer for coach replies: paragraphs, "- " bullets,
+// "1." numbered steps, **bold**. Builds React elements (no innerHTML),
+// so model output can't inject markup.
 export function MiniMarkdown({ text }) {
   const blocks = []
   let list = null
   for (const raw of text.split('\n')) {
     const line = raw.trimEnd()
-    const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/)
+    const m = line.match(/^\s*(?:([-*•])|\d+[.)])\s+(.*)$/)
     if (m) {
-      if (!list) {
-        list = []
-        blocks.push({ type: 'ul', items: list })
+      const type = m[1] ? 'ul' : 'ol'
+      if (!list || list.type !== type) {
+        list = { type, items: [] }
+        blocks.push(list)
       }
-      list.push(m[1])
+      list.items.push(m[2])
     } else {
       list = null
       if (line.trim()) blocks.push({ type: 'p', text: line.replace(/^#+\s*/, '') })
@@ -422,17 +424,17 @@ export function MiniMarkdown({ text }) {
     s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
       part.startsWith('**') && part.endsWith('**') ? <strong key={`${k}-${i}`}>{part.slice(2, -2)}</strong> : part,
     )
-  return blocks.map((b, i) =>
-    b.type === 'ul' ? (
-      <ul key={i}>
+  return blocks.map((b, i) => {
+    if (b.type === 'p') return <p key={i}>{inline(b.text, i)}</p>
+    const List = b.type
+    return (
+      <List key={i}>
         {b.items.map((it, j) => (
           <li key={j}>{inline(it, `${i}-${j}`)}</li>
         ))}
-      </ul>
-    ) : (
-      <p key={i}>{inline(b.text, i)}</p>
-    ),
-  )
+      </List>
+    )
+  })
 }
 
 export function Spinner() {

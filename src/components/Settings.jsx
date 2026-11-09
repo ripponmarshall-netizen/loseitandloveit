@@ -178,7 +178,7 @@ export default function Settings() {
           icon="person"
           color="var(--blue)"
           label="Personal details"
-          value={[profile.sex === 'female' ? 'Female' : 'Male', ageFromBirthYear(profile.birth_year), heightLabel(profile.height_cm, units)].filter(Boolean).join(' · ')}
+          sub={[profile.sex === 'female' ? 'Female' : 'Male', ageFromBirthYear(profile.birth_year), heightLabel(profile.height_cm, units)].filter(Boolean).join(' · ')}
           onClick={() => setSheet('body')}
         />
         <ListRow

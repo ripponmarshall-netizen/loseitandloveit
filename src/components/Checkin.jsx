@@ -182,6 +182,11 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
 }
 
 const r1 = (n) => Math.round(n * 10) / 10
+// "today" / "yesterday" mid-sentence, but dates keep their capitals ("Fri 6 Nov").
+const relDay = (iso, today) => {
+  const label = formatDayLabel(iso, today)
+  return /^(Today|Yesterday|Tomorrow)$/.test(label) ? label.toLowerCase() : label
+}
 
 // "−1.2 lb" style change between two weights in kg.
 export function weightDelta(kg, prevKg, units) {
@@ -259,7 +264,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
           {val && kg != null && !isValidWeightKg(kg) && <small className="danger-text">That doesn’t look like a realistic adult weight.</small>}
           {prev && kg != null && isValidWeightKg(kg) && (
             <small className="muted">
-              {weightDelta(kg, prev.weight_kg, units)} vs {formatDayLabel(prev.log_date, today).toLowerCase()} ({displayWeight(Number(prev.weight_kg), units)})
+              {weightDelta(kg, prev.weight_kg, units)} vs {relDay(prev.log_date, today)} ({displayWeight(Number(prev.weight_kg), units)})
             </small>
           )}
         </label>

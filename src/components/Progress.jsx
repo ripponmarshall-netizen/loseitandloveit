@@ -10,9 +10,11 @@ import { MOOD_BY_V, SYMPTOM_BY_ID } from '../data/glp1.js'
 import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } from '../lib/glp1.js'
 import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget, weightDelta } from './Checkin.jsx'
-import { addDays, formatEta, formatShortDate, lastNDates } from '../lib/dates.js'
+import { addDays, formatEta, formatShortDate, formatTimeUntil, lastNDates } from '../lib/dates.js'
 import { Sparkline, TrendChart } from './Charts.jsx'
 import { Icon, Segmented } from './ui.jsx'
+
+const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-GB')
 
 const GRANULARITY = [
   ['day', 'Daily'],
@@ -106,7 +108,7 @@ export default function Progress() {
     const newTarget = suggestedTarget
     try {
       await saveProfile({ ...profile, calorie_target_override: newTarget })
-      toast(`Target set to ${newTarget} kcal`)
+      toast(`Target set to ${fmtN(newTarget)} kcal`)
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -132,7 +134,7 @@ export default function Progress() {
           sub={last && goalKg && last.trend > goalKg ? 'to go' : undefined}
         />
         <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} />
-        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} />
+        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} sub={eta ? formatTimeUntil(eta, today) : undefined} />
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek && targets ? `of ${targets.calories.toLocaleString('en-GB')} kcal` : 'no full days'} />
       </div>
 
@@ -157,16 +159,16 @@ export default function Progress() {
         {adaptive ? (
           <>
             <p>
-              About <strong className="num">{adaptive.tdee} kcal/day</strong>{' '}
+              About <strong className="num">{fmtN(adaptive.tdee)} kcal/day</strong>{' '}
               <span className={`badge ${adaptive.confidence === 'high' ? 'jam' : adaptive.confidence === 'low' ? 'off' : 'usda'}`}>{adaptive.confidence} confidence</span>
             </p>
             <p className="small muted">
-              You averaged {adaptive.avgIntake} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
-              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets?.tdee ?? '—'} kcal.
+              You averaged {fmtN(adaptive.avgIntake)} kcal over {adaptive.loggedDays} logged days while your trend moved{' '}
+              {signed(adaptive.trendChangeKg)} in {adaptive.spanDays} days. The formula estimate was {targets?.tdee ? fmtN(targets.tdee) : '—'} kcal.
             </p>
             {suggestedTarget && Math.abs(adaptive.tdee - targets.tdee) >= 150 && suggestedTarget !== targets.calories && (
               <button className="btn secondary sm" onClick={adoptAdaptive}>
-                Base my target on this ({suggestedTarget} kcal)
+                Base my target on this ({fmtN(suggestedTarget)} kcal)
               </button>
             )}
             <p className="tiny muted" style={{ marginTop: 10, marginBottom: 0 }}>
@@ -461,7 +463,7 @@ function Wellbeing({ today }) {
         })}
       </div>
       <div className="stats" style={{ marginTop: 12 }}>
-        <Stat label="Mood" color="var(--yellow)" value={sum.mood ? MOOD_BY_V[Math.round(sum.mood)]?.label : '—'} sub={sum.mood ? `${sum.mood} / 5 avg` : 'no check-ins'} />
+        <Stat label="Mood" color="var(--yellow)" value={sum.mood ? MOOD_BY_V[Math.round(sum.mood)]?.label : '—'} sub={sum.mood ? `${sum.mood} / 5 avg` : 'none yet'} />
         <Stat label="Water" color="var(--cyan)" value={sum.waterMl ? formatWater(sum.waterMl) : '—'} sub={`goal ${formatWater(waterTarget)}`} />
         <Stat label="Energy" color="var(--green)" value={sum.energy ? `${sum.energy}/5` : '—'} sub="average" />
       </div>
@@ -484,8 +486,8 @@ function ExerciseSummary({ workouts, today, units }) {
       <div className="stats" style={{ marginBottom: 8 }}>
         <Stat inner label="Sessions" color="var(--red)" value={week.sessions} />
         <Stat inner label="Minutes" color="var(--orange)" value={week.minutes} />
-        <Stat inner label="Burned" color="var(--pink)" value={week.kcal} sub="net kcal" />
-        <Stat inner label="Strength" color="var(--purple)" value={`${week.strength}/2+`} sub="sessions" />
+        <Stat inner label="Burned" color="var(--pink)" value={fmtN(week.kcal)} sub="net kcal" />
+        <Stat inner label="Strength" color="var(--purple)" value={week.strength} sub="aim for 2+" />
         <Stat inner label="Treadmill" color="var(--blue)" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
         <Stat inner label="28 days" color="var(--teal)" value={month.sessions} sub={`${month.minutes} min`} />
       </div>
