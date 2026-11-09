@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase.js'
+import { Penguin } from './ui.jsx'
 
 // Email + password rather than magic links: on iPhone a magic link opens in
 // Safari, not in the installed home-screen app, so the app never gets the session.
@@ -45,9 +46,9 @@ export default function Auth({ onUseLocal }) {
 
   return (
     <div className="auth">
-      <img className="brand-mark" src="./icons/icon-192.png" alt="" />
-      <h1 className="center">Lose It &amp; Love It</h1>
-      <p className="center muted" style={{ marginBottom: 20 }}>
+      <Penguin kind="workout" />
+      <h1 className="center" style={{ marginBottom: 6 }}>Lose It &amp; Love It</h1>
+      <p className="center muted" style={{ marginBottom: 22 }}>
         Track what you eat, watch the trend, get coached.
       </p>
       <form className="card" onSubmit={submit}>
@@ -70,14 +71,14 @@ export default function Auth({ onUseLocal }) {
           </label>
         )}
         {msg && (
-          <p className="small" style={{ color: msg.ok ? 'var(--ok)' : 'var(--danger)' }} role="alert">
+          <p className="small" style={{ color: msg.ok ? 'var(--green)' : 'var(--danger)' }} role="alert">
             {msg.text}
           </p>
         )}
         <button className="btn block" disabled={busy}>
           {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
         </button>
-        <div className="row between small" style={{ marginTop: 12 }}>
+        <div className="row between small" style={{ marginTop: 14 }}>
           {mode === 'signin' ? (
             <>
               <button type="button" className="link" onClick={() => setMode('signup')}>Create an account</button>
@@ -88,7 +89,7 @@ export default function Auth({ onUseLocal }) {
           )}
         </div>
       </form>
-      <button className="btn ghost block" onClick={onUseLocal}>Try it without an account</button>
+      <button className="btn gray block" onClick={onUseLocal}>Try it without an account</button>
       <p className="tiny muted center" style={{ marginTop: 8 }}>
         Without an account, data stays on this device only and the AI coach is off.
       </p>
