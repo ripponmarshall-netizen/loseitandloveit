@@ -57,9 +57,21 @@ export function formatLongDate(iso) {
   return LONG_FMT.format(parseISODate(iso))
 }
 
-const MONTH_YEAR_FMT = new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric' })
+const MONTH_FMT = new Intl.DateTimeFormat('en-GB', { month: 'short' })
 
-// Goal dates can be years away: "12 Mar" this year, "Mar 2028" otherwise.
+// Goal dates can be years away: "12 Mar" this year, "Mar ’28" otherwise
+// (short enough for a third-width stat tile).
 export function formatEta(iso, todayIso) {
-  return iso.slice(0, 4) === todayIso.slice(0, 4) ? formatShortDate(iso) : MONTH_YEAR_FMT.format(parseISODate(iso))
+  if (iso.slice(0, 4) === todayIso.slice(0, 4)) return formatShortDate(iso)
+  return `${MONTH_FMT.format(parseISODate(iso))} ’${iso.slice(2, 4)}`
+}
+
+// How far away a date is, roughly: "in 3 days", "in 5 weeks", "in 7 months".
+export function formatTimeUntil(iso, todayIso) {
+  const days = daysBetween(todayIso, iso)
+  if (days <= 0) return 'now'
+  if (days < 14) return `in ${days} day${days === 1 ? '' : 's'}`
+  if (days < 7 * 26) return `in ${Math.round(days / 7)} weeks`
+  const months = Math.round(days / 30.44)
+  return months < 24 ? `in ${months} months` : `in ${Math.round(months / 12)} years`
 }

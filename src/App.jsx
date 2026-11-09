@@ -184,15 +184,18 @@ export default function App() {
     return null
   }, [localMode, userId])
 
-  const toast = useCallback((msg, kind = 'info') => {
+  // toast('Saved') · toast(e.message, 'error') · toast('Deleted', 'info', { label: 'Undo', run })
+  const dismissToast = useCallback(() => {
     clearTimeout(toastTimer.current)
-    setToastMsg({ msg, kind, id: Date.now() })
-    // Slide out, then unmount (it used to vanish mid-frame).
-    toastTimer.current = setTimeout(() => {
-      setToastMsg((t) => t && { ...t, leaving: true })
-      toastTimer.current = setTimeout(() => setToastMsg(null), 260)
-    }, kind === 'error' ? 5000 : 2500)
+    setToastMsg((t) => t && { ...t, leaving: true })
+    toastTimer.current = setTimeout(() => setToastMsg(null), 260)
   }, [])
+  const toast = useCallback((msg, kind = 'info', action = null) => {
+    clearTimeout(toastTimer.current)
+    setToastMsg({ msg, kind, action, id: Date.now() })
+    // Slide out, then unmount (it used to vanish mid-frame). An Undo stays a little longer.
+    toastTimer.current = setTimeout(dismissToast, action ? 5000 : kind === 'error' ? 5000 : 2500)
+  }, [dismissToast])
 
   const reloadWeights = useCallback(async () => {
     if (!store) return
@@ -398,7 +401,19 @@ export default function App() {
           className={`toast${toastMsg.kind === 'error' ? ' error' : ''}${toastMsg.leaving ? ' leaving' : ''}`}
           role={toastMsg.kind === 'error' ? 'alert' : 'status'}
         >
-          {toastMsg.msg}
+          <span>{toastMsg.msg}</span>
+          {toastMsg.action && (
+            <button
+              type="button"
+              className="toast-action"
+              onClick={() => {
+                dismissToast()
+                toastMsg.action.run()
+              }}
+            >
+              {toastMsg.action.label}
+            </button>
+          )}
         </div>
       )}
     </AppCtx.Provider>

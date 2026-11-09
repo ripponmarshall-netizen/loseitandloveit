@@ -219,6 +219,7 @@ p { margin: 0 0 10px; }
   color: var(--text-2); margin: 26px 16px 8px;
 }
 .list-header.big { text-transform: none; letter-spacing: -0.02em; font-size: 22px; line-height: 28px; font-weight: 700; color: var(--text); margin: 24px 2px 8px; }
+.list-header .no-caps { text-transform: none; letter-spacing: 0; }
 .list-footer { font-size: 13px; line-height: 18px; color: var(--text-2); margin: 7px 16px 0; }
 .list {
   background: var(--card);
@@ -448,6 +449,12 @@ select.input { appearance: none; -webkit-appearance: none; background-image: non
 .toast::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 .toast.error::before { background: var(--danger); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -24px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0); } }
+.toast-action {
+  appearance: none; border: 0; background: none; color: var(--tint); font: inherit; font-weight: 600;
+  padding: 6px 2px 6px 8px; margin: -6px -6px -6px 4px; cursor: pointer; flex: none;
+  border-left: 1px solid var(--sep);
+}
+.toast-action:active { opacity: 0.5; }
 
 /* ---------- Today ---------- */
 .day-nav { display: flex; align-items: center; gap: 2px; margin-right: -8px; }
@@ -503,8 +510,8 @@ select.input { appearance: none; -webkit-appearance: none; background-image: non
 .bubble.user { align-self: flex-end; background: var(--tint); color: #fff; border-bottom-right-radius: 6px; white-space: pre-wrap; transform-origin: bottom right; }
 .bubble.assistant { align-self: flex-start; background: var(--card); border-bottom-left-radius: 6px; transform-origin: bottom left; }
 .bubble p { margin: 0 0 8px; }
-.bubble p:last-child, .bubble ul:last-child { margin-bottom: 0; }
-.bubble ul { margin: 0 0 8px; padding-left: 20px; }
+.bubble p:last-child, .bubble ul:last-child, .bubble ol:last-child { margin-bottom: 0; }
+.bubble ul, .bubble ol { margin: 0 0 8px; padding-left: 20px; }
 .bubble li + li { margin-top: 3px; }
 @keyframes bubble-in { from { opacity: 0; transform: scale(0.92) translateY(6px); } to { opacity: 1; transform: none; } }
 .thinking { display: flex; align-items: center; gap: 10px; }

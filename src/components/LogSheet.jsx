@@ -155,11 +155,13 @@ export default function LogSheet({ date, onClose }) {
         ))}
       </div>
 
-      <div className="list-header">Water · {formatWater(water.ml)} of {formatWater(waterTarget)}</div>
+      <div className="list-header">
+        Water · <span className="no-caps">{formatWater(water.ml)} of {formatWater(waterTarget)}</span>
+      </div>
       <div className="grid3">
         <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => water.add(GLASS_ML)}>+ Glass</button>
         <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => water.add(BOTTLE_ML)}>+ Bottle</button>
-        <button className="btn gray" disabled={water.ml <= 0} onClick={() => water.add(-GLASS_ML)}>Undo</button>
+        <button className="btn gray" disabled={water.ml <= 0} onClick={() => water.add(-GLASS_ML)}>− Glass</button>
       </div>
     </Sheet>
   )

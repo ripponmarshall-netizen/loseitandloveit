@@ -34,8 +34,10 @@ export default function Coach({ active = true }) {
   const [streaming, setStreaming] = useState(null) // text while a reply is arriving
   const [status, setStatus] = useState('Mimi is thinking…')
   const [busy, setBusy] = useState(false)
-  const endRef = useRef()
   const abortRef = useRef()
+  // Follow new text only while you're at the bottom, so scrolling up to
+  // re-read an answer isn't yanked back down mid-reply.
+  const stickRef = useRef(true)
   const inputRef = useRef()
   const onGlp1 = !!glp1Plan(app.profile)
   const mimi = useMimi()
@@ -57,7 +59,22 @@ export default function Coach({ active = true }) {
   }, [store, toast])
 
   useEffect(() => {
-    if (active) endRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+    if (!active) return
+    const onScroll = () => {
+      const el = document.documentElement
+      stickRef.current = el.scrollHeight - (window.scrollY + window.innerHeight) < 160
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [active])
+
+  // Scroll the page to its end, not an end marker into view: the page's
+  // bottom padding clears the fixed composer and tab bar, so the newest
+  // message lands just above them instead of underneath.
+  useEffect(() => {
+    if (!active || !stickRef.current) return
+    const top = document.documentElement.scrollHeight
+    window.scrollTo({ top, behavior: streaming ? 'auto' : 'smooth' })
   }, [messages, streaming, status, active])
 
   // A question asked from elsewhere (e.g. a check-in): send it once the history has loaded
@@ -90,6 +107,7 @@ export default function Coach({ active = true }) {
     const question = text.trim()
     if (!question || busy) return
     setInput('')
+    stickRef.current = true
     setBusy(true)
     setStatus('Mimi is thinking…')
     const prior = (messages || []).slice(-20).map(({ role, content }) => ({ role, content }))
@@ -147,7 +165,7 @@ export default function Coach({ active = true }) {
   const checking = status.startsWith('Checking')
 
   return (
-    <div style={{ paddingBottom: 64 }}>
+    <div>
       <header className="page-head">
         <div className="row" style={{ gap: 12, alignItems: 'flex-end' }}>
           <PenguinFace size={44} />
@@ -213,7 +231,6 @@ export default function Coach({ active = true }) {
             ) : (
               <Thinking status={status} />
             ))}
-          <div ref={endRef} />
         </div>
       )}
 
