@@ -79,7 +79,7 @@ export function BodyFields({ form, hasWeighIns }) {
         <input className="input" inputMode="decimal" value={f.start_weight} onChange={set('start_weight')} />
         {hasWeighIns && (
           <small className="tiny muted">
-            Your targets use your trend weight from weigh-ins, not this number. To fix a weigh-in, tap it under Progress → Weigh-ins.
+            Your targets use your latest weigh-in, not this number. To fix a weigh-in, tap it under Progress → Weigh-ins.
           </small>
         )}
       </label>

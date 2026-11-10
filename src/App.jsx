@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppCtx } from './appContext.js'
 import { supabase } from './lib/supabase.js'
 import { createCloudStore, createLocalStore } from './lib/db.js'
-import { computeTargets, trendSeries } from './lib/calc.js'
+import { computeTargets, trendSeries, latestWeight } from './lib/calc.js'
 import { logicalToday } from './lib/dates.js'
 import Auth from './components/Auth.jsx'
 import Onboarding from './components/Onboarding.jsx'
@@ -245,7 +245,7 @@ export default function App() {
   )
 
   const series = useMemo(() => trendSeries(weights), [weights])
-  const currentWeight = series.length ? series[series.length - 1].trend : Number(profile?.start_weight_kg) || null
+  const currentWeight = latestWeight(series) ?? (Number(profile?.start_weight_kg) || null)
   const targets = useMemo(
     () => (profile ? computeTargets(profile, currentWeight) : null),
     [profile, currentWeight],
@@ -329,6 +329,7 @@ export default function App() {
     saveProfile,
     weights,
     series,
+    currentWeightKg: currentWeight,
     targets,
     today,
     date,

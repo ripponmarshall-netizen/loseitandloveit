@@ -296,6 +296,12 @@ export function trendSeries(weights) {
   return out
 }
 
+// The weight to show as "current": the most recent weigh-in itself, not the
+// smoothed trend. The trend is for judging direction, rate and milestones.
+export function latestWeight(series) {
+  return series.length ? series[series.length - 1].weight : null
+}
+
 // Trend value on a given date: the last point on or before it.
 export function trendOn(series, iso) {
   let v = null

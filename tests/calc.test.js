@@ -10,6 +10,7 @@ import {
   weeklyRate,
   adaptiveTdee,
   inputToKg,
+  latestWeight,
   projectGoalDate,
   cmToFtIn,
   ftInToCm,
@@ -318,4 +319,15 @@ test('goal ETA fits a small tile and says how far away it is', () => {
   assert.equal(formatTimeUntil('2027-09-01', '2026-11-09'), 'in 10 months')
   assert.equal(formatTimeUntil('2029-11-09', '2026-11-09'), 'in 3 years')
   assert.equal(formatTimeUntil('2026-11-09', '2026-11-09'), 'now')
+})
+
+test('latestWeight is the most recent weigh-in, not the smoothed trend', () => {
+  assert.equal(latestWeight([]), null)
+  const s = trendSeries([
+    { log_date: '2026-01-03', weight_kg: 98 },
+    { log_date: '2026-01-01', weight_kg: 100 },
+    { log_date: '2026-01-02', weight_kg: 100 },
+  ])
+  assert.equal(latestWeight(s), 98)
+  assert.notEqual(s[s.length - 1].trend, 98)
 })

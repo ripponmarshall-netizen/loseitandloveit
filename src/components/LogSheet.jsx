@@ -113,7 +113,7 @@ export default function LogSheet({ date, onClose }) {
           <input
             className="input"
             enterKeyHint="go"
-            placeholder="Patty, 2 glasses water, 30 min walk…"
+            placeholder="Patty, 2 glasses water…"
             value={text}
             onChange={(e) => setText(e.target.value)}
             aria-label="Log anything"
