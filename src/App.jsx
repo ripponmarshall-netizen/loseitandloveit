@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AppCtx } from './appContext.js'
 import { supabase } from './lib/supabase.js'
 import { createCloudStore, createLocalStore } from './lib/db.js'
-import { computeTargets, trendSeries } from './lib/calc.js'
+import { computeTargets, latestWeight, trendSeries } from './lib/calc.js'
 import { logicalToday } from './lib/dates.js'
 import Auth from './components/Auth.jsx'
 import Onboarding from './components/Onboarding.jsx'
@@ -11,7 +11,7 @@ import Progress from './components/Progress.jsx'
 import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
-import { Spinner } from './components/ui.jsx'
+import { Icon, Spinner } from './components/ui.jsx'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -136,7 +136,7 @@ export default function App() {
   )
 
   const series = useMemo(() => trendSeries(weights), [weights])
-  const currentWeight = series.length ? series[series.length - 1].trend : Number(profile?.start_weight_kg) || null
+  const currentWeight = latestWeight(series) ?? (Number(profile?.start_weight_kg) || null)
   const targets = useMemo(
     () => (profile ? computeTargets(profile, currentWeight) : null),
     [profile, currentWeight],
@@ -155,6 +155,11 @@ export default function App() {
     setSelectedDate(null)
   }, [localMode])
 
+  // Each tab is its own screen: start it at the top.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [tab])
+
   const enterLocalMode = useCallback(() => {
     writeMode('local')
     setLocalMode(true)
@@ -168,6 +173,7 @@ export default function App() {
     saveProfile,
     weights,
     series,
+    currentWeightKg: currentWeight,
     targets,
     today,
     date,
@@ -202,17 +208,21 @@ export default function App() {
   } else {
     body = (
       <>
-        {tab === 'today' && <Today />}
-        {tab === 'progress' && <Progress />}
-        {tab === 'coach' && <Coach />}
-        {tab === 'settings' && <Settings />}
+        <div className="screen" key={tab}>
+          {tab === 'today' && <Today />}
+          {tab === 'progress' && <Progress />}
+          {tab === 'coach' && <Coach />}
+          {tab === 'settings' && <Settings />}
+        </div>
         <nav className="nav" aria-label="Main">
           <div className="nav-inner">
-            <NavBtn id="today" icon="🍽️" label="Today" tab={tab} setTab={setTab} />
-            <NavBtn id="progress" icon="📉" label="Progress" tab={tab} setTab={setTab} />
-            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>＋</button>
-            <NavBtn id="coach" icon="💬" label="Coach" tab={tab} setTab={setTab} />
-            <NavBtn id="settings" icon="⚙️" label="Settings" tab={tab} setTab={setTab} />
+            <NavBtn id="today" icon="today" label="Today" tab={tab} setTab={setTab} />
+            <NavBtn id="progress" icon="progress" label="Progress" tab={tab} setTab={setTab} />
+            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>
+              <Icon name="plus" size={28} />
+            </button>
+            <NavBtn id="coach" icon="coach" label="Coach" tab={tab} setTab={setTab} />
+            <NavBtn id="settings" icon="settings" label="Settings" tab={tab} setTab={setTab} />
           </div>
         </nav>
         {addFor && <AddFood {...addFor} onClose={() => setAddFor(null)} />}
@@ -224,7 +234,7 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <main className="app">{body}</main>
       {toastMsg && (
-        <div className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
+        <div key={toastMsg.msg} className={`toast ${toastMsg.kind === 'error' ? 'error' : ''}`} role="status">
           {toastMsg.msg}
         </div>
       )}
@@ -235,7 +245,7 @@ export default function App() {
 function NavBtn({ id, icon, label, tab, setTab }) {
   return (
     <button className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      <span className="ico" aria-hidden="true">{icon}</span>
+      <Icon name={icon} />
       {label}
     </button>
   )

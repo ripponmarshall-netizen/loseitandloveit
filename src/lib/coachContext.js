@@ -38,8 +38,10 @@ export async function buildCoachContext({ store, profile, series, targets, today
       warnings: targets.warnings.length ? targets.warnings : undefined,
     },
     weight: last && {
-      latest_weigh_in: { date: last.date, kg: last.weight },
-      trend_kg: last.trend,
+      current_kg: last.weight,
+      current_weighed_on: last.date,
+      smoothed_trend_kg: last.trend,
+      note: 'Quote current_kg as their weight. smoothed_trend_kg is only for judging direction and rate.',
       start_kg: Number(profile.start_weight_kg),
       weekly_change_kg: rate == null ? null : Math.round(rate * 100) / 100,
       projected_goal_date: projectGoalDate(series, Number(profile.goal_weight_kg), today, rate),

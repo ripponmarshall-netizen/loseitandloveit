@@ -25,6 +25,41 @@ export function Sheet({ title, onClose, children }) {
   )
 }
 
+const ICONS = {
+  today: (
+    <>
+      <path d="M7 3v7a2 2 0 0 0 2 2v9M5 3v5M9 3v5" />
+      <path d="M17 21v-7h-2.5V8c0-2.8 1.2-4.5 2.5-5v11" />
+    </>
+  ),
+  progress: (
+    <>
+      <path d="M3 4v16h18" />
+      <path d="m7 9 4 4 3-3 5 5" />
+      <path d="M19 11v4h-4" />
+    </>
+  ),
+  coach: <path d="M20 11.5a7.5 7.5 0 0 1-11 6.6L4 19.5l1.4-4.6A7.5 7.5 0 1 1 20 11.5Z" />,
+  settings: (
+    <>
+      <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="17" r="2" />
+    </>
+  ),
+  plus: <path d="M12 5v14M5 12h14" />,
+  trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3" />,
+}
+
+// Line icons drawn in the current text colour, so they follow the theme.
+export function Icon({ name, size = 24 }) {
+  return (
+    <svg className="ico" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  )
+}
+
 export function Segmented({ value, options, onChange }) {
   return (
     <div className="segmented" role="tablist">
@@ -46,7 +81,7 @@ export function Stepper({ value, onChange, step = 0.5, min = 0.25 }) {
         inputMode="decimal"
         aria-label="Servings"
         value={value}
-        onChange={(e) => onChange(e.target.value.replace(',', '.'))}
+        onChange={(e) => onChange(e.target.value.replace(',', '.').replace(/[^0-9.]/g, ''))}
         onBlur={(e) => set(Number(e.target.value) || 1)}
       />
       <button type="button" aria-label="More" onClick={() => set(Number(value) + step)}>+</button>

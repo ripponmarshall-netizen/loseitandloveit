@@ -32,7 +32,7 @@ const csvCell = (v) => {
 }
 
 export default function Settings() {
-  const { store, mode, session, profile, saveProfile, series, toast, signOut, today, bumpData, reloadWeights } = useApp()
+  const { store, mode, session, profile, saveProfile, currentWeightKg, toast, signOut, today, bumpData, reloadWeights } = useApp()
   const [usage, setUsage] = useState(null)
   const importRef = useRef()
 
@@ -120,7 +120,7 @@ export default function Settings() {
       <ProfileForm
         key={profile.updated_at || 'p'}
         initial={profile}
-        currentWeightKg={series.length ? series[series.length - 1].trend : null}
+        currentWeightKg={currentWeightKg}
         onSubmit={onSave}
         submitLabel="Save changes"
         advanced

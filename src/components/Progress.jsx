@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary } from '../lib/calc.js'
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
-import { Segmented } from './ui.jsx'
+import { Icon, Segmented } from './ui.jsx'
 
 export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
@@ -12,14 +12,18 @@ export default function Progress() {
   const [workouts, setWorkouts] = useState([])
 
   useEffect(() => {
+    let cancelled = false
     store
       .listEntries(addDays(today, -89), today)
-      .then((rows) => setDaily(dailyTotals(rows)))
-      .catch((e) => toast(e.message, 'error'))
+      .then((rows) => !cancelled && setDaily(dailyTotals(rows)))
+      .catch((e) => !cancelled && toast(e.message, 'error'))
     store
       .listWorkouts(addDays(today, -27), today)
-      .then(setWorkouts)
-      .catch(() => setWorkouts([]))
+      .then((rows) => !cancelled && setWorkouts(rows))
+      .catch(() => !cancelled && setWorkouts([]))
+    return () => {
+      cancelled = true
+    }
   }, [store, today, dataVersion, toast])
 
   const last = series[series.length - 1]
@@ -55,10 +59,10 @@ export default function Progress() {
       <h1>Progress</h1>
 
       <div className="stats" style={{ marginBottom: 12 }}>
-        <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
-        <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
-        <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
+        <Stat label="Current" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? formatShortDate(last.date) : 'no weigh-ins'} />
+        <Stat label="Since start" value={last ? signed(last.weight - startKg) : '—'} />
+        <Stat label="To goal" value={last ? signed(goalKg - last.weight) : '—'} />
+        <Stat label="Per week" value={rate == null ? '—' : signed(rate)} sub="from trend" />
         <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
         <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
       </div>
@@ -190,9 +194,10 @@ function WeightList({ weights }) {
   const [showAll, setShowAll] = useState(false)
   const list = [...weights].reverse()
   const shown = showAll ? list : list.slice(0, 7)
-  async function remove(id) {
+  async function remove(w) {
+    if (!window.confirm(`Delete the weigh-in for ${formatShortDate(w.log_date)}?`)) return
     try {
-      await store.deleteWeight(id)
+      await store.deleteWeight(w.id)
       await reloadWeights()
     } catch (e) {
       toast(e.message, 'error')
@@ -202,18 +207,18 @@ function WeightList({ weights }) {
   return (
     <div>
       {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+        <div key={w.id} className="row between" style={{ padding: '4px 0', borderTop: '1px solid var(--line)' }}>
           <span>{formatShortDate(w.log_date)}</span>
           <span className="row">
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, fontSize: 16 }} onClick={() => remove(w.id)}>
-              🗑
+            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 40, height: 40, color: 'var(--muted)' }} onClick={() => remove(w)}>
+              <Icon name="trash" size={18} />
             </button>
           </span>
         </div>
       ))}
       {list.length > 7 && (
-        <button className="link small" onClick={() => setShowAll((s) => !s)}>
+        <button className="link small" style={{ paddingTop: 10 }} onClick={() => setShowAll((s) => !s)}>
           {showAll ? 'Show less' : `Show all ${list.length}`}
         </button>
       )}

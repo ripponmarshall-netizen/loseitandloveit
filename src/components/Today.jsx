@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
-import { entryTotals, exerciseAllowance, inputToKg, sumEntries, weightUnit } from '../lib/calc.js'
+import { displayWeight, entryTotals, exerciseAllowance, inputToKg, sumEntries, weightUnit } from '../lib/calc.js'
 import { addDays, formatDayLabel } from '../lib/dates.js'
 import { MacroBar, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { ExerciseCard, WorkoutSheet } from './Workouts.jsx'
 
 
 export default function Today() {
-  const { store, date, setDate, today, targets, weights, dataVersion, bumpData, openAdd, toast, profile } = useApp()
+  const { store, date, setDate, today, targets, weights, currentWeightKg, setTab, dataVersion, bumpData, openAdd, toast, profile } = useApp()
   const [entries, setEntries] = useState(null)
   const [editing, setEditing] = useState(null)
   const [workouts, setWorkouts] = useState([])
@@ -74,8 +74,9 @@ export default function Today() {
         <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>‹</button>
         <button className="link label" onClick={() => setDate(today)} style={{ color: 'var(--text)' }}>
           {formatDayLabel(date, today)}
+          {date !== today && <span className="tiny back-today">Back to today</span>}
         </button>
-        <button className="icon-btn" aria-label="Next day" disabled={date >= today} style={{ opacity: date >= today ? 0.3 : 1 }} onClick={() => setDate(addDays(date, 1))}>
+        <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate(addDays(date, 1))}>
           ›
         </button>
       </div>
@@ -92,7 +93,7 @@ export default function Today() {
               <strong className="num">{totals.calories.toLocaleString('en-GB')}</strong>
             </div>
             <div className="row between small" style={{ marginBottom: burned ? 0 : 10 }}>
-              <span className="muted">Target{allowance > 0 ? ` (+${allowance} exercise)` : ''}</span>
+              <span className="muted">Target{allowance > 0 ? ` (+${allowance})` : ''}</span>
               <strong className="num">{target.toLocaleString('en-GB')}</strong>
             </div>
             {burned > 0 && (
@@ -108,7 +109,16 @@ export default function Today() {
         </div>
       </section>
 
-      {date === today && !weighedToday && <QuickWeight units={profile.units} />}
+      {date === today &&
+        (weighedToday ? (
+          <button className="card row weight-row" onClick={() => setTab('progress')}>
+            <span className="grow small">⚖️ Current weight</span>
+            <strong className="num">{displayWeight(currentWeightKg, profile.units)}</strong>
+            <span className="muted" aria-hidden="true">›</span>
+          </button>
+        ) : (
+          <QuickWeight units={profile.units} />
+        ))}
 
       {entries === null ? (
         <div className="center" style={{ padding: 24 }}>
@@ -194,7 +204,7 @@ function QuickWeight({ units }) {
   return (
     <form className="card row" onSubmit={save}>
       <span className="grow small">⚖️ Morning weigh-in</span>
-      <input className="input" style={{ width: 96 }} inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} aria-label="Weight" />
+      <input className="input" style={{ width: 96, flex: 'none' }} inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} aria-label="Weight" />
       <button className="btn sm" disabled={busy || !val}>Save</button>
     </form>
   )

@@ -38,7 +38,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
       {error && <p className="small" style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>}
       {workouts.map((w) => (
         <button key={w.id} className="entry" onClick={() => onEdit(w)}>
-          <span aria-hidden="true" style={{ fontSize: 20 }}>{w.kind === 'treadmill' ? '🏃' : '🏠'}</span>
+          <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>{w.kind === 'treadmill' ? '🏃' : '🏠'}</span>
           <div className="grow">
             <div className="ellipsis">{w.name}</div>
             <div className="tiny muted ellipsis">{workoutDetail(w, units)}</div>
@@ -96,12 +96,12 @@ function fromWorkout(w, units) {
 
 /** Add or edit a workout. */
 export function WorkoutSheet({ date, workout, onClose }) {
-  const { store, units, series, profile, bumpData, toast, today } = useApp()
+  const { store, units, currentWeightKg, profile, bumpData, toast, today } = useApp()
   const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : emptyForm('treadmill')))
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
   const imperial = units === 'imperial'
-  const weightKg = series.length ? series[series.length - 1].trend : Number(profile.start_weight_kg)
+  const weightKg = currentWeightKg || Number(profile.start_weight_kg)
 
   const speedKmh = f.speed ? (imperial ? mphToKmh(Number(f.speed)) : Number(f.speed)) : 0
   const minutes = Number(f.duration_min) || 0

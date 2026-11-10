@@ -114,7 +114,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         </label>
         <div className="grid2">
           <label className="field">
-            <span>Sex (for the BMR formula)</span>
+            <span>Sex</span>
             <select className="input" value={f.sex} onChange={set('sex')}>
               <option value="male">Male</option>
               <option value="female">Female</option>
@@ -132,7 +132,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
               <input className="input" inputMode="numeric" value={f.ft} onChange={set('ft')} />
             </label>
             <label className="field">
-              <span>(in)</span>
+              <span>Height (in)</span>
               <input className="input" inputMode="numeric" value={f.inch} onChange={set('inch')} />
             </label>
           </div>
@@ -160,10 +160,11 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           <select className="input" value={f.activity_level} onChange={set('activity_level')}>
             {Object.entries(ACTIVITY).map(([k, a]) => (
               <option key={k} value={k}>
-                {a.label}: {a.desc}
+                {a.label}
               </option>
             ))}
           </select>
+          <small className="muted tiny">{ACTIVITY[f.activity_level]?.desc}</small>
         </label>
         <label className="field">
           <span>Pace</span>
@@ -211,11 +212,11 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         {advanced && (
           <div className="grid2">
             <label className="field">
-              <span>Calorie target override</span>
+              <span>Calorie override</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.calorie_target_override} onChange={set('calorie_target_override')} />
             </label>
             <label className="field">
-              <span>Protein target override (g)</span>
+              <span>Protein override (g)</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.protein_target_override} onChange={set('protein_target_override')} />
             </label>
           </div>
@@ -232,7 +233,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
             Maintenance ≈ {preview.tdee} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
           </p>
           {preview.warnings.map((w) => (
-            <p key={w} className="small" style={{ color: '#b45309' }}>
+            <p key={w} className="small warn-text">
               {w}
             </p>
           ))}

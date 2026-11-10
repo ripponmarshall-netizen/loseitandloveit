@@ -13,6 +13,8 @@ import {
   cmToFtIn,
   ftInToCm,
   kgToLb,
+  latestWeight,
+  inputToKg,
 } from '../src/lib/calc.js'
 import { logicalToday, addDays, daysBetween, lastNDates } from '../src/lib/dates.js'
 
@@ -176,4 +178,23 @@ test('exercise allowance and weekly summary', () => {
   ])
   assert.deepEqual(s, { sessions: 3, minutes: 65, kcal: 295, strength: 1, treadmill: 1, treadmillKm: 2.5 })
   assert.ok(Math.abs(kmhToMph(mphToKmh(3)) - 3) < 1e-9)
+})
+
+test('latestWeight is the most recent weigh-in, not the smoothed trend', () => {
+  assert.equal(latestWeight([]), null)
+  const s = trendSeries([
+    { log_date: '2026-01-03', weight_kg: 98 },
+    { log_date: '2026-01-01', weight_kg: 100 },
+    { log_date: '2026-01-02', weight_kg: 100 },
+  ])
+  assert.equal(latestWeight(s), 98)
+  assert.notEqual(s[s.length - 1].trend, 98)
+})
+
+test('inputToKg accepts decimal commas and rejects junk', () => {
+  assert.equal(inputToKg('80,5', 'metric'), 80.5)
+  assert.ok(Math.abs(inputToKg('220.5', 'imperial') - 100.02) < 0.01)
+  assert.equal(inputToKg('abc', 'metric'), null)
+  assert.equal(inputToKg('', 'imperial'), null)
+  assert.equal(inputToKg('-5', 'metric'), null)
 })

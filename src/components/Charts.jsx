@@ -19,8 +19,15 @@ function niceTicks(min, max, count = 4) {
 export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
   const pts = series.filter((p) => p.date >= fromDate && p.date <= toDate)
   if (pts.length < 2) {
-    return <p className="small muted">Log at least two weigh-ins to see your trend. Morning, after the toilet, before food works best.</p>
+    return (
+      <p className="small muted" style={{ margin: 0 }}>
+        {series.length >= 2
+          ? 'Fewer than two weigh-ins in this range. Try a longer one.'
+          : 'Log at least two weigh-ins to see your chart. Morning, after the toilet, before food works best.'}
+      </p>
+    )
   }
+  const lastPt = pts[pts.length - 1]
   const conv = (kg) => weightValue(kg, units)
   const vals = pts.flatMap((p) => [conv(p.weight), conv(p.trend)])
   let min = Math.min(...vals)
@@ -59,11 +66,12 @@ export function WeightChart({ series, goalKg, units, fromDate, toDate }) {
           <circle key={p.date} cx={x(p.date)} cy={y(conv(p.weight))} r="2.6" fill="var(--muted)" fillOpacity="0.7" />
         ))}
         <path d={trendPath} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(lastPt.date)} cy={y(conv(lastPt.weight))} r="4.5" fill="var(--brand)" stroke="var(--card)" strokeWidth="2" />
         <text x={PAD.l} y={H - 6}>{formatShortDate(pts[0].date)}</text>
         <text x={W - PAD.r} y={H - 6} textAnchor="end">{formatShortDate(pts[pts.length - 1].date)}</text>
       </svg>
       <p className="tiny muted" style={{ margin: '4px 0 0' }}>
-        Dots are weigh-ins; the line is your smoothed trend. Judge progress by the line, not the dots.
+        Dots are weigh-ins (the big one is your current weight); the line is your smoothed trend, which irons out daily water swings.
       </p>
     </div>
   )

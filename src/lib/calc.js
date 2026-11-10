@@ -43,7 +43,7 @@ export function tdeeFromProfile(profile, weightKg) {
 }
 
 /**
- * Daily targets from the profile and the latest (trend) weight.
+ * Daily targets from the profile and the latest weigh-in.
  * Returns calories and macros in grams plus any safety warnings applied.
  */
 export function computeTargets(profile, currentWeightKg) {
@@ -169,6 +169,12 @@ export function trendSeries(weights) {
   return out
 }
 
+// The weight to show as "current": the most recent weigh-in itself, not the
+// smoothed trend. The trend is only for judging direction and rate.
+export function latestWeight(series) {
+  return series.length ? series[series.length - 1].weight : null
+}
+
 // Trend value on a given date: the last point on or before it.
 export function trendOn(series, iso) {
   let v = null
@@ -271,8 +277,9 @@ export function weightUnit(units) {
 }
 
 export function inputToKg(value, units) {
-  const n = Number(value)
-  if (!n) return null
+  // Accept a decimal comma ("220,5") as well as a point.
+  const n = Number(String(value ?? '').trim().replace(',', '.'))
+  if (!n || n < 0) return null
   return units === 'imperial' ? lbToKg(n) : n
 }
 
