@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { exactProfile } from './lib/profileForm.js'
 import { AppCtx } from './appContext.js'
 import { supabase } from './lib/supabase.js'
 import { createCloudStore, createLocalStore } from './lib/db.js'
@@ -103,7 +104,9 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false)
   const [session, setSession] = useState(null)
   const [localMode, setLocalMode] = useState(() => readMode() === 'local')
-  const [profile, setProfile] = useState(undefined) // undefined = loading, null = none yet
+  const [rawProfile, setProfile] = useState(undefined) // undefined = loading, null = none yet
+  // Start and goal weights as they were entered (see exactWeightKg).
+  const profile = useMemo(() => exactProfile(rawProfile), [rawProfile])
   const [weights, setWeights] = useState([])
   const [tab, setTab] = useState('today')
   const [selectedDate, setSelectedDate] = useState(null)

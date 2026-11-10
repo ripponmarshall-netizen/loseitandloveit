@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { supabase } from '../lib/supabase.js'
 import { ACTIVITY, CONDITIONS, ageFromBirthYear, cleanConditions, cmToFtIn, displayWeight, entryTotals } from '../lib/calc.js'
 import { formatShortDate } from '../lib/dates.js'
-import { validateProfile } from '../lib/profileForm.js'
+import { validateProfile, exactWeightKg } from '../lib/profileForm.js'
 import { APP_VERSION } from '../config.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import {
@@ -379,7 +379,8 @@ function ProfileSheet({ title, groups, children, onClose }) {
     // still matches the old starting weight, keep the two in step: otherwise
     // correcting the starting weight looks like it did nothing.
     const oldStart = Number(profile.start_weight_kg)
-    const newStart = form.values.start_weight_kg
+    // To 0.01 kg, as weigh-ins are stored, and as the pounds that were typed.
+    const newStart = form.values.start_weight_kg ? Math.round(exactWeightKg(form.values.start_weight_kg, form.values.units) * 100) / 100 : null
     const first = weights[0]
     const syncFirst = first && newStart && Math.abs(newStart - oldStart) >= 0.05 && Math.abs(Number(first.weight_kg) - oldStart) < 0.06
     try {

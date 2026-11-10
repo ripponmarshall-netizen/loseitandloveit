@@ -131,10 +131,11 @@ export function GoalFields({ form, advanced = false }) {
         <select className="input" value={f.activity_level} onChange={set('activity_level')}>
           {Object.entries(ACTIVITY).map(([k, a]) => (
             <option key={k} value={k}>
-              {a.label}: {a.desc}
+              {a.label}
             </option>
           ))}
         </select>
+        <small className="tiny muted">{ACTIVITY[f.activity_level]?.desc}</small>
       </label>
       {advanced && (
         <details className="card" style={{ padding: '12px 14px' }}>
@@ -218,7 +219,7 @@ export function TargetPreview({ values, currentWeightKg }) {
         <span style={{ color: 'var(--protein)', fontWeight: 600 }}>P {preview.protein} g</span>
         <span style={{ color: 'var(--carbs)', fontWeight: 600 }}>C {preview.carbs} g</span>
         <span style={{ color: 'var(--fat)', fontWeight: 600 }}>F {preview.fat} g</span>
-        <span className="muted">Maintenance ≈ {preview.tdee}</span>
+        <span className="muted">Maintenance ≈ {preview.tdee.toLocaleString('en-GB')} kcal</span>
       </div>
       {preview.split === 'carb-conscious' && (
         <p className="small muted" style={{ margin: '4px 0' }}>Carb-conscious split: carbs at most 40% of calories.</p>

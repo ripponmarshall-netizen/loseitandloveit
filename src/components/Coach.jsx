@@ -75,7 +75,7 @@ export default function Coach({ active = true }) {
     if (!active || !stickRef.current) return
     const top = document.documentElement.scrollHeight
     window.scrollTo({ top, behavior: streaming ? 'auto' : 'smooth' })
-  }, [messages, streaming, status, active])
+  }, [messages, streaming, status, active, mimi.insight, mimi.busy])
 
   // A question asked from elsewhere (e.g. a check-in): send it once the history has loaded
   // (so it lands after earlier messages), or just focus the box.
@@ -179,8 +179,6 @@ export default function Coach({ active = true }) {
         )}
       </header>
 
-      <MimiCheckin />
-
       {messages === null ? (
         <div className="center" style={{ padding: 32, color: 'var(--text-3)' }}>
           <Spinner />
@@ -233,6 +231,9 @@ export default function Coach({ active = true }) {
             ))}
         </div>
       )}
+
+      {/* The check-in sits after the conversation, just above the prompts and the message box. */}
+      {messages !== null && !busy && <MimiCheckin />}
 
       {!busy && (
         <div className="chips" style={{ marginTop: 14 }}>

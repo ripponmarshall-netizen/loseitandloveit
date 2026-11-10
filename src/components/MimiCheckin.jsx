@@ -227,7 +227,7 @@ export function MimiBubble({ lowered = false }) {
   )
 }
 
-/** Mimi's latest check-in, shown at the top of the Mimi section. */
+/** Mimi's latest check-in, shown at the bottom of the chat in the Mimi section. */
 export default function MimiCheckin() {
   const { today, profile, openSheet, openAdd, askCoach } = useApp()
   const { enabled, insight, busy, dismiss } = useMimi()

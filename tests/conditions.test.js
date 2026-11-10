@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CONDITIONS, cleanConditions, computeTargets, inputToKg, isValidWeightKg, milestones, PCOS_MAX_DEFICIT } from '../src/lib/calc.js'
-import { fromForm, toForm } from '../src/lib/profileForm.js'
+import { exactProfile, exactWeightKg, fromForm, toForm } from '../src/lib/profileForm.js'
 
 const year = new Date().getFullYear()
 const man = { sex: 'male', birth_year: year - 35, height_cm: 178, start_weight_kg: 100, goal_weight_kg: 85, activity_level: 'moderate', weekly_rate_kg: 0.5 }
@@ -68,4 +68,23 @@ test('weight validation', () => {
   assert.ok(isValidWeightKg(140.6))
   assert.ok(!isValidWeightKg(20))
   assert.ok(!isValidWeightKg(NaN))
+})
+
+test('a goal typed in pounds reads back as the pounds that were typed', () => {
+  for (const lb of [120, 150, 165.5, 180, 199, 230, 250.5]) {
+    const stored = fromForm({ ...toForm({ units: 'imperial' }), goal_weight: String(lb), start_weight: '260' }).goal_weight_kg
+    const p = exactProfile({ units: 'imperial', goal_weight_kg: stored, start_weight_kg: 117.9 })
+    assert.ok(Math.abs(p.goal_weight_kg * 2.2046226218 - lb) < 1e-6, `${lb} lb`)
+    assert.equal(toForm(p).goal_weight, String(lb))
+  }
+  assert.equal(toForm(exactProfile({ units: 'imperial', start_weight_kg: 117.9 })).start_weight, '260')
+})
+
+test('exactWeightKg leaves metric and already precise values alone', () => {
+  assert.equal(exactWeightKg(81.6, 'metric'), 81.6)
+  assert.equal(exactWeightKg(81.647, 'imperial'), 81.647)
+  assert.equal(exactWeightKg(82, 'imperial'), 82) // 180.8 lb: not a whole or half pound
+  assert.equal(exactWeightKg(null, 'imperial'), null)
+  assert.equal(exactProfile(null), null)
+  assert.equal(fromForm({ ...toForm({ units: 'metric' }), goal_weight: '80,5' }).goal_weight_kg, 80.5)
 })
