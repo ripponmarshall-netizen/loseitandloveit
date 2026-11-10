@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
-import { validateProfile } from '../lib/profileForm.js'
+import { validateProfile, exactWeightKg } from '../lib/profileForm.js'
 import { AboutFields, BodyFields, GoalFields, HealthFields, LifestyleFields, TargetPreview, UnitsField, useProfileForm } from './ProfileForm.jsx'
 import { Penguin, Segmented } from './ui.jsx'
 import { GLP1_MEDS, MED_BY_ID } from '../data/glp1.js'
@@ -35,7 +35,8 @@ export default function Onboarding() {
     setBusy(true)
     try {
       // Save the profile last: it flips the app from onboarding to the main screens.
-      await store.upsertWeight({ log_date: today, weight_kg: v.start_weight_kg })
+      // The first weigh-in is the weight as typed (weigh-ins keep 0.01 kg), so 230 lb doesn't become 229.9.
+      await store.upsertWeight({ log_date: today, weight_kg: Math.round(exactWeightKg(v.start_weight_kg, v.units) * 100) / 100 })
       await reloadWeights()
       const med = MED_BY_ID[glp1.med]
       await saveProfile(

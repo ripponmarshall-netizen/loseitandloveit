@@ -12,6 +12,27 @@ const r1 = (n) => Math.round(n * 10) / 10
 export const snapPace = (kg, units) =>
   PACES[units].reduce((best, [v]) => (Math.abs(v - kg) < Math.abs(best - kg) ? v : best), PACES[units][1][0])
 
+/**
+ * Profile weights are stored to 0.1 kg, which loses a little when they were
+ * typed in pounds: 180 lb is saved as 81.6 kg and reads back as 179.9 lb.
+ * If the stored value is exactly what a whole or half pound rounds to, return
+ * that pound value in kg, so the app shows and works with what was entered.
+ */
+export function exactWeightKg(kg, units) {
+  const n = Number(kg)
+  if (!n || units !== 'imperial') return kg == null ? kg : n || kg
+  if (Math.abs(n - r1(n)) > 1e-9) return n // already more precise than 0.1 kg
+  const lb = Math.round(kgToLb(n) * 2) / 2
+  return r1(lbToKg(lb)) === r1(n) ? lbToKg(lb) : n
+}
+
+/** A profile with its start and goal weights restored to what was entered. */
+export function exactProfile(p) {
+  if (!p) return p
+  const units = p.units || 'imperial'
+  return { ...p, start_weight_kg: exactWeightKg(p.start_weight_kg, units), goal_weight_kg: exactWeightKg(p.goal_weight_kg, units) }
+}
+
 export function toForm(p = {}) {
   const units = p.units || 'imperial'
   const ftin = p.height_cm ? cmToFtIn(Number(p.height_cm)) : { ft: '', in: '' }
@@ -38,7 +59,8 @@ export function toForm(p = {}) {
 }
 
 export function fromForm(f) {
-  const toKg = (v) => (v ? r1(f.units === 'imperial' ? lbToKg(Number(v)) : Number(v)) : null)
+  const num = (v) => Number(String(v).trim().replace(',', '.'))
+  const toKg = (v) => (v ? r1(f.units === 'imperial' ? lbToKg(num(v)) : num(v)) : null)
   const height =
     f.units === 'imperial' ? (f.ft ? r1(ftInToCm(f.ft, f.inch || 0)) : null) : f.height_cm ? Number(f.height_cm) : null
   return {
