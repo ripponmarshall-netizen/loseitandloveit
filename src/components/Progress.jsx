@@ -125,15 +125,15 @@ export default function Progress() {
       </header>
 
       <div className="stats" style={{ marginBottom: 18 }}>
-        <Stat label="Trend" color="var(--blue)" value={last ? displayWeight(last.trend, units) : '—'} />
-        <Stat label="Since start" color="var(--green)" value={last ? signed(last.trend - startKg) : '—'} />
+        <Stat label="Current" color="var(--blue)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
+        <Stat label="Since start" color="var(--green)" value={last ? signed(last.weight - startKg) : '—'} />
         <Stat
           label="To goal"
           color="var(--teal)"
-          value={!last || !goalKg ? '—' : last.trend <= goalKg ? 'Reached' : `${weightValue(last.trend - goalKg, units).toFixed(1)} ${weightUnit(units)}`}
-          sub={last && goalKg && last.trend > goalKg ? 'to go' : undefined}
+          value={!last || !goalKg ? '—' : last.weight <= goalKg ? 'Reached' : `${weightValue(last.weight - goalKg, units).toFixed(1)} ${weightUnit(units)}`}
+          sub={last && goalKg && last.weight > goalKg ? 'to go' : undefined}
         />
-        <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} />
+        <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} sub={rate == null ? undefined : 'trend'} />
         <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} sub={eta ? formatTimeUntil(eta, today) : undefined} />
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek && targets ? `of ${targets.calories.toLocaleString('en-GB')} kcal` : 'no full days'} />
       </div>
@@ -232,8 +232,8 @@ function WeightTrend({ open, onToggle, goalKg }) {
       icon="scale"
       color="var(--indigo)"
       title="Weight"
-      value={last ? displayWeight(last.trend, units) : 'No weigh-ins yet'}
-      sub={change != null ? `${signedV(change)} · ${PERIOD[gran]}` : 'Smoothed trend'}
+      value={last ? displayWeight(last.weight, units) : 'No weigh-ins yet'}
+      sub={change != null ? `Trend ${signedV(change)} · ${PERIOD[gran]}` : last ? 'Latest weigh-in' : 'Log one to start'}
       spark={<Sparkline values={series.slice(-30).map((p) => conv(p.trend))} color="var(--indigo)" width={72} height={28} />}
     >
       <Segmented label="Weight chart period" value={gran} onChange={setGran} options={GRANULARITY} />

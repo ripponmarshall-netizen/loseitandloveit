@@ -477,7 +477,7 @@ export function Glp1Progress({ onEditDose, onSetup }) {
   const status = planDoseStatus(plan, doses, today)
   const startPt = plan.startedOn ? trendOn(series, plan.startedOn) || series.find((p) => p.date >= plan.startedOn) : null
   const last = series[series.length - 1]
-  const change = startPt && last && last.date > startPt.date ? last.trend - startPt.trend : null
+  const change = startPt && last && last.date > startPt.date ? last.weight - startPt.weight : null
   const weeks = plan.startedOn ? Math.max(0, Math.floor(daysBetween(plan.startedOn, today) / 7)) : null
   const signed = (kg) => {
     const v = weightValue(kg, units)
@@ -498,7 +498,7 @@ export function Glp1Progress({ onEditDose, onSetup }) {
         onClick={onSetup}
       />
       {change != null && (
-        <ListRow icon="trend" color="var(--green)" label="Since starting" sub={`Trend now ${displayWeight(last.trend, units)}`} value={signed(change)} />
+        <ListRow icon="trend" color="var(--green)" label="Since starting" sub={`Now ${displayWeight(last.weight, units)}`} value={signed(change)} />
       )}
       {status.assumed && doses && (
         <ListRow

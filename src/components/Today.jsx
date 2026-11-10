@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { displayWeight, entryTotals, exerciseAllowance, sumEntries, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
-import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
+import { addDays, formatDayLabel, formatLongDate, formatShortDate } from '../lib/dates.js'
 import { MOOD_BY_V } from '../data/glp1.js'
 import { GLASS_ML, dailyNudge, doseStatusLabel, formatDose, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
@@ -91,8 +91,8 @@ export default function Today() {
       icon="scale"
       color="var(--indigo)"
       label="Weight"
-      value={lastTrend ? displayWeight(lastTrend.trend, units) : weighIn ? displayWeight(Number(weighIn.weight_kg), units) : 'Weigh in'}
-      sub={lastTrend ? (signedRate ? `Trend · ${signedRate}` : 'Trend') : 'Morning is best'}
+      value={lastTrend ? displayWeight(lastTrend.weight, units) : 'Weigh in'}
+      sub={lastTrend ? (signedRate ? `Trend ${signedRate}` : weighIn ? 'Weighed today' : `Weighed ${formatShortDate(lastTrend.date)}`) : 'Morning is best'}
       done={!!weighIn}
       onClick={() => (series.length ? openProgress('weight') : openSheet('weight', { date }))}
       onPlus={() => openSheet('weight', weighIn ? { weight: weighIn } : { date })}

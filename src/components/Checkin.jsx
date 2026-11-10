@@ -6,10 +6,10 @@ import { displayWeight, inputToKg, isValidWeightKg, weightUnit, weightValue } fr
 import { addDays, formatDayLabel } from '../lib/dates.js'
 import { Icon, Segmented, Sheet } from './ui.jsx'
 
-/** The day's water goal from the profile and trend weight. */
+/** The day's water goal from the profile and current weight. */
 export function useWaterTarget() {
-  const { profile, series } = useApp()
-  const kg = series.length ? series[series.length - 1].trend : Number(profile.start_weight_kg)
+  const { profile, currentWeightKg } = useApp()
+  const kg = currentWeightKg || Number(profile.start_weight_kg)
   return waterTargetMl(kg, profile.water_target_ml)
 }
 

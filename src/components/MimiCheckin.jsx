@@ -145,6 +145,7 @@ export function MimiProvider({ children }) {
           workouts: day.workouts,
           weighedToday: weighed,
           recentDaily: dailyTotals(prior),
+          currentKg: last?.weight ?? null,
           trendKg: last?.trend ?? null,
           weeklyChangeKg: rate == null ? null : Math.round(rate * 100) / 100,
           glp1: plan ? { medicine: plan.name, next_dose: doseStatusLabel(dose) } : null,

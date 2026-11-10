@@ -106,12 +106,12 @@ function fromPreset(p = {}) {
 }
 
 export function WorkoutSheet({ date, workout, preset, onClose }) {
-  const { store, units, series, profile, bumpData, toast, today } = useApp()
+  const { store, units, currentWeightKg, profile, bumpData, toast, today } = useApp()
   const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : fromPreset(preset)))
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
   const imperial = units === 'imperial'
-  const weightKg = series.length ? series[series.length - 1].trend : Number(profile.start_weight_kg)
+  const weightKg = currentWeightKg || Number(profile.start_weight_kg)
 
   const speedKmh = f.speed ? (imperial ? mphToKmh(Number(f.speed)) : Number(f.speed)) : 0
   const minutes = Number(f.duration_min) || 0

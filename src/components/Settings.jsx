@@ -57,11 +57,11 @@ function heightLabel(cm, units) {
 
 export default function Settings() {
   const app = useApp()
-  const { store, mode, session, profile, saveProfile, series, weights, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
+  const { store, mode, session, profile, saveProfile, series, currentWeightKg, weights, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
   const [usage, setUsage] = useState(null)
   const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password' | 'photo'
   const importRef = useRef()
-  const trendKg = series.length ? series[series.length - 1].trend : null
+  const weightKg = series.length ? currentWeightKg : null
   const latestWeighIn = weights[weights.length - 1]
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export default function Settings() {
 
   const name = profile.display_name || (mode === 'cloud' ? session?.user?.email?.split('@')[0] : 'You')
   const plan = glp1Plan(profile)
-  const autoWater = waterTargetMl(trendKg ?? Number(profile.start_weight_kg))
+  const autoWater = waterTargetMl(weightKg ?? Number(profile.start_weight_kg))
   const WATER_OPTIONS = [
     ['', `Automatic (${formatWater(autoWater)})`, 'Auto'],
     ...[1500, 2000, 2500, 3000, 3500, 4000].map((ml) => [String(ml), formatWater(ml)]),
@@ -160,7 +160,7 @@ export default function Settings() {
         </button>
       </div>
 
-      <ListSection header="Plan" footer="Your calorie target updates as your trend weight changes.">
+      <ListSection header="Plan" footer="Your calorie target updates as your weight changes.">
         <ListRow icon="target" color="var(--green)" label="Daily target" value={targets ? `${targets.calories.toLocaleString('en-GB')} kcal` : '—'} onClick={() => setSheet('plan')} />
         <ListRow icon="trend" color="var(--teal)" label="Goal weight" value={displayWeight(Number(profile.goal_weight_kg), units)} onClick={() => setSheet('plan')} />
         <ListRow
@@ -185,8 +185,8 @@ export default function Settings() {
           icon="scale"
           color="var(--indigo)"
           label="Current weight"
-          sub={latestWeighIn ? `Trend · last weigh-in ${displayWeight(Number(latestWeighIn.weight_kg), units)} on ${formatShortDate(latestWeighIn.log_date)}` : 'From your weigh-ins'}
-          value={trendKg ? displayWeight(trendKg, units) : '—'}
+          sub={latestWeighIn ? (latestWeighIn.log_date === today ? 'Weighed today' : `Weighed ${formatShortDate(latestWeighIn.log_date)}`) : 'From your weigh-ins'}
+          value={weightKg ? displayWeight(weightKg, units) : '—'}
           onClick={() => openSheet('weight', latestWeighIn?.log_date === today ? { weight: latestWeighIn } : {})}
         />
         <ListRow icon="ruler" color="var(--purple)" label="Units">
@@ -318,11 +318,11 @@ export default function Settings() {
       </ListSection>
 
       {sheet === 'plan' && (
-        <ProfileSheet title="Your plan" groups={['goal', 'targets']} currentWeightKg={trendKg} onClose={() => setSheet(null)}>
+        <ProfileSheet title="Your plan" groups={['goal', 'targets']} currentWeightKg={weightKg} onClose={() => setSheet(null)}>
           {(form) => (
             <>
               <GoalFields form={form} advanced />
-              <TargetPreview values={form.values} currentWeightKg={trendKg} />
+              <TargetPreview values={form.values} currentWeightKg={weightKg} />
             </>
           )}
         </ProfileSheet>
@@ -342,7 +342,7 @@ export default function Settings() {
           {(form) => (
             <>
               <HealthFields form={form} />
-              <TargetPreview values={form.values} currentWeightKg={trendKg} />
+              <TargetPreview values={form.values} currentWeightKg={weightKg} />
             </>
           )}
         </ProfileSheet>

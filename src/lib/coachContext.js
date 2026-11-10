@@ -19,7 +19,7 @@ export async function buildCoachContext({ store, profile, series, targets, today
   const rate = weeklyRate(series)
   const now = new Date()
   const plan = glp1Plan(profile)
-  const waterTarget = waterTargetMl(last?.trend ?? Number(profile.start_weight_kg), profile.water_target_ml)
+  const waterTarget = waterTargetMl(last?.weight ?? Number(profile.start_weight_kg), profile.water_target_ml)
 
   return {
     note: 'All weights in kg. Talk to the user in their preferred units.',
@@ -49,6 +49,8 @@ export async function buildCoachContext({ store, profile, series, targets, today
       warnings: targets.warnings.length ? targets.warnings : undefined,
     },
     weight: last && {
+      current_kg: last.weight,
+      note: 'current_kg (the latest weigh-in) is what the user sees as their weight: quote that. trend_kg is the smoothed trend, for direction and rate only.',
       latest_weigh_in: { date: last.date, kg: last.weight },
       trend_kg: last.trend,
       start_kg: Number(profile.start_weight_kg),
