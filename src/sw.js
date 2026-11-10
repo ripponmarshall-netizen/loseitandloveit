@@ -1,10 +1,16 @@
-// Minimal offline shell. Bump VERSION when you change this file.
-const VERSION = 'v3'
-const CACHE = `lili-${VERSION}`
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png']
+// Offline app. vite.config.js fills in the list of built files and a build
+// stamp, so every deploy installs a fresh cache with the whole app in it.
+const ASSETS = self.__ASSETS
+const CACHE = `lili-${self.__BUILD}`
+const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png', ...ASSETS]
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()))
+  event.waitUntil(
+    caches.open(CACHE)
+      // One missing file must not stop the rest from being stored.
+      .then((c) => Promise.all([...new Set(SHELL)].map((url) => c.add(url).catch(() => {}))))
+      .then(() => self.skipWaiting()),
+  )
 })
 
 self.addEventListener('activate', (event) => {
@@ -33,7 +39,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res
         })
-        .catch(() => caches.match('./index.html')),
+        .catch(() => caches.match('./index.html', { ignoreVary: true })),
     )
     return
   }
@@ -49,14 +55,14 @@ self.addEventListener('fetch', (event) => {
           }
           return res
         })
-        .catch(() => caches.match(req)),
+        .catch(() => caches.match(req, { ignoreVary: true })),
     )
     return
   }
 
   // Hashed build assets: the name changes with the content, so cache first.
   event.respondWith(
-    caches.match(req).then(
+    caches.match(req, { ignoreVary: true }).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {

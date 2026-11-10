@@ -25,7 +25,8 @@ A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered co
 | Shift work | "My day starts at" setting (default 4 am), so a 2 am meal after a night shift counts toward the previous day |
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
 | Design | Apple-style: system font (SF Pro on iPhone), white background, pure black in dark mode, iOS grouped lists, sheets with swipe-to-dismiss, spring animations. Appearance: Automatic, Light or Dark. Mimi the Penguin works out while the app loads and thinks while the AI works. Sheets stay above the iPhone keyboard while you type. |
-| PWA | Installable on iPhone, offline app shell |
+| Offline and sync | Everything you log is saved on the phone first and sent to your account in the background, so screens open instantly and logging works with no signal (on shift, in a dead spot). Changes wait in an outbox and sync when the connection returns; a small pill says when you're offline or changes are waiting, and Settings → Sync shows the status. Mimi, AI estimates and the online food databases still need a connection. |
+| PWA | Installable on iPhone. The whole app is stored on install, so it opens with no signal. |
 
 ## One-time setup (all from an iPhone browser)
 
@@ -111,7 +112,10 @@ src/
   config.js             Supabase URL + publishable key
   lib/calc.js           BMR/TDEE/targets, trend, weekly rate, adaptive TDEE, units
   lib/dates.js          local dates + shift-aware "logical today"
-  lib/db.js             data layer: cloud (Supabase) and local (localStorage)
+  lib/db.js             data layer: wires the engine to localStorage, Supabase and online/foreground events
+  lib/engine.js         every store method, on a copy of the data kept on the device (pure, tested)
+  lib/sync.js           cloud mode: outbox of unsent writes, pull and merge from Supabase (pure, tested)
+  sw.js                 service worker source; the build writes the file list into it
   lib/ai.js             calls the Edge Function (streaming coach, meal estimate, photo resize)
   lib/coachContext.js   the data snapshot sent to the coach
   lib/checkins.js       when Mimi's check-ins are due, and their small data snapshot (pure, tested)
@@ -130,12 +134,12 @@ src/
 supabase/
   migrations/0001_init.sql   tables + RLS + AI usage functions
   functions/ai/index.ts      Claude API proxy (coach + estimate + check-in + food search), allowlist, daily cap
-tests/calc.test.js, food, glp1, quicklog, checkins
+tests/calc.test.js, sync, food, glp1, quicklog, checkins
 ```
 
 ## Known limits / next steps
 
-1. **Offline logging.** The app shell works offline, but saving needs a connection. Next: an outbox queue in `db.js`.
+1. **Sync is last-write-wins.** Fine for one person. If you edit the same entry on two devices while one is offline, the later sync wins. The phone keeps the full history; if its storage ever fills up, it keeps the last 400 days and fetches older days on demand. A different browser or a reinstalled home-screen app starts with an empty copy and needs one online launch.
 2. **Food database.** Built-ins are approximate. USDA and Open Food Facts are now searchable (barcodes by typing the number). Next: verify the top 20 built-ins against recipes, and camera barcode scanning (iOS Safari has no BarcodeDetector, so it needs a library).
 3. **Reminders when the app is closed.** Mimi's check-ins only run while the app is open. Real phone notifications need Web Push (iOS 16.4+, home-screen app only), a push-subscription table and a Supabase cron job that builds the snapshot server-side. A scheduled weekly summary would use the same plumbing.
 4. **Steps.** Exercise and water are logged; steps aren't yet (no HealthKit access from a web app).
