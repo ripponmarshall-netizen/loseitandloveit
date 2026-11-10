@@ -1185,3 +1185,20 @@ input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
   .confetti { display: none; }
   .award.earned .award-medal::after, .celebrate-medal::after { display: none; }
 }
+
+/* ---------- Sync status and load errors ---------- */
+.sync-pill {
+  display: flex; align-items: center; justify-content: center; gap: 6px; width: fit-content; max-width: 100%;
+  margin: 0 auto 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--fill-2); color: var(--text-2); font-size: 13px; font-weight: 600;
+  animation: fade-in 0.3s var(--ease) both;
+}
+.sync-pill.offline { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+.sync-pill svg { flex: none; width: 15px; height: 15px; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.load-error {
+  min-height: 70dvh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 0 12px;
+}
+.load-error h2 { margin: 8px 0 0; }
+.load-error p { color: var(--text-2); margin: 0 0 10px; max-width: 30ch; }

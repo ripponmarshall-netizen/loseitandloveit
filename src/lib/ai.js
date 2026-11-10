@@ -4,11 +4,25 @@ import { AI_FUNCTION_URL, SUPABASE_PUBLISHABLE_KEY } from '../config.js'
 async function authHeaders() {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
-  if (!token) throw new Error('Sign in to use the AI features.')
+  if (!token) throw new Error(offline() ? OFFLINE : 'Sign in to use the AI features.')
   return {
     Authorization: `Bearer ${token}`,
     apikey: SUPABASE_PUBLISHABLE_KEY,
     'Content-Type': 'application/json',
+  }
+}
+
+const OFFLINE = 'Mimi needs a connection. Your log still works offline; try again when you have signal.'
+const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false
+
+// fetch() that explains a dropped connection instead of "Failed to fetch".
+async function post(body, signal) {
+  const headers = await authHeaders()
+  try {
+    return await fetch(AI_FUNCTION_URL, { method: 'POST', headers, body: JSON.stringify(body), signal })
+  } catch (e) {
+    if (e.name === 'AbortError') throw e
+    throw new Error(offline() ? OFFLINE : 'Could not reach Mimi. Check your connection and try again.')
   }
 }
 
@@ -30,12 +44,7 @@ async function errorFrom(res) {
  * sources: { usda, off } which online databases to use.
  */
 export async function streamCoach({ message, history, context, refs, sources, onText, onStatus, signal }) {
-  const res = await fetch(AI_FUNCTION_URL, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ action: 'coach', message, history, context, refs, sources }),
-    signal,
-  })
+  const res = await post({ action: 'coach', message, history, context, refs, sources }, signal)
   if (!res.ok || !res.body) throw await errorFrom(res)
 
   const reader = res.body.getReader()
@@ -75,23 +84,14 @@ export async function streamCoach({ message, history, context, refs, sources, on
 }
 
 export async function estimateMeal({ text, image, refs, sources, checkDatabases = true }) {
-  const res = await fetch(AI_FUNCTION_URL, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ action: 'estimate', text, image, refs, sources, check_databases: checkDatabases }),
-  })
+  const res = await post({ action: 'estimate', text, image, refs, sources, check_databases: checkDatabases })
   if (!res.ok) throw await errorFrom(res)
   return res.json()
 }
 
 /** Mimi's check-in: a headline and 1–3 short tips from a compact data snapshot. */
 export async function requestCheckin({ context, signal }) {
-  const res = await fetch(AI_FUNCTION_URL, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ action: 'checkin', context }),
-    signal,
-  })
+  const res = await post({ action: 'checkin', context }, signal)
   if (!res.ok) throw await errorFrom(res)
   return res.json()
 }
@@ -102,12 +102,7 @@ export async function requestCheckin({ context, signal }) {
  * Returns { results: [{ id, source, name, brand, per100, serving_g, serving_text }], errors }.
  */
 export async function searchFoodDatabases({ query, barcode, sources, signal }) {
-  const res = await fetch(AI_FUNCTION_URL, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ action: 'food_search', query, barcode, sources }),
-    signal,
-  })
+  const res = await post({ action: 'food_search', query, barcode, sources }, signal)
   if (!res.ok) throw await errorFrom(res)
   return res.json()
 }

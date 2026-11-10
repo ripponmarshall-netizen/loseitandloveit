@@ -55,9 +55,20 @@ function heightLabel(cm, units) {
   return `${ft}′${inch}″`
 }
 
+function syncDetail(sync) {
+  const parts = []
+  if (sync.pending) parts.push(`${sync.pending} change${sync.pending === 1 ? '' : 's'} saved on this phone`)
+  if (sync.syncedAt) {
+    const mins = Math.round((Date.now() - sync.syncedAt) / 60000)
+    parts.push(mins < 1 ? 'Checked just now' : mins < 60 ? `Checked ${mins} min ago` : mins < 1440 ? `Checked ${Math.round(mins / 60)} h ago` : `Checked ${Math.round(mins / 1440)} d ago`)
+  }
+  if (sync.storageFull) parts.push('Phone storage is full')
+  return parts.join(' · ') || 'Not checked yet'
+}
+
 export default function Settings() {
   const app = useApp()
-  const { store, mode, session, profile, saveProfile, series, currentWeightKg, weights, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet } = app
+  const { store, mode, session, profile, saveProfile, series, currentWeightKg, weights, targets, toast, signOut, today, bumpData, reloadWeights, units, prefs, setPrefs, openSheet, sync } = app
   const [usage, setUsage] = useState(null)
   const [sheet, setSheet] = useState(null) // 'plan' | 'body' | 'notes' | 'password' | 'photo'
   const importRef = useRef()
@@ -72,6 +83,15 @@ export default function Settings() {
     try {
       await saveProfile({ ...profile, ...patch })
       toast(msg)
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  }
+
+  async function syncNow() {
+    try {
+      await store.syncNow()
+      toast('Up to date')
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -298,6 +318,20 @@ export default function Settings() {
           </div>
         </div>
       </ListSection>
+
+      {mode === 'cloud' && sync && (
+        <ListSection header="Sync" footer="Everything you log is saved on this phone first, then sent to your account. With no signal the app keeps working and catches up later.">
+          <ListRow
+            icon={sync.offline ? 'cloudOff' : sync.syncing ? 'refresh' : 'cloud'}
+            color={sync.offline ? 'var(--orange)' : 'var(--blue)'}
+            label={sync.syncing ? 'Syncing…' : sync.offline ? 'Offline' : sync.pending ? 'Waiting to sync' : 'Up to date'}
+            sub={syncDetail(sync)}
+            value="Sync now"
+            chevron={false}
+            onClick={syncNow}
+          />
+        </ListSection>
+      )}
 
       <ListSection header="Your data" footer={mode === 'local' ? 'Local mode: if iOS clears website data, it’s gone. Export regularly or create an account.' : 'Imports add entries; they don’t merge.'}>
         <ListRow icon="download" color="var(--blue)" label="Export backup (JSON)" onClick={exportJson} />

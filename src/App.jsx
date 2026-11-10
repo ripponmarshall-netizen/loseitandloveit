@@ -42,6 +42,26 @@ const writeMode = (m) => {
   }
 }
 
+// Who was last signed in on this device. With no signal Supabase can't
+// refresh an expired session, but their data is on the device and anything
+// they log waits in the outbox, so the app opens for them anyway.
+const USER_KEY = 'lili:user'
+const readUser = () => {
+  try {
+    return localStorage.getItem(USER_KEY)
+  } catch {
+    return null
+  }
+}
+const writeUser = (id) => {
+  try {
+    if (id) localStorage.setItem(USER_KEY, id)
+    else localStorage.removeItem(USER_KEY)
+  } catch {
+    /* private mode */
+  }
+}
+
 // Every bottom sheet the app opens from more than one place.
 const SHEETS = {
   log: LogSheet,
@@ -103,6 +123,10 @@ function useAutoHideTabBar(enabled, resetKey) {
 export default function App() {
   const [authReady, setAuthReady] = useState(false)
   const [session, setSession] = useState(null)
+  const [knownUser, setKnownUser] = useState(readUser)
+  const [loadError, setLoadError] = useState(null)
+  const [loadTry, setLoadTry] = useState(0)
+  const [sync, setSync] = useState(null) // cloud mode: { pending, syncing, offline, syncedAt, error }
   const [localMode, setLocalMode] = useState(() => readMode() === 'local')
   const [rawProfile, setProfile] = useState(undefined) // undefined = loading, null = none yet
   // Start and goal weights as they were entered (see exactWeightKg).
@@ -153,12 +177,23 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setAuthReady(true)
-    })
+    const remember = (id) => {
+      writeUser(id)
+      setKnownUser(id)
+    }
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        setSession(data.session)
+        if (data.session) remember(data.session.user.id)
+        else if (!error) remember(null) // really signed out, not just offline
+      })
+      .catch(() => {})
+      .finally(() => setAuthReady(true))
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s)
+      if (s) remember(s.user.id)
+      else if (event === 'SIGNED_OUT') remember(null)
       // Arrived from a password-reset email: send them to Settings to set a new one.
       if (event === 'PASSWORD_RECOVERY') {
         goTab('settings')
@@ -180,7 +215,7 @@ export default function App() {
     }
   }, [])
 
-  const userId = session?.user?.id
+  const userId = session?.user?.id ?? knownUser
   const store = useMemo(() => {
     if (localMode) return createLocalStore()
     if (userId) return createCloudStore(userId)
@@ -210,6 +245,7 @@ export default function App() {
   }, [store, toast])
 
   useEffect(() => {
+    setLoadError(null)
     if (!store) {
       setProfile(undefined)
       setWeights([])
@@ -224,13 +260,35 @@ export default function App() {
         setWeights(w)
       })
       .catch((e) => {
-        if (cancelled) return
-        toast(e.message, 'error')
-        setProfile(null)
+        // Never fall through to onboarding here: "couldn't load" is not "no profile".
+        if (!cancelled) setLoadError(e.message)
       })
     return () => {
       cancelled = true
     }
+  }, [store, loadTry])
+
+  // Cloud mode: the store syncs in the background. Refresh the screens when
+  // the account brought changes, and keep the sync status for the UI.
+  useEffect(() => {
+    if (!store?.subscribe) {
+      setSync(null)
+      return
+    }
+    setSync(store.syncStatus())
+    return store.subscribe((event) => {
+      if (event.type === 'status') setSync(store.syncStatus())
+      else if (event.type === 'error') toast(event.message, 'error')
+      else if (event.type === 'change') {
+        Promise.all([store.getProfile(), store.listWeights()])
+          .then(([p, w]) => {
+            setProfile((cur) => (cur === undefined ? cur : p ?? null))
+            setWeights(w)
+            setDataVersion((v) => v + 1)
+          })
+          .catch(() => {})
+      }
+    })
   }, [store, toast])
 
   const saveProfile = useCallback(
@@ -290,7 +348,11 @@ export default function App() {
       writeMode(null)
       setLocalMode(false)
     } else {
-      await supabase.auth.signOut()
+      // Offline, Supabase can't end the session on the server; forget it here regardless.
+      await supabase.auth.signOut().catch(() => {})
+      writeUser(null)
+      setKnownUser(null)
+      setSession(null)
     }
     setTab('today')
     tabRef.current = 'today'
@@ -353,10 +415,21 @@ export default function App() {
     progressFocus,
     prefs,
     setPrefs,
+    sync,
   }
 
   let body
-  if ((!authReady && !localMode) || (store && profile === undefined)) {
+  if (store && loadError) {
+    body = (
+      <div className="load-error">
+        <PenguinFace size={72} />
+        <h2>Couldn’t load your data</h2>
+        <p>{loadError}</p>
+        <button type="button" className="btn" onClick={() => setLoadTry((n) => n + 1)}>Try again</button>
+        <button type="button" className="link small" onClick={signOut}>Sign out</button>
+      </div>
+    )
+  } else if ((!authReady && !store) || (store && profile === undefined)) {
     body = <PenguinLoader />
   } else if (!store) {
     body = <Auth onUseLocal={enterLocalMode} />
@@ -373,6 +446,7 @@ export default function App() {
     )
     body = (
       <MimiProvider>
+        <SyncPill sync={sync} />
         {['today', 'progress', 'coach', 'settings'].map(show)}
         {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={tabbarHidden} />}
         {/* Touching the bottom edge brings a hidden tab bar back. */}
@@ -421,6 +495,32 @@ export default function App() {
         </div>
       )}
     </AppCtx.Provider>
+  )
+}
+
+// Shown only when there's something to know: no signal, or changes still
+// waiting to reach the account. Silent when everything is in step.
+function SyncPill({ sync }) {
+  const [late, setLate] = useState(false)
+  const waiting = !!sync && sync.pending > 0 && !sync.offline
+  // A normal save syncs within a second or two; only mention it if it drags.
+  useEffect(() => {
+    if (!waiting) return setLate(false)
+    const id = setTimeout(() => setLate(true), 6000)
+    return () => clearTimeout(id)
+  }, [waiting])
+  if (!sync) return null
+  const n = sync.pending
+  const offline = sync.offline || (typeof navigator !== 'undefined' && navigator.onLine === false)
+  if (!offline && !(waiting && late)) return null
+  const text = offline
+    ? n ? `Offline · ${n} change${n === 1 ? '' : 's'} saved on this phone` : 'Offline · showing what’s on this phone'
+    : `Syncing ${n} change${n === 1 ? '' : 's'}…`
+  return (
+    <div className={`sync-pill${offline ? ' offline' : ''}`} role="status">
+      <Icon name={offline ? 'cloudOff' : 'cloud'} size={15} strokeWidth={2} />
+      {text}
+    </div>
   )
 }
 
