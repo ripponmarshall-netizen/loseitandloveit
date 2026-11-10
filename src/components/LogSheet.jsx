@@ -24,7 +24,7 @@ const ACTIONS = {
  */
 export default function LogSheet({ date, onClose }) {
   const app = useApp()
-  const { openSheet, profile, weights, today, units, store, reloadWeights, toast } = app
+  const { openSheet, profile, weights, today, units, store, reloadWeights, toast, mode } = app
   const day = useDay(date)
   const plan = glp1Plan(profile)
   const waterTarget = useWaterTarget()
@@ -102,7 +102,7 @@ export default function LogSheet({ date, onClose }) {
     mood: `Check in${preview.mood ? `: ${MOOD_BY_V[preview.mood]?.label}` : ''}`,
     dose: 'Log a GLP-1 dose',
     exercise: `Log ${preview.minutes ? `${preview.minutes} min ` : ''}${preview.mode === 'run' ? 'run' : preview.kind === 'treadmill' ? 'walk' : 'workout'}`,
-    food: `Search ${preview.drink ? 'drinks' : 'food'} for “${preview.query}”`,
+    food: preview.drink || mode !== 'cloud' ? `Search ${preview.drink ? 'drinks' : 'food'} for “${preview.query}”` : `Estimate “${preview.query}” with AI`,
   }[preview.type]
 
   return (
@@ -134,7 +134,7 @@ export default function LogSheet({ date, onClose }) {
             </span>
             <span className="label">
               {a.id === 'dose' && plan ? `${plan.name} dose` : a.id === 'meal' ? a.reason : ACTIONS[a.id].label}
-              <span className="sub">{a.id === 'meal' ? `${isToday ? 'Now' : 'This day'} · search, AI photo or quick add` : a.reason}</span>
+              <span className="sub">{a.id === 'meal' ? `${isToday ? 'Now' : 'This day'} · ${mode === 'cloud' ? 'describe it or snap a photo' : 'search or quick add'}` : a.reason}</span>
             </span>
             <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
               <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

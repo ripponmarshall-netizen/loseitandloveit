@@ -848,18 +848,10 @@ button.mimi-tip:active { transform: scale(0.98); }
 /* Staggered entrance for Dashboard cards (opacity + small lift; no fixed children inside) */
 .rise { animation-duration: 0.55s; animation-delay: calc(var(--i, 0) * 45ms); }
 
-/* Day switcher under the title */
-.day-strip {
-  display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  margin: -8px 0 18px; padding: 4px; border-radius: 999px; background: var(--fill-2);
-}
-.day-strip .icon-btn { width: 38px; height: 38px; }
-.day-strip-label {
-  flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: 16px; font-weight: 600;
-  display: flex; flex-direction: column; align-items: center; line-height: 1.15; cursor: pointer; padding: 4px 0;
-}
-.day-strip-label:disabled { cursor: default; }
-.day-strip-back { font-size: 12px; font-weight: 500; color: var(--tint); }
+/* Day switcher in the page header */
+.day-nav { display: flex; align-items: center; background: var(--fill-2); border-radius: 999px; padding: 2px; }
+.day-nav .icon-btn { width: 36px; height: 36px; }
+.eyebrow-link { display: block; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; color: var(--tint) !important; }
 
 /* Calorie hero */
 .hero-card { padding: 22px; }
@@ -874,14 +866,28 @@ button.mimi-tip:active { transform: scale(0.98); }
 .card-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .card-link { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 500; color: var(--tint); }
 
-/* Macros: three rings */
-.macro-card { display: block; width: 100%; border: 0; text-align: left; color: inherit; font: inherit; cursor: pointer; transition: transform 0.3s var(--spring); }
-.macro-card:active { transform: scale(0.98); }
-.macro-rings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.macro-ring { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
-.macro-pct { font-size: 14px; font-weight: 700; letter-spacing: -0.02em; }
-.macro-ring-label { margin-top: 8px; font-size: 14px; font-weight: 600; color: var(--c); }
-.macro-ring-sub { font-size: 12px; color: var(--text-2); }
+/* Macros: three slim bars under the calorie ring */
+.macro-strip {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 100%;
+  margin-top: 18px; padding: 16px 0 0; border: 0; border-top: 0.5px solid var(--sep);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: opacity 0.2s;
+}
+.macro-strip:active { opacity: 0.6; }
+.macro-mini { display: flex; flex-direction: column; min-width: 0; }
+.macro-mini-label { font-size: 12px; font-weight: 600; color: var(--c); }
+.macro-mini-val { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.macro-mini-val .muted { font-size: 12px; font-weight: 400; color: var(--text-2); }
+.macro-mini-bar { height: 5px; border-radius: 3px; background: var(--fill-2); overflow: hidden; margin-top: 6px; }
+.macro-mini-bar i { display: block; height: 100%; border-radius: 3px; background: var(--c); transition: width 0.6s var(--spring); }
+
+/* Light text tabs: a quieter second-level switch than the segmented control */
+.mode-tabs { display: flex; gap: 22px; margin: 0 4px; border-bottom: 0.5px solid var(--sep); }
+.mode-tabs button {
+  border: 0; background: none; font: inherit; font-size: 15px; font-weight: 500; color: var(--text-2);
+  padding: 8px 0 10px; margin-bottom: -0.5px; border-bottom: 2px solid transparent; cursor: pointer; transition: color 0.2s, border-color 0.2s;
+}
+.mode-tabs button.on { color: var(--tint); font-weight: 600; border-bottom-color: var(--tint); }
+.progress-tabs { margin-bottom: 18px; }
 
 /* Bento grid of concise cards */
 .bento { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }

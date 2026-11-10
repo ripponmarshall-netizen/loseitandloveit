@@ -23,26 +23,30 @@ function Badge({ food }) {
 }
 
 export default function AddFood({ date, meal: initialMeal, tab: initialTab, query = '', drinks = false, onClose }) {
-  const { today } = useApp()
+  const { today, mode } = useApp()
   const [meal, setMeal] = useState(initialMeal)
-  const [tab, setTab] = useState(initialTab || 'search')
-  const [aiText, setAiText] = useState('')
+  // Describing the meal to the AI is the default way in. Drinks stay a pick
+  // list, and without an account there is no AI, so both open on Search.
+  const aiFirst = mode === 'cloud' && !drinks
+  const [tab, setTab] = useState(initialTab || (aiFirst ? 'ai' : 'search'))
+  const [aiText, setAiText] = useState(aiFirst ? query : '')
   const day = formatDayLabel(date, today)
 
   return (
     <Sheet tall title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
       <div className="stack" style={{ marginBottom: 14 }}>
         <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
-        <Segmented
-          label="How to add"
-          value={tab}
-          onChange={setTab}
-          options={[
-            ['search', 'Search'],
+        <div className="mode-tabs" role="tablist" aria-label="How to add">
+          {[
             ['ai', 'AI estimate'],
+            ['search', 'Search'],
             ['quick', 'Quick add'],
-          ]}
-        />
+          ].map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       {tab === 'search' && (
         <SearchTab
@@ -499,7 +503,9 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
       <label className="field">
         <textarea
           className="input"
-          placeholder="e.g. 2 fried dumplings, 1 cup ackee and saltfish, small callaloo, mint tea with 2 sugars"
+          autoFocus
+          rows={3}
+          placeholder="What did you eat? e.g. 2 fried dumplings, 1 cup ackee and saltfish, mint tea with 2 sugars"
           value={text}
           onChange={(e) => setText(e.target.value)}
           aria-label="What did you eat?"

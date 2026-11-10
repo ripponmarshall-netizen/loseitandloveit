@@ -168,30 +168,29 @@ export default function Today() {
     <div className="dashboard">
       <header className="page-head">
         <div className="grow">
-          <div className="eyebrow">{isToday ? formatLongDate(date) : `${formatDayLabel(date, today)} · ${formatLongDate(date)}`}</div>
-          <h1>Dashboard</h1>
+          {isToday ? (
+            <div className="eyebrow">{formatLongDate(date)}</div>
+          ) : (
+            <button className="eyebrow eyebrow-link" onClick={() => setDate(today)}>Back to today</button>
+          )}
+          <h1>{formatDayLabel(date, today)}</h1>
+        </div>
+        <div className="day-nav">
+          <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
+            <Icon name="left" />
+          </button>
+          <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate(addDays(date, 1))}>
+            <Icon name="right" />
+          </button>
         </div>
         <button className="head-avatar" aria-label="Your profile and settings" onClick={() => setTab('settings')}>
           <Avatar profile={profile} size={38} />
         </button>
       </header>
 
-      <div className="day-strip">
-        <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
-          <Icon name="left" />
-        </button>
-        <button className="day-strip-label" onClick={() => setDate(today)} disabled={isToday} aria-label={isToday ? 'Today' : 'Back to today'}>
-          {formatDayLabel(date, today)}
-          {!isToday && <span className="day-strip-back">Back to today</span>}
-        </button>
-        <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate(addDays(date, 1))}>
-          <Icon name="right" />
-        </button>
-      </div>
-
       <section className="card hero-card rise" style={{ '--i': 0 }}>
         <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label="Today’s nutrition breakdown">
-          <Ring value={totals.calories} max={target} size={148} stroke={14}>
+          <Ring value={totals.calories} max={target} size={132} stroke={13}>
             <span className="big num">{fmt(Math.abs(left))}</span>
             <span className="tiny muted">{left >= 0 ? 'kcal left' : 'kcal over'}</span>
           </Ring>
@@ -206,28 +205,21 @@ export default function Today() {
             )}
           </div>
         </button>
+        <button className="macro-strip" onClick={() => openProgress('macros')} aria-label="Macros: open trends in Progress">
+          <MacroMini label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
+          <MacroMini label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
+          <MacroMini label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
+        </button>
       </section>
-
-      <button className="card macro-card rise" style={{ '--i': 1 }} onClick={() => openProgress('macros')} aria-label="Macros: open trends in Progress">
-        <div className="card-title">
-          <span>Macros</span>
-          <span className="card-link">Trends <Icon name="right" size={14} strokeWidth={2.4} /></span>
-        </div>
-        <div className="macro-rings">
-          <MacroRing label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
-          <MacroRing label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
-          <MacroRing label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
-        </div>
-      </button>
 
       <div className="bento">
         {small.map((t, i) => (
-          <div key={t.key} className="rise" style={{ '--i': i + 2 }}>{t}</div>
+          <div key={t.key} className="rise" style={{ '--i': i + 1 }}>{t}</div>
         ))}
       </div>
 
       {!exerciseInGrid && (
-        <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 2 }}>
+        <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 1 }}>
           <button className="tile-main row-tile" onClick={exercise.onClick} aria-label={workouts.length ? `Exercise: ${burned} kcal burned` : 'Log exercise'}>
             <span className="tile-icon" aria-hidden="true"><Icon name="run" strokeWidth={2.2} /></span>
             <span className="grow">
@@ -332,17 +324,20 @@ export default function Today() {
   )
 }
 
-/** One macro as a small ring with grams eaten and the target underneath. */
-function MacroRing({ label, value, target, color }) {
-  const pct = target > 0 ? Math.round((value / target) * 100) : 0
+/** One macro as a slim bar with grams eaten and the target. */
+function MacroMini({ label, value, target, color }) {
+  const pct = target > 0 ? Math.min(100, Math.round((value / target) * 100)) : 0
   return (
-    <div className="macro-ring" style={{ '--c': color }}>
-      <Ring value={value} max={target} size={64} stroke={7} color={color}>
-        <span className="macro-pct num">{pct}%</span>
-      </Ring>
-      <span className="macro-ring-label">{label}</span>
-      <span className="macro-ring-sub num">{Math.round(value)} / {target} g</span>
-    </div>
+    <span className="macro-mini" style={{ '--c': color }}>
+      <span className="macro-mini-label">{label}</span>
+      <span className="macro-mini-val num">
+        {Math.round(value)}
+        <span className="muted"> / {target} g</span>
+      </span>
+      <span className="macro-mini-bar" aria-hidden="true">
+        <i style={{ width: `${pct}%` }} />
+      </span>
+    </span>
   )
 }
 

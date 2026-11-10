@@ -22,6 +22,16 @@ const GRANULARITY = [
   ['month', 'Monthly'],
 ]
 const COUNT = { day: 30, week: 12, month: 12 }
+
+// Progress is split into four short views instead of one long page.
+const VIEWS = [
+  ['weight', 'Weight'],
+  ['food', 'Food'],
+  ['health', 'Health'],
+  ['awards', 'Awards'],
+]
+// Which view holds each section a Dashboard card can jump to.
+const VIEW_OF = { weight: 'weight', macros: 'food', dose: 'health' }
 const PERIOD = { day: 'last 30 days', week: 'last 12 weeks', month: 'last 12 months' }
 
 // A year of food in 2-month chunks: one big request would hit the API's row cap.
@@ -41,7 +51,8 @@ export default function Progress() {
   const [daily, setDaily] = useState({})
   const [workouts, setWorkouts] = useState([]) // a year, for badges; the exercise card uses the last 28 days
   const [loaded, setLoaded] = useState({ food: false, workouts: false })
-  const [open, setOpen] = useState({ weight: true, macros: false, dose: false })
+  const [open, setOpen] = useState({ weight: true, macros: true, dose: true })
+  const [view, setView] = useState('weight')
   const [badgeOpen, setBadgeOpen] = useState(null)
 
   useEffect(() => {
@@ -68,6 +79,7 @@ export default function Progress() {
     if (!progressFocus) return
     const { section } = progressFocus
     setOpen((o) => ({ ...o, [section]: true }))
+    setView(VIEW_OF[section] || 'weight')
     const t = setTimeout(() => document.getElementById(`trend-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 140)
     return () => clearTimeout(t)
   }, [progressFocus])
@@ -124,35 +136,46 @@ export default function Progress() {
         </div>
       </header>
 
+      <div className="progress-tabs">
+        <Segmented label="Progress section" value={view} onChange={setView} options={VIEWS} />
+      </div>
+
+      {view === 'weight' && (
+      <>
       <div className="stats" style={{ marginBottom: 18 }}>
         <Stat label="Current" color="var(--blue)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
-        <Stat label="Since start" color="var(--green)" value={last ? signed(last.weight - startKg) : '—'} />
         <Stat
           label="To goal"
           color="var(--teal)"
           value={!last || !goalKg ? '—' : last.weight <= goalKg ? 'Reached' : `${weightValue(last.weight - goalKg, units).toFixed(1)} ${weightUnit(units)}`}
           sub={last && goalKg && last.weight > goalKg ? 'to go' : undefined}
         />
-        <Stat label="Per week" color="var(--purple)" value={rate == null ? '—' : signed(rate)} sub={rate == null ? undefined : 'trend'} />
         <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} sub={eta ? formatTimeUntil(eta, today) : undefined} />
-        <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek && targets ? `of ${targets.calories.toLocaleString('en-GB')} kcal` : 'no full days'} />
       </div>
 
-      <WeightTrend open={open.weight} onToggle={() => toggle('weight')} goalKg={goalKg} />
-      <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} />
-      <DoseTrend open={open.dose} onToggle={() => toggle('dose')} />
-
+      <WeightTrend
+        open={open.weight}
+        onToggle={() => toggle('weight')}
+        goalKg={goalKg}
+        extra={[
+          ['Since start', last ? signed(last.weight - startKg) : '—'],
+          ['Per week', rate == null ? '—' : signed(rate)],
+          ['Started at', startKg ? displayWeight(startKg, units) : '—'],
+        ]}
+      />
       <WeighIns weights={weights} />
+      </>
+      )}
 
-      <MilestonesCard milestones={ms} progress={msProgress} series={series} units={units} pcos={hasCondition(profile, 'pcos')} />
+      {view === 'food' && (
+      <>
+      <div className="stats" style={{ marginBottom: 18 }}>
+        <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek ? 'kcal a day' : 'no full days'} />
+        <Stat label="Target" color="var(--green)" value={targets ? fmtN(targets.calories) : '—'} sub="kcal a day" />
+        <Stat label="Maintenance" color="var(--blue)" value={adaptive ? fmtN(adaptive.tdee) : targets?.tdee ? fmtN(targets.tdee) : '—'} sub={adaptive ? 'measured' : 'formula'} />
+      </div>
 
-      <BadgeGrid badges={keepEarned(badges, celebration.kept)} fresh={celebration.fresh} units={units} onOpen={setBadgeOpen} />
-
-      <ExerciseSummary workouts={recentWorkouts} today={today} units={units} />
-
-      <Glp1Progress onEditDose={(d) => openSheet('dose', { date: d.log_date, dose: d })} onSetup={() => openSheet('medication')} />
-
-      <Wellbeing today={today} />
+      <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} />
 
       <section className="card">
         <h2>Your real maintenance</h2>
@@ -182,6 +205,24 @@ export default function Progress() {
           </p>
         )}
       </section>
+      </>
+      )}
+
+      {view === 'health' && (
+      <>
+      <ExerciseSummary workouts={recentWorkouts} today={today} units={units} />
+      <Wellbeing today={today} />
+      <DoseTrend open={open.dose} onToggle={() => toggle('dose')} />
+      <Glp1Progress onEditDose={(d) => openSheet('dose', { date: d.log_date, dose: d })} onSetup={() => openSheet('medication')} />
+      </>
+      )}
+
+      {view === 'awards' && (
+      <>
+      <MilestonesCard milestones={ms} progress={msProgress} series={series} units={units} pcos={hasCondition(profile, 'pcos')} />
+      <BadgeGrid badges={keepEarned(badges, celebration.kept)} fresh={celebration.fresh} units={units} onOpen={setBadgeOpen} />
+      </>
+      )}
 
       {celebration.queue.length > 0 && <BadgeCelebration badges={celebration.queue} units={units} onDone={celebration.dismiss} />}
       {badgeOpen && <BadgeDetail badge={badgeOpen} units={units} onClose={() => setBadgeOpen(null)} />}
@@ -212,7 +253,7 @@ function TrendCard({ id, open, onToggle, icon, color, title, value, sub, spark, 
   )
 }
 
-function WeightTrend({ open, onToggle, goalKg }) {
+function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
   const { series, units, today } = useApp()
   const [gran, setGran] = useState('day')
   const conv = (kg) => Math.round(weightValue(kg, units) * 10) / 10
@@ -259,6 +300,13 @@ function WeightTrend({ open, onToggle, goalKg }) {
               <MiniStat label="Average" value={stats.avg.toFixed(1)} unit={unit} />
               <MiniStat label="Lowest" value={stats.min.toFixed(1)} unit={unit} />
               <MiniStat label="Change" value={change != null ? signedV(change) : '—'} tone={change != null ? (change < 0 ? 'good' : change > 0 ? 'bad' : '') : ''} />
+            </div>
+          )}
+          {extra.length > 0 && (
+            <div className="trend-stats">
+              {extra.map(([l, v]) => (
+                <MiniStat key={l} label={l} value={v} />
+              ))}
             </div>
           )}
           <p className="tiny muted trend-note">
