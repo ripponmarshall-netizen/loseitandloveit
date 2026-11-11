@@ -106,4 +106,8 @@ test('profile validation gives friendly messages', () => {
   assert.match(validateProfile({ ...ok, calorie_target_override: 500 }, undefined, 2026), /800/)
   // Step-by-step: only the requested group is checked
   assert.equal(validateProfile({ ...ok, goal_weight_kg: null }, ['about', 'body'], 2026), null)
+  // The goal must sit at or below the starting weight
+  assert.match(validateProfile({ ...ok, goal_weight_kg: 110 }, ['goal'], 2026), /at or below/)
+  assert.match(validateProfile({ ...ok, start_weight_kg: 80 }, ['body'], 2026), /at or below/)
+  assert.equal(validateProfile({ ...ok, goal_weight_kg: 100 }, ['goal'], 2026), null)
 })

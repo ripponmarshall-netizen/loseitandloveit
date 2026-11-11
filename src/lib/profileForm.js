@@ -107,6 +107,10 @@ export function validateProfile(v, groups = ['about', 'body', 'goal', 'targets']
     if (!v.goal_weight_kg) return 'Enter a goal weight.'
     if (v.goal_weight_kg < 30 || v.goal_weight_kg > 350) return 'Goal weight should be between 30 and 350 kg (66 to 770 lb).'
   }
+  // Targets, milestones and the countdown all work toward a lower goal.
+  if ((has('body') || has('goal')) && v.start_weight_kg && v.goal_weight_kg && v.goal_weight_kg > v.start_weight_kg) {
+    return 'Set a goal weight at or below your starting weight.'
+  }
   if (has('targets')) {
     const c = v.calorie_target_override
     if (c != null && (c < 800 || c > 6000)) return 'A manual calorie target must be between 800 and 6000 kcal.'

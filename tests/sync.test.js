@@ -282,3 +282,25 @@ test('engine: one implementation behaves like the old local store', async () => 
   await assert.rejects(engine.upsertWeight({ log_date: '2026-11-10', weight_kg: 5 }), /realistic/)
   assert.match(newId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 })
+
+test('workouts and food are cleaned to the table check constraints, so sync never drops them', async () => {
+  const eng = createEngine({ persist: () => {} })
+  const t = await eng.addWorkout({
+    log_date: '2026-11-01', kind: 'treadmill', duration_min: 900, speed_kmh: 40, incline_pct: 60, distance_km: 250,
+  })
+  assert.equal(t.duration_min, 600)
+  assert.equal(t.speed_kmh, 25)
+  assert.equal(t.incline_pct, 40)
+  assert.equal(t.distance_km, 100)
+  const slow = await eng.addWorkout({ log_date: '2026-11-01', kind: 'treadmill', duration_min: -5, speed_kmh: 0, incline_pct: -9 })
+  assert.equal(slow.duration_min, 1) // negative falls back to the default, never <= 0
+  assert.equal(slow.speed_kmh, null)
+  assert.equal(slow.incline_pct, -5)
+  const home = await eng.addWorkout({ log_date: '2026-11-01', kind: 'home', duration_min: 0.04, activity: 'yoga', intensity: 'extreme' })
+  assert.equal(home.duration_min, 0.1)
+  assert.equal(home.activity, 'bodyweight')
+  assert.equal(home.intensity, 'moderate')
+  const [e] = await eng.addEntries([{ log_date: '2026-11-01', meal: 'lunch', name: 'Typo', calories: 12345678, protein_g: 1e6 }])
+  assert.equal(e.calories, 999999.9)
+  assert.equal(e.protein_g, 99999.9)
+})

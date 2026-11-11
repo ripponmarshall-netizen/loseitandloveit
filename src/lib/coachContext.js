@@ -1,5 +1,5 @@
 import { addDays, daysBetween, lastNDates } from './dates.js'
-import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
+import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, goalProgress, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
 import { FREQUENCY_LABEL, MOOD_BY_V, SYMPTOM_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
 
@@ -54,6 +54,8 @@ export async function buildCoachContext({ store, profile, series, targets, today
       latest_weigh_in: { date: last.date, kg: last.weight },
       trend_kg: last.trend,
       start_kg: Number(profile.start_weight_kg),
+      goal_kg: Number(profile.goal_weight_kg) || null,
+      ...goalFields(profile, last.weight),
       weekly_change_kg: rate == null ? null : Math.round(rate * 100) / 100,
       projected_goal_date: projectGoalDate(series, Number(profile.goal_weight_kg), today, rate),
       weigh_ins_last_28_days: series.filter((p) => p.date >= addDays(today, -27)).length,
@@ -136,5 +138,16 @@ function glp1Context({ plan, doses, series, today }) {
       site: d.site ? SITE_BY_ID[d.site]?.label : undefined,
       notes: d.notes || undefined,
     })),
+  }
+}
+
+// The main goal from the profile, measured from the latest weigh-in (as the app shows it).
+function goalFields(profile, currentKg) {
+  const g = goalProgress(profile.start_weight_kg, profile.goal_weight_kg, currentKg)
+  if (!g) return {}
+  return {
+    to_goal_kg: Math.round(g.toGoalKg * 10) / 10,
+    goal_progress_pct: Math.round(g.fraction * 100),
+    goal_reached: g.reached,
   }
 }

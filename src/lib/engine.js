@@ -74,8 +74,13 @@ const SOURCE_SET = new Set(['manual', 'library', 'recent', 'ai', 'quick'])
 const TIP_KINDS = new Set(['food', 'protein', 'water', 'move', 'weight', 'mood', 'dose', 'praise', 'rest'])
 
 const num = (v) => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Number(v))
-// Non-negative number (the database rejects negatives).
-const pos = (v) => Math.max(0, Number(v) || 0)
+// Non-negative number (the database rejects negatives), below the column's
+// numeric(p, s) limit: numeric(7, 1) for calories, numeric(6, 1) for macros.
+const pos = (v, max = 99999.9) => Math.min(max, Math.max(0, Number(v) || 0))
+const kcal = (v) => pos(v, 999999.9)
+const between = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+const ACTIVITY_SET = new Set(['bodyweight', 'weights', 'hiit', 'skipping', 'mobility'])
+const INTENSITY_SET = new Set(['light', 'moderate', 'hard'])
 // Servings must be > 0 and <= 50 (table check constraint).
 const servingsOf = (v) => Math.min(50, Math.max(0.01, Number(v ?? 1) || 1))
 const clamp15 = (v) => (v == null || v === '' ? null : Math.max(1, Math.min(5, Math.round(Number(v)))))
@@ -86,13 +91,14 @@ function cleanWorkout(w) {
     log_date: w.log_date,
     kind: treadmill ? 'treadmill' : 'home',
     name: String(w.name || (treadmill ? 'Treadmill' : 'Home workout')).slice(0, 120),
-    duration_min: Number(w.duration_min) || 1,
-    speed_kmh: treadmill ? num(w.speed_kmh) : null,
-    incline_pct: treadmill ? num(w.incline_pct) ?? 0 : null,
-    distance_km: treadmill ? num(w.distance_km) : null,
+    // Within the table's check constraints: a row the server rejects is dropped by sync.
+    duration_min: between(Math.round((Number(w.duration_min) > 0 ? Number(w.duration_min) : 1) * 10) / 10, 0.1, 600),
+    speed_kmh: treadmill && num(w.speed_kmh) > 0 ? Math.min(25, Math.round(num(w.speed_kmh) * 10) / 10) || 0.1 : null,
+    incline_pct: treadmill ? between(num(w.incline_pct) ?? 0, -5, 40) : null,
+    distance_km: treadmill && num(w.distance_km) != null ? between(Math.round(num(w.distance_km) * 100) / 100, 0, 100) : null,
     mode: treadmill ? (w.mode === 'run' ? 'run' : 'walk') : null,
-    activity: treadmill ? null : w.activity || 'bodyweight',
-    intensity: treadmill ? null : w.intensity || 'moderate',
+    activity: treadmill ? null : ACTIVITY_SET.has(w.activity) ? w.activity : 'bodyweight',
+    intensity: treadmill ? null : INTENSITY_SET.has(w.intensity) ? w.intensity : 'moderate',
     exercises: treadmill
       ? []
       : (w.exercises || [])
@@ -168,7 +174,7 @@ function cleanEntry(e) {
     name: String(e.name || 'Food').slice(0, 200),
     serving: e.serving || null,
     servings: servingsOf(e.servings),
-    calories: pos(e.calories),
+    calories: kcal(e.calories),
     protein_g: pos(e.protein_g),
     carbs_g: pos(e.carbs_g),
     fat_g: pos(e.fat_g),
@@ -183,7 +189,7 @@ function cleanEntryPatch(p) {
   if ('name' in p) out.name = String(p.name || 'Food').slice(0, 200)
   if ('meal' in p && MEAL_SET.has(p.meal)) out.meal = p.meal
   if ('servings' in p) out.servings = servingsOf(p.servings)
-  for (const k of ['calories', 'protein_g', 'carbs_g', 'fat_g']) if (k in p) out[k] = pos(p[k])
+  for (const k of ['calories', 'protein_g', 'carbs_g', 'fat_g']) if (k in p) out[k] = k === 'calories' ? kcal(p[k]) : pos(p[k])
   return out
 }
 
@@ -191,7 +197,7 @@ function cleanFood(f) {
   return {
     name: String(f.name || 'Food').slice(0, 200),
     serving: f.serving || null,
-    calories: pos(f.calories),
+    calories: kcal(f.calories),
     protein_g: pos(f.protein_g),
     carbs_g: pos(f.carbs_g),
     fat_g: pos(f.fat_g),
