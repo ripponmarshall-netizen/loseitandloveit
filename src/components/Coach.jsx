@@ -3,6 +3,7 @@ import { useApp } from '../appContext.js'
 import { streamCoach } from '../lib/ai.js'
 import { buildCoachContext } from '../lib/coachContext.js'
 import { MiniMarkdown, Spinner } from './ui.jsx'
+import { Icon } from './icons.jsx'
 
 const PROMPTS = [
   'Review my last 7 days',
@@ -179,7 +180,7 @@ export default function Coach() {
             }}
           />
           <button className="btn" disabled={busy || !input.trim()} aria-label="Send">
-            {busy ? <Spinner /> : '↑'}
+            {busy ? <Spinner /> : <Icon name="arrow-up" />}
           </button>
         </div>
       </form>

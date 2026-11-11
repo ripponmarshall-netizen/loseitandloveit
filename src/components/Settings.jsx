@@ -116,7 +116,6 @@ export default function Settings() {
         {mode === 'cloud' && <ChangePassword />}
       </section>
 
-      <h3 style={{ margin: '18px 4px 8px' }}>Profile &amp; targets</h3>
       <ProfileForm
         key={profile.updated_at || 'p'}
         initial={profile}
@@ -127,7 +126,7 @@ export default function Settings() {
       />
 
       {mode === 'cloud' && (
-        <section className="card" style={{ marginTop: 12 }}>
+        <section className="card">
           <h3>AI usage today</h3>
           <p className="small" style={{ margin: 0 }}>
             {usage
@@ -137,9 +136,9 @@ export default function Settings() {
         </section>
       )}
 
-      <section className="card" style={{ marginTop: 12 }}>
-        <h3>Your data</h3>
-        <div className="stack">
+      <details className="card fold">
+        <summary>Your data</summary>
+        <div className="fold-body stack">
           <button className="btn soft block" onClick={exportJson}>Export everything (JSON backup)</button>
           <button className="btn soft block" onClick={exportCsv}>Export food log (CSV for Sheets/Excel)</button>
           <input ref={importRef} type="file" accept="application/json,.json" hidden onChange={importJson} />
@@ -148,14 +147,14 @@ export default function Settings() {
             <button className="btn danger block" onClick={wipeLocal}>Delete all data on this device</button>
           )}
         </div>
-      </section>
+      </details>
 
-      <section className="card">
-        <h3>Install on iPhone</h3>
-        <p className="small" style={{ margin: 0 }}>
+      <details className="card fold">
+        <summary>Install on iPhone</summary>
+        <p className="fold-body small">
           In Safari tap <strong>Share</strong> → <strong>Add to Home Screen</strong>. It then opens full-screen like an app and works offline for viewing.
         </p>
-      </section>
+      </details>
 
       <p className="tiny muted center">
         v{APP_VERSION} · Estimates, not medical advice. Talk to your doctor before big diet changes, especially with diabetes, blood pressure

@@ -12,6 +12,7 @@ import Coach from './components/Coach.jsx'
 import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
 import { Spinner } from './components/ui.jsx'
+import { Icon } from './components/icons.jsx'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -208,11 +209,13 @@ export default function App() {
         {tab === 'settings' && <Settings />}
         <nav className="nav" aria-label="Main">
           <div className="nav-inner">
-            <NavBtn id="today" icon="🍽️" label="Today" tab={tab} setTab={setTab} />
-            <NavBtn id="progress" icon="📉" label="Progress" tab={tab} setTab={setTab} />
-            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>＋</button>
-            <NavBtn id="coach" icon="💬" label="Coach" tab={tab} setTab={setTab} />
-            <NavBtn id="settings" icon="⚙️" label="Settings" tab={tab} setTab={setTab} />
+            <NavBtn id="today" icon="today" label="Today" tab={tab} setTab={setTab} />
+            <NavBtn id="progress" icon="progress" label="Progress" tab={tab} setTab={setTab} />
+            <button className="add" aria-label="Add food" onClick={() => ctx.openAdd()}>
+              <Icon name="plus" size={28} />
+            </button>
+            <NavBtn id="coach" icon="coach" label="Coach" tab={tab} setTab={setTab} />
+            <NavBtn id="settings" icon="settings" label="Settings" tab={tab} setTab={setTab} />
           </div>
         </nav>
         {addFor && <AddFood {...addFor} onClose={() => setAddFor(null)} />}
@@ -235,7 +238,7 @@ export default function App() {
 function NavBtn({ id, icon, label, tab, setTab }) {
   return (
     <button className={tab === id ? 'on' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      <span className="ico" aria-hidden="true">{icon}</span>
+      <Icon name={icon} size={24} />
       {label}
     </button>
   )

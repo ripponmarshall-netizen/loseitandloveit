@@ -5,6 +5,7 @@ import { entryTotals, exerciseAllowance, inputToKg, sumEntries, weightUnit } fro
 import { addDays, formatDayLabel } from '../lib/dates.js'
 import { MacroBar, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { ExerciseCard, WorkoutSheet } from './Workouts.jsx'
+import { Icon } from './icons.jsx'
 
 
 export default function Today() {
@@ -71,12 +72,14 @@ export default function Today() {
   return (
     <div>
       <div className="daynav">
-        <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>‹</button>
-        <button className="link label" onClick={() => setDate(today)} style={{ color: 'var(--text)' }}>
+        <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
+          <Icon name="chevron-left" />
+        </button>
+        <button className="link label" onClick={() => setDate(today)}>
           {formatDayLabel(date, today)}
         </button>
         <button className="icon-btn" aria-label="Next day" disabled={date >= today} style={{ opacity: date >= today ? 0.3 : 1 }} onClick={() => setDate(addDays(date, 1))}>
-          ›
+          <Icon name="chevron-right" />
         </button>
       </div>
 
@@ -115,41 +118,43 @@ export default function Today() {
           <Spinner />
         </div>
       ) : (
-        MEALS.map((meal) => {
-          const list = entries.filter((e) => e.meal === meal)
-          const kcal = sumEntries(list).calories
-          return (
-            <section className="card" key={meal}>
-              <div className="meal-head">
-                <h2>{MEAL_LABEL[meal]}</h2>
-                <div className="row">
-                  {kcal > 0 && <span className="small muted num">{kcal} kcal</span>}
-                  <button className="btn soft sm" onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
-                    + Add
-                  </button>
-                </div>
-              </div>
-              {list.map((e) => (
-                <button key={e.id} className="entry" onClick={() => setEditing(e)}>
-                  <div className="grow">
-                    <div className="ellipsis">{e.name}</div>
-                    <div className="tiny muted ellipsis">
-                      {Number(e.servings) !== 1 && `${Number(e.servings)} × `}
-                      {e.serving || (e.source === 'quick' ? 'Quick add' : '1 serving')}
-                      {e.source === 'ai' && (
-                        <>
-                          {' '}
-                          <span className="tag">AI est.</span>
-                        </>
-                      )}
-                    </div>
+        <section className="card">
+          {MEALS.map((meal) => {
+            const list = entries.filter((e) => e.meal === meal)
+            const kcal = sumEntries(list).calories
+            return (
+              <div className="meal" key={meal}>
+                <div className="meal-head">
+                  <h2>{MEAL_LABEL[meal]}</h2>
+                  <div className="row">
+                    {kcal > 0 && <span className="small muted num">{kcal} kcal</span>}
+                    <button className="add-btn" onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
+                      <Icon name="plus" size={18} />
+                    </button>
                   </div>
-                  <span className="kcal num">{entryTotals(e).calories}</span>
-                </button>
-              ))}
-            </section>
-          )
-        })
+                </div>
+                {list.map((e) => (
+                  <button key={e.id} className="entry" onClick={() => setEditing(e)}>
+                    <div className="grow">
+                      <div className="ellipsis">{e.name}</div>
+                      <div className="tiny muted ellipsis">
+                        {Number(e.servings) !== 1 && `${Number(e.servings)} × `}
+                        {e.serving || (e.source === 'quick' ? 'Quick add' : '1 serving')}
+                        {e.source === 'ai' && (
+                          <>
+                            {' '}
+                            <span className="tag">AI est.</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className="kcal num">{entryTotals(e).calories}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
+        </section>
       )}
 
       <ExerciseCard
@@ -193,7 +198,9 @@ function QuickWeight({ units }) {
   }
   return (
     <form className="card row" onSubmit={save}>
-      <span className="grow small">⚖️ Morning weigh-in</span>
+      <span className="grow small row">
+        <Icon name="scale" size={18} /> Morning weigh-in
+      </span>
       <input className="input" style={{ width: 96 }} inputMode="decimal" placeholder={weightUnit(units)} value={val} onChange={(e) => setVal(e.target.value)} aria-label="Weight" />
       <button className="btn sm" disabled={busy || !val}>Save</button>
     </form>

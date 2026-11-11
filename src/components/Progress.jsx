@@ -4,6 +4,7 @@ import { adaptiveTdee, dailyTotals, displayWeight, inputToKg, kmhToMph, projectG
 import { addDays, formatShortDate, lastNDates } from '../lib/dates.js'
 import { CalorieBars, WeightChart } from './Charts.jsx'
 import { Segmented } from './ui.jsx'
+import { Icon } from './icons.jsx'
 
 export default function Progress() {
   const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile } = useApp()
@@ -54,14 +55,19 @@ export default function Progress() {
     <div>
       <h1>Progress</h1>
 
-      <div className="stats" style={{ marginBottom: 12 }}>
-        <Stat label="Trend" value={last ? displayWeight(last.trend, units) : '—'} />
-        <Stat label="Since start" value={last ? signed(last.trend - startKg) : '—'} />
-        <Stat label="To goal" value={last ? signed(goalKg - last.trend) : '—'} />
-        <Stat label="Per week" value={rate == null ? '—' : signed(rate)} />
-        <Stat label="Goal ETA" value={eta ? formatShortDate(eta) : '—'} />
-        <Stat label="7-day avg" value={avgWeek ? `${avgWeek}` : '—'} sub={avgWeek ? `of ${targets.calories} kcal` : 'no full days'} />
-      </div>
+      {/* Only show figures that exist yet, so a new account isn't a wall of dashes. */}
+      {last && (
+        <section className="card">
+          <div className="stats">
+            <Stat label="Trend" value={displayWeight(last.trend, units)} />
+            <Stat label="Since start" value={signed(last.trend - startKg)} />
+            <Stat label="To goal" value={signed(goalKg - last.trend)} />
+            {rate != null && <Stat label="Per week" value={signed(rate)} />}
+            {eta && <Stat label="Goal ETA" value={formatShortDate(eta)} />}
+            {avgWeek && <Stat label="7-day avg" value={`${avgWeek}`} sub={`of ${targets.calories} kcal`} />}
+          </div>
+        </section>
+      )}
 
       <section className="card">
         <div className="row between" style={{ marginBottom: 8 }}>
@@ -124,6 +130,16 @@ function ExerciseSummary({ workouts, today, units }) {
   const week = workoutSummary(workouts.filter((w) => w.log_date > addDays(today, -7)))
   const month = workoutSummary(workouts)
   const km = (v) => (units === 'imperial' ? `${(Math.round(kmhToMph(v) * 10) / 10).toFixed(1)} mi` : `${v.toFixed(1)} km`)
+  if (!month.sessions) {
+    return (
+      <section className="card">
+        <h2>Exercise</h2>
+        <p className="small muted" style={{ margin: 0 }}>
+          No workouts logged in the last 28 days. Add one from Today. Aim for 2–3 strength sessions a week, plus walking or treadmill.
+        </p>
+      </section>
+    )
+  }
   return (
     <section className="card">
       <h2>Exercise, last 7 days</h2>
@@ -202,12 +218,12 @@ function WeightList({ weights }) {
   return (
     <div>
       {shown.map((w) => (
-        <div key={w.id} className="row between" style={{ padding: '8px 0', borderTop: '1px solid var(--line)' }}>
+        <div key={w.id} className="row between list-row">
           <span>{formatShortDate(w.log_date)}</span>
           <span className="row">
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36, fontSize: 16 }} onClick={() => remove(w.id)}>
-              🗑
+            <button className="icon-btn" aria-label="Delete weigh-in" style={{ width: 36, height: 36 }} onClick={() => remove(w.id)}>
+              <Icon name="trash" size={18} />
             </button>
           </span>
         </div>

@@ -4,6 +4,7 @@ import { HOME_ACTIVITIES, estimateWorkoutKcal, kmhToMph, mphToKmh } from '../lib
 import { formatDayLabel } from '../lib/dates.js'
 import { HOME_PRESETS, TREADMILL_PRESETS } from '../data/workouts.js'
 import { Segmented, Sheet } from './ui.jsx'
+import { Icon } from './icons.jsx'
 
 const r1 = (n) => Math.round(n * 10) / 10
 const INTENSITY = [
@@ -32,13 +33,17 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
         <h2>Exercise</h2>
         <div className="row">
           {burned > 0 && <span className="small muted num">−{burned} kcal</span>}
-          <button className="btn soft sm" onClick={onAdd} aria-label="Add workout">+ Add</button>
+          <button className="add-btn" onClick={onAdd} aria-label="Add workout">
+            <Icon name="plus" size={18} />
+          </button>
         </div>
       </div>
       {error && <p className="small" style={{ color: 'var(--danger)', margin: 0 }}>{error}</p>}
       {workouts.map((w) => (
         <button key={w.id} className="entry" onClick={() => onEdit(w)}>
-          <span aria-hidden="true" style={{ fontSize: 20 }}>{w.kind === 'treadmill' ? '🏃' : '🏠'}</span>
+          <span className="entry-ico">
+            <Icon name={w.kind === 'treadmill' ? 'treadmill' : 'home'} size={18} />
+          </span>
           <div className="grow">
             <div className="ellipsis">{w.name}</div>
             <div className="tiny muted ellipsis">{workoutDetail(w, units)}</div>
@@ -195,8 +200,8 @@ export function WorkoutSheet({ date, workout, onClose }) {
             value={f.kind}
             onChange={(k) => setF((s) => ({ ...emptyForm(k), notes: s.notes }))}
             options={[
-              ['treadmill', '🏃 Treadmill'],
-              ['home', '🏠 Home workout'],
+              ['treadmill', <><Icon name="treadmill" size={16} /> Treadmill</>],
+              ['home', <><Icon name="home" size={16} /> Home workout</>],
             ]}
           />
         </div>
@@ -281,7 +286,7 @@ export function WorkoutSheet({ date, workout, onClose }) {
               <input className="input" style={{ width: 56 }} inputMode="numeric" placeholder="sets" value={x.sets} onChange={(e) => setExercise(i, 'sets', e.target.value)} aria-label="Sets" />
               <input className="input" style={{ width: 84 }} placeholder="reps" value={x.reps} onChange={(e) => setExercise(i, 'reps', e.target.value)} aria-label="Reps" />
               <button type="button" className="icon-btn" aria-label="Remove exercise" onClick={() => setF((s) => ({ ...s, exercises: s.exercises.filter((_, j) => j !== i) }))}>
-                ✕
+                <Icon name="close" size={18} />
               </button>
             </div>
           ))}

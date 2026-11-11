@@ -5,6 +5,7 @@ import { estimateMeal, photoToBase64 } from '../lib/ai.js'
 import { formatDayLabel } from '../lib/dates.js'
 import { Segmented, Sheet, Spinner, Stepper } from './ui.jsx'
 import { MEALS } from '../lib/meals.js'
+import { Icon } from './icons.jsx'
 
 const MEAL_OPTS = MEALS.map((m) => [m, m === 'snack' ? 'Snack' : m[0].toUpperCase() + m.slice(1)])
 
@@ -24,9 +25,9 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, onCl
           value={tab}
           onChange={setTab}
           options={[
-            ['search', '🔎 Search'],
-            ['ai', '✨ AI estimate'],
-            ['quick', '⚡ Quick add'],
+            ['search', <><Icon name="search" size={16} /> Search</>],
+            ['ai', <><Icon name="sparkles" size={16} /> AI estimate</>],
+            ['quick', <><Icon name="bolt" size={16} /> Quick add</>],
           ]}
         />
       </div>
@@ -142,7 +143,7 @@ function SearchTab({ date, meal, onDone }) {
       )}
       {total === 0 && (
         <p className="muted small center" style={{ marginTop: 16 }}>
-          No match. Try ✨ AI estimate or ⚡ Quick add.
+          No match. Try AI estimate or Quick add.
         </p>
       )}
       <p className="tiny muted" style={{ marginTop: 12 }}>
@@ -317,7 +318,7 @@ function AiTab({ date, meal, onDone }) {
       <div className="row">
         <input ref={fileRef} type="file" accept="image/*" hidden onChange={pickPhoto} />
         <button className="btn ghost" type="button" onClick={() => fileRef.current.click()}>
-          📷 {photo ? 'Change photo' : 'Photo'}
+          <Icon name="camera" size={18} /> {photo ? 'Change photo' : 'Photo'}
         </button>
         <button className="btn grow" disabled={loading || (!text.trim() && !photo)} onClick={run}>
           {loading ? <Spinner /> : 'Estimate'}

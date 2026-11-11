@@ -58,8 +58,21 @@ function fromForm(f) {
   }
 }
 
+// A plain card during onboarding; a collapsible one in Settings so the page stays short.
+function Section({ title, collapsible, children }) {
+  if (!collapsible) return <div className="card">{children}</div>
+  return (
+    <details className="card fold">
+      <summary>{title}</summary>
+      <div className="fold-body">{children}</div>
+    </details>
+  )
+}
+
 export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, submitLabel = 'Save', advanced = false }) {
   const [f, setF] = useState(() => toForm(initial))
+  const [saved, setSaved] = useState(() => JSON.stringify(toForm(initial)))
+  const dirty = JSON.stringify(f) !== saved
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
@@ -94,6 +107,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
     setBusy(true)
     try {
       await onSubmit(v)
+      setSaved(JSON.stringify(f))
     } catch (ex) {
       setErr(ex.message)
     } finally {
@@ -103,7 +117,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
 
   return (
     <form onSubmit={submit}>
-      <div className="card">
+      <Section title="About you" collapsible={advanced}>
         <label className="field">
           <span>Name (optional)</span>
           <input className="input" value={f.display_name} onChange={set('display_name')} autoComplete="given-name" />
@@ -114,7 +128,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         </label>
         <div className="grid2">
           <label className="field">
-            <span>Sex (for the BMR formula)</span>
+            <span>Sex (for BMR)</span>
             <select className="input" value={f.sex} onChange={set('sex')}>
               <option value="male">Male</option>
               <option value="female">Female</option>
@@ -132,7 +146,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
               <input className="input" inputMode="numeric" value={f.ft} onChange={set('ft')} />
             </label>
             <label className="field">
-              <span>(in)</span>
+              <span>Height (in)</span>
               <input className="input" inputMode="numeric" value={f.inch} onChange={set('inch')} />
             </label>
           </div>
@@ -152,9 +166,9 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
             <input className="input" inputMode="decimal" value={f.goal_weight} onChange={set('goal_weight')} />
           </label>
         </div>
-      </div>
+      </Section>
 
-      <div className="card">
+      <Section title="Plan & targets" collapsible={advanced}>
         <label className="field">
           <span>Activity level</span>
           <select className="input" value={f.activity_level} onChange={set('activity_level')}>
@@ -211,16 +225,16 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
         {advanced && (
           <div className="grid2">
             <label className="field">
-              <span>Calorie target override</span>
+              <span>Calorie override</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.calorie_target_override} onChange={set('calorie_target_override')} />
             </label>
             <label className="field">
-              <span>Protein target override (g)</span>
+              <span>Protein override (g)</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.protein_target_override} onChange={set('protein_target_override')} />
             </label>
           </div>
         )}
-      </div>
+      </Section>
 
       {preview && (
         <div className="card flat" style={{ background: 'var(--brand-soft)' }}>
@@ -232,7 +246,7 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
             Maintenance ≈ {preview.tdee} kcal · Protein {preview.protein} g · Carbs {preview.carbs} g · Fat {preview.fat} g
           </p>
           {preview.warnings.map((w) => (
-            <p key={w} className="small" style={{ color: '#b45309' }}>
+            <p key={w} className="small warn-text">
               {w}
             </p>
           ))}
@@ -247,9 +261,14 @@ export default function ProfileForm({ initial = {}, currentWeightKg, onSubmit, s
           {err}
         </p>
       )}
-      <button className="btn block" disabled={busy}>
-        {busy ? 'Saving…' : submitLabel}
-      </button>
+      {/* In Settings the button only appears once something changed, and sticks above the nav. */}
+      {(!advanced || dirty) && (
+        <div className={advanced ? 'savebar' : undefined}>
+          <button className="btn block" disabled={busy}>
+            {busy ? 'Saving…' : submitLabel}
+          </button>
+        </div>
+      )}
     </form>
   )
 }
