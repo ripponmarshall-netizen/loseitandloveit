@@ -12,6 +12,7 @@ import {
   inputToKg,
   latestWeight,
   projectGoalDate,
+  goalProgress,
   cmToFtIn,
   ftInToCm,
   kgToLb,
@@ -98,6 +99,40 @@ test('weekly rate and goal projection on a steady loss', () => {
   const eta = projectGoalDate(s, 90, '2026-10-31', rate)
   assert.ok(eta > '2026-11-30' && eta < '2027-02-01', eta)
   assert.equal(projectGoalDate(s, 90, '2026-10-31', 0.1), null)
+})
+
+test('goal projection: already at the goal shows today even when the loss has levelled off', () => {
+  const s = [{ date: '2026-10-01', weight: 89.5, trend: 89.8 }]
+  assert.equal(projectGoalDate(s, 90, '2026-10-31', null), '2026-10-31')
+  assert.equal(projectGoalDate(s, 90, '2026-10-31', 0.2), '2026-10-31')
+  assert.equal(projectGoalDate(s, '90', '2026-10-31', 0), '2026-10-31')
+})
+
+test('goalProgress measures everything against the main goal', () => {
+  const g = goalProgress(100, 80, 95)
+  assert.equal(g.goalKg, 80)
+  assert.equal(g.totalKg, 20)
+  assert.equal(g.lostKg, 5)
+  assert.equal(g.toGoalKg, 15)
+  assert.equal(g.fraction, 0.25)
+  assert.equal(g.reached, false)
+  // strings from the database, no weigh-in yet, above the start, past the goal
+  assert.equal(goalProgress('100', '80', null).toGoalKg, 20)
+  assert.equal(goalProgress(100, 80, 103).fraction, 0)
+  const past = goalProgress(100, 80, 78)
+  assert.equal(past.toGoalKg, 0)
+  assert.equal(past.fraction, 1)
+  assert.equal(past.reached, true)
+  // no goal, or not a loss goal
+  assert.equal(goalProgress(100, null, 95), null)
+  assert.equal(goalProgress(100, 100, 95), null)
+})
+
+test('targets compare a string goal weight as a number', () => {
+  const p = { sex: 'male', birth_year: 1990, height_cm: 180, start_weight_kg: 100, goal_weight_kg: '85', activity_level: 'light', weekly_rate_kg: 0.5 }
+  const t = computeTargets(p, 100)
+  assert.ok(t.plannedDeficit > 0)
+  assert.equal(t.protein, Math.round(Math.min(1.8 * 85, (t.calories * 0.4) / 4)))
 })
 
 test('adaptive TDEE recovers true maintenance from synthetic data', () => {

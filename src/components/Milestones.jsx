@@ -22,15 +22,19 @@ function milestoneName(m, units) {
 
 // ---------------------------------------------------------------- milestones card
 
-export function MilestonesCard({ milestones, progress, series, units, pcos }) {
-  if (!milestones.length || !progress) return null
+export function MilestonesCard({ milestones, progress, goal, series, units, pcos }) {
+  if (!milestones.length || !progress || !goal) return null
   const { next, last, toNextKg, fraction, reachedCount, total } = progress
-  const pct = Math.round(fraction * 100)
+  // The ring and the headline track the main goal from the profile; the mini
+  // milestones are the stepping stones shown underneath.
+  const goalPct = Math.round(goal.fraction * 100)
+  const done = !next // the trend has reached the goal
 
   // A window of the path: the last two reached and the next few.
   const nextIdx = next ? milestones.indexOf(next) : milestones.length
   const from = Math.max(0, Math.min(nextIdx - 2, milestones.length - 6))
   const shown = milestones.slice(from, from + 6)
+  const pct = Math.round(fraction * 100)
 
   return (
     <section className="card milestones" aria-labelledby="ms-title">
@@ -45,33 +49,42 @@ export function MilestonesCard({ milestones, progress, series, units, pcos }) {
         <svg className="ms-ring" viewBox="0 0 84 84" aria-hidden="true">
           <circle cx="42" cy="42" r="34" className="ms-ring-bg" />
           <circle
-            key={`${next?.id}-${pct}`}
+            key={`goal-${goalPct}`}
             cx="42"
             cy="42"
             r="34"
             pathLength="100"
             className="ms-ring-fg"
-            style={{ '--off': 100 - pct }}
+            style={{ '--off': 100 - (done ? 100 : goalPct) }}
             transform="rotate(-90 42 42)"
           />
         </svg>
         <div className="ms-ring-label num" aria-hidden="true">
-          {next ? `${pct}%` : '🏆'}
+          {done ? '🏆' : `${goalPct}%`}
         </div>
         <div className="grow">
-          {next ? (
-            <>
-              <div className="small muted">Next milestone</div>
-              <div className="ms-next num">{milestoneName(next, units)}</div>
-              <div className="small">
-                <strong className="num">{displayWeight(toNextKg, units)}</strong> to go
-                {last && <span className="muted"> · last: {milestoneLabel(last, units)} on {formatShortDate(last.reachedOn)}</span>}
-              </div>
-            </>
-          ) : (
+          {done ? (
             <>
               <div className="ms-next">Goal reached</div>
               <div className="small muted">Every milestone done. Time to set a maintenance plan.</div>
+            </>
+          ) : (
+            <>
+              <div className="small muted">Your goal: {displayWeight(goal.goalKg, units)}</div>
+              <div className="ms-next num">
+                {goal.reached ? 'At your goal weight' : `${displayWeight(goal.toGoalKg, units)} to go`}
+              </div>
+              <div className="small">
+                {goal.reached ? (
+                  <span className="muted">It counts once your trend gets there too.</span>
+                ) : (
+                  <>
+                    Next milestone: <strong className="num">{milestoneLabel(next, units)}</strong>
+                    {next.kind !== 'goal' && <span className="muted num"> · {displayWeight(toNextKg, units)} away</span>}
+                  </>
+                )}
+                {last && <span className="muted"> · last: {milestoneLabel(last, units)} on {formatShortDate(last.reachedOn)}</span>}
+              </div>
             </>
           )}
         </div>

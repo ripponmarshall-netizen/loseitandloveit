@@ -86,7 +86,8 @@ export function computeTargets(profile, currentWeightKg) {
   const tdee = tdeeFromProfile(profile, weightKg)
   if (tdee == null) return null
 
-  const wantsToLose = profile.goal_weight_kg && profile.goal_weight_kg < weightKg
+  const goalKg = Number(profile.goal_weight_kg) || null
+  const wantsToLose = goalKg != null && goalKg < weightKg
   let rate = wantsToLose ? Number(profile.weekly_rate_kg || 0.5) : 0
   const maxRate = weightKg * MAX_WEEKLY_LOSS_FRACTION
   if (rate > maxRate) {
@@ -120,7 +121,7 @@ export function computeTargets(profile, currentWeightKg) {
 
   // Protein: ~1.8 g per kg of goal weight (a proxy for lean mass when
   // overweight), capped at 40% of calories. Fat ~28% of calories. Carbs fill the rest.
-  const refWeight = wantsToLose ? profile.goal_weight_kg : weightKg
+  const refWeight = wantsToLose ? goalKg : weightKg
   let protein = profile.protein_target_override
     ? Number(profile.protein_target_override)
     : Math.min(1.8 * refWeight, (calories * 0.4) / 4)
@@ -184,6 +185,29 @@ export function milestones(startKg, currentKg) {
     const lost = Math.max(0, start - now)
     return { pct, targetKg: target, reached: now <= target, progress: Math.min(1, lost / (start - target)) }
   })
+}
+
+/**
+ * Progress toward the main goal weight entered in the profile. Every "to goal"
+ * figure in the app comes from here, so they always agree.
+ * currentKg is the latest weigh-in (what the user sees as their weight).
+ * Returns null without a goal below the start weight.
+ */
+export function goalProgress(startKg, goalKg, currentKg) {
+  const start = Number(startKg)
+  const goal = Number(goalKg)
+  if (!start || !goal || goal >= start) return null
+  const now = Number(currentKg) || start
+  const totalKg = start - goal
+  const lostKg = start - now // negative if above the start weight
+  return {
+    goalKg: goal,
+    totalKg,
+    lostKg,
+    toGoalKg: Math.max(0, now - goal),
+    fraction: Math.max(0, Math.min(1, lostKg / totalKg)),
+    reached: now <= goal,
+  }
 }
 
 // Realistic adult range, matching the database check (30–350 kg).
@@ -323,10 +347,13 @@ export function weeklyRate(series, days = 14) {
 }
 
 export function projectGoalDate(series, goalKg, todayIso, rate = weeklyRate(series)) {
-  if (!series.length || !goalKg || rate == null || rate >= -0.02) return null
+  const goal = Number(goalKg)
+  if (!series.length || !goal) return null
   const current = series[series.length - 1].trend
-  if (current <= goalKg) return todayIso
-  const weeks = (current - goalKg) / -rate
+  // Already there: no rate needed (it used to show no date once the loss levelled off).
+  if (current <= goal) return todayIso
+  if (rate == null || rate >= -0.02) return null
+  const weeks = (current - goal) / -rate
   if (weeks > 260) return null
   return addDays(todayIso, Math.round(weeks * 7))
 }

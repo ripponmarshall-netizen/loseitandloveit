@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
-  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, hasCondition, kmhToMph,
+  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, goalProgress, hasCondition, kmhToMph,
   projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
 } from '../lib/calc.js'
 import { buildMilestones, computeBadges, milestoneProgress } from '../lib/milestones.js'
@@ -89,7 +89,10 @@ export default function Progress() {
   const goalKg = Number(profile.goal_weight_kg)
 
   const ms = useMemo(() => buildMilestones({ startKg, goalKg, series, units }), [startKg, goalKg, series, units])
-  const msProgress = milestoneProgress(ms, startKg, last?.trend)
+  // Distances are measured from the latest weigh-in (the "Current" figure) to
+  // the goal weight in the profile; milestones are still reached by the trend.
+  const goal = goalProgress(startKg, goalKg, last?.weight)
+  const msProgress = milestoneProgress(ms, startKg, last?.weight)
   const badges = useMemo(
     () =>
       computeBadges({
@@ -147,8 +150,8 @@ export default function Progress() {
         <Stat
           label="To goal"
           color="var(--teal)"
-          value={!last || !goalKg ? '—' : last.weight <= goalKg ? 'Reached' : `${weightValue(last.weight - goalKg, units).toFixed(1)} ${weightUnit(units)}`}
-          sub={last && goalKg && last.weight > goalKg ? 'to go' : undefined}
+          value={!last || !goal ? '—' : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)}`}
+          sub={last && goal && !goal.reached ? `${Math.round(goal.fraction * 100)}% of the way` : undefined}
         />
         <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} sub={eta ? formatTimeUntil(eta, today) : undefined} />
       </div>
@@ -161,6 +164,7 @@ export default function Progress() {
           ['Since start', last ? signed(last.weight - startKg) : '—'],
           ['Per week', rate == null ? '—' : signed(rate)],
           ['Started at', startKg ? displayWeight(startKg, units) : '—'],
+          ['Goal', goalKg ? displayWeight(goalKg, units) : '—'],
         ]}
       />
       <WeighIns weights={weights} />
@@ -219,7 +223,7 @@ export default function Progress() {
 
       {view === 'awards' && (
       <>
-      <MilestonesCard milestones={ms} progress={msProgress} series={series} units={units} pcos={hasCondition(profile, 'pcos')} />
+      <MilestonesCard milestones={ms} progress={msProgress} goal={goal} series={series} units={units} pcos={hasCondition(profile, 'pcos')} />
       <BadgeGrid badges={keepEarned(badges, celebration.kept)} fresh={celebration.fresh} units={units} onOpen={setBadgeOpen} />
       </>
       )}
