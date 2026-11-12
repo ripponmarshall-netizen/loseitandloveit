@@ -400,6 +400,22 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       remove('workouts', id)
     },
     /**
+     * Log a saved workout again on another day: same type, time and calories,
+     * as the user's own entry (not an Apple import any more).
+     */
+    async repeatWorkout(id, log_date) {
+      const src = find('workouts', id, 'Workout')
+      const row = {
+        ...cleanWorkout({ ...src, log_date, source: null, calories_source: src.calories_source === 'device' ? 'manual' : src.calories_source }),
+        id: newId(),
+        created_at: now(),
+      }
+      db.workouts.push(row)
+      wrote('workouts', 'upsert', row.id)
+      save()
+      return copy(row)
+    },
+    /**
      * Add workouts that carry their own id (Apple Fitness imports use a stable
      * id per workout), skipping any already here. Returns { added, skipped }.
      */

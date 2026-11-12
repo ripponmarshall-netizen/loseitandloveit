@@ -15,7 +15,6 @@ import { WORKOUT_GROUPS, WORKOUT_TYPE_BY_KEY } from '../data/appleWorkouts.js'
 // that fit the existing forms map onto them (indoor walk/run -> treadmill,
 // strength -> weights...), so they can be edited like any other workout;
 // everything else is kind 'other'.
-export const GROUPS = WORKOUT_GROUPS
 
 const PREFIX = 'HKWorkoutActivityType'
 const splitWords = (s) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase())
@@ -307,7 +306,7 @@ export function matchesWorkout(w, query) {
   const date = new Date(y, m - 1, d, 12)
   const hay = [
     w.name,
-    GROUPS[w.group]?.label,
+    WORKOUT_GROUPS[w.group]?.label,
     w.notes,
     date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     w.log_date,

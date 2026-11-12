@@ -1,8 +1,7 @@
-// "Log anything": turn a short phrase into an action, and order the Log
-// sheet's options by what's most likely needed right now. Pure and tested.
+// "Log anything": turn a short phrase into an action. Pure and tested.
 import { GLP1_MEDS } from '../data/glp1.js'
 import { WORKOUT_TYPES } from '../data/appleWorkouts.js'
-import { BOTTLE_ML, GLASS_ML, waterPaceFraction } from './glp1.js'
+import { BOTTLE_ML, GLASS_ML } from './glp1.js'
 
 export function guessMeal(date = new Date()) {
   const h = date.getHours() + date.getMinutes() / 60
@@ -118,32 +117,4 @@ export function parseQuickLog(input) {
   }
 
   return { type: 'food', query: input.trim(), drink: DRINK.test(text) }
-}
-
-/**
- * Order the Log sheet's actions for right now. Returns
- * [{ id, score, reason }] sorted best first.
- */
-export function suggestLogActions({ hour, onGlp1, dose, weighed, moodLogged, waterMl = 0, waterTarget = 2500, mealsLogged = {} }) {
-  const meal = guessMeal(new Date(2000, 0, 1, Math.floor(hour), Math.round((hour % 1) * 60)))
-  const mealLabel = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', snack: 'a snack' }[meal]
-  const expected = waterTarget * waterPaceFraction(hour)
-  const out = [
-    { id: 'meal', score: mealsLogged[meal] ? 55 : 72, reason: mealsLogged[meal] ? 'Add more food' : `Log ${mealLabel}` },
-    { id: 'drink', score: 50, reason: 'Juice, tea, soda…' },
-    {
-      id: 'water',
-      score: waterMl < expected - 250 ? 68 : 42,
-      reason: waterMl < expected - 250 ? 'Behind for this time of day' : 'Add a glass',
-    },
-    { id: 'exercise', score: 45, reason: 'Log one or import from Apple Fitness' },
-    { id: 'mood', score: moodLogged ? 12 : hour >= 17 ? 74 : 35, reason: moodLogged ? 'Update check-in' : 'How are you today?' },
-    { id: 'weight', score: weighed ? 8 : hour < 11 ? 80 : 30, reason: weighed ? 'Already weighed' : hour < 11 ? 'Morning weigh-in' : 'Weigh-in' },
-    {
-      id: 'dose',
-      score: !onGlp1 ? 5 : dose?.state === 'overdue' ? 100 : dose?.state === 'due' || dose?.state === 'none' ? 95 : 15,
-      reason: !onGlp1 ? 'Track a GLP-1 medicine' : dose?.label || 'GLP-1',
-    },
-  ]
-  return out.sort((a, b) => b.score - a.score)
 }

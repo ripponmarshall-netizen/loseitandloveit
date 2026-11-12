@@ -27,7 +27,7 @@ export function workoutDetail(w, units) {
   return [`${Math.round(w.duration_min)} min`, a?.label, w.intensity].filter(Boolean).join(' · ')
 }
 
-export const workoutLook = (w) =>
+const workoutLook = (w) =>
   w.kind === 'treadmill' ? { icon: 'run', color: 'var(--red)' }
     : w.kind === 'other' ? { icon: 'bolt', color: 'var(--green)' }
       : { icon: w.source === 'apple' ? 'flame' : 'house', color: 'var(--orange)' }
@@ -52,7 +52,7 @@ function WorkoutRow({ w, units, onEdit, showDate }) {
 }
 
 /** The day's workouts plus an Add button (in the Workouts sheet). */
-export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
+function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
   const { units } = useApp()
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
   return (
@@ -65,7 +65,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
         ))}
         <button className="list-row meal-row add-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
           <span className="dot" />
-          <span className="label">{workouts.length ? 'Add another workout' : 'Treadmill or home workout'}</span>
+          <span className="label">{workouts.length ? 'Add another workout' : 'Log a workout'}</span>
           <span className="meal-add" aria-hidden="true">
             <Icon name="plus" strokeWidth={2.8} />
           </span>
@@ -87,8 +87,9 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
  * 30 days. Opened from the Dashboard, so the Dashboard itself stays small.
  */
 export function WorkoutsSheet({ date, onClose }) {
-  const { store, units, profile, today, openSheet, dataVersion } = useApp()
+  const { store, units, profile, today, openSheet, dataVersion, bumpData, toast } = useApp()
   const day = useDay(date)
+  const [repeating, setRepeating] = useState(false)
   const [recent, setRecent] = useState(null)
   const isToday = date === today
   const workouts = day?.workouts || []
@@ -109,10 +110,52 @@ export function WorkoutsSheet({ date, onClose }) {
   const others = (recent || []).filter((w) => w.log_date !== date).sort((a, b) => (a.log_date < b.log_date ? 1 : a.log_date > b.log_date ? -1 : 0))
   const month = workoutSummary(recent || [])
   const edit = (w) => openSheet('workout', { date: w.log_date, workout: w })
+  // The most recent session up to this day, to log again in one tap.
+  const last = [...(recent || []), ...workouts]
+    .filter((w) => w.log_date <= date)
+    .sort((a, b) => (a.log_date !== b.log_date ? (a.log_date < b.log_date ? 1 : -1) : String(b.created_at || '').localeCompare(String(a.created_at || ''))))[0]
+
+  async function repeat() {
+    if (!last || repeating) return
+    setRepeating(true)
+    try {
+      const added = await store.repeatWorkout(last.id, date)
+      bumpData()
+      toast(`${added.name} logged again`, 'info', {
+        label: 'Undo',
+        run: async () => {
+          try {
+            await store.deleteWorkout(added.id)
+            bumpData()
+          } catch (e) {
+            toast(e.message, 'error')
+          }
+        },
+      })
+    } catch (e) {
+      toast(e.message, 'error')
+    } finally {
+      setRepeating(false)
+    }
+  }
 
   return (
     <Sheet title={`Workouts${isToday ? '' : ` · ${formatDayLabel(date, today)}`}`} onClose={onClose}>
       <ExerciseCard workouts={workouts} error={day?.workoutError} allowance={allowance} onAdd={() => openSheet('workout', { date })} onEdit={edit} />
+
+      {last && (
+        <button type="button" className="repeat-card" disabled={repeating} onClick={repeat} style={{ '--c': workoutLook(last).color }}>
+          <span className="repeat-icon" aria-hidden="true"><Icon name="refresh" strokeWidth={2.4} /></span>
+          <span className="grow">
+            <span className="repeat-eyebrow">Repeat last</span>
+            <span className="repeat-title ellipsis">{last.name}</span>
+            <span className="repeat-sub ellipsis">
+              {Math.round(last.duration_min)} min · {last.calories_burned} kcal · {last.log_date === date ? 'earlier today' : formatShortDate(last.log_date)}
+            </span>
+          </span>
+          <span className="repeat-go">Log</span>
+        </button>
+      )}
 
       <div className="list" style={{ marginTop: 14 }}>
         <button className="list-row has-icon" onClick={() => openSheet('workout', { date, preset: { kind: 'other' } })}>
