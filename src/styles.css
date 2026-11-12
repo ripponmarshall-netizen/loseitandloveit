@@ -56,7 +56,7 @@
   --shadow-pop: 0 10px 30px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.06);
   --spring: cubic-bezier(0.32, 0.72, 0, 1);
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-  --tab-h: 52px;
+  --tab-h: 60px;
   color-scheme: light;
 }
 
@@ -1273,3 +1273,66 @@ input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
   border-top: 0.5px solid var(--sep);
 }
 .input.readonly { display: flex; align-items: center; color: var(--text-2); }
+
+/* ---------- Navigation: one button that unfurls into a row ---------- */
+.nav-dock {
+  position: fixed; left: 0; right: 0; z-index: 21; bottom: calc(env(safe-area-inset-bottom) + 8px);
+  display: flex; justify-content: center; pointer-events: none;
+  transition: transform 0.45s var(--spring), opacity 0.3s var(--ease);
+}
+.nav-dock > * { pointer-events: auto; }
+.nav-dock.hidden { transform: translateY(calc(100% + 40px)); opacity: 0; }
+.kb-open .nav-dock { visibility: hidden; }
+.nav-orb, .nav-rail {
+  background: color-mix(in srgb, var(--card) 74%, transparent);
+  backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  box-shadow: 0 12px 32px -10px rgb(0 0 0 / 0.28), 0 2px 6px rgb(0 0 0 / 0.06), inset 0 0 0 0.5px var(--sep);
+}
+.nav-orb {
+  height: 48px; padding: 0 14px 0 7px; border: 0; border-radius: 999px; cursor: pointer;
+  display: flex; align-items: center; gap: 9px; color: var(--text); font: inherit; font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+  animation: orb-in 0.45s var(--spring) backwards; transition: transform 0.3s var(--spring);
+}
+.nav-orb:active { transform: scale(0.94); }
+.nav-orb .nav-glyph {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--indigo) 60%, var(--purple));
+}
+.nav-orb .nav-glyph svg { width: 19px; height: 19px; }
+.nav-orb .nav-glyph:has(.pg-face-wrap) { background: var(--card-2); }
+.nav-orb-dots { display: flex; gap: 3px; margin-left: 1px; }
+.nav-orb-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--text-3); }
+@keyframes orb-in { from { opacity: 0; transform: scale(0.8); } }
+
+.nav-rail {
+  display: flex; gap: 2px; padding: 6px; border-radius: 30px; max-width: calc(100vw - 24px);
+  overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain;
+  transform-origin: 50% 100%; animation: rail-in 0.5s var(--spring) backwards;
+}
+.nav-rail::-webkit-scrollbar { display: none; }
+@keyframes rail-in { from { opacity: 0; transform: scale(0.4, 0.8); } }
+.nav-item {
+  flex: none; width: 66px; height: 60px; scroll-snap-align: center; border: 0; border-radius: 24px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: none; color: var(--text-2); font: inherit; font-size: 11px; font-weight: 600;
+  animation: item-in 0.5s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 45ms + 40ms);
+  transition: transform 0.3s var(--spring), background-color 0.2s;
+}
+@keyframes item-in { from { opacity: 0; transform: translateY(10px) scale(0.6); } }
+.nav-item:active { transform: scale(0.9); }
+.nav-item .nav-glyph { height: 30px; display: grid; place-items: center; }
+.nav-item .nav-glyph svg { width: 25px; height: 25px; }
+.nav-item.on { color: var(--tint); background: color-mix(in srgb, var(--tint) 12%, transparent); }
+.nav-item .pg-face-wrap { width: 26px; height: 26px; filter: saturate(0.35) opacity(0.75); }
+.nav-item.on .pg-face-wrap { filter: none; }
+.nav-item.log .nav-glyph {
+  width: 40px; height: 40px; margin-top: -4px; border-radius: 50%; color: #fff;
+  background: linear-gradient(135deg, var(--blue), var(--indigo) 60%, var(--purple));
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--indigo) 40%, transparent);
+}
+.nav-item.log .nav-glyph svg { width: 22px; height: 22px; }
+.nav-item.log { color: var(--text); }
+.nav-scrim { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.1); animation: fade-in 0.2s var(--ease) both; }
+
+/* The + sheet's logging card matches the Dashboard's */
+.sheet .log-dock { background: var(--sheet-card); border-radius: 22px; margin-bottom: 4px; }

@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { useApp } from '../appContext.js'
-import { BOTTLE_ML, GLASS_ML, planDoseStatus, doseStatusLabel, formatWater } from '../lib/glp1.js'
+import { planDoseStatus, doseStatusLabel } from '../lib/glp1.js'
 import { suggestLogActions } from '../lib/quicklog.js'
 import { useWaterTarget } from './Checkin.jsx'
-import { QuickLogField, useQuickLog } from './QuickLog.jsx'
+import { LogDock, useQuickLog } from './QuickLog.jsx'
 import { Icon, Sheet } from './ui.jsx'
 
 const ACTIONS = {
@@ -17,8 +17,8 @@ const ACTIONS = {
 }
 
 /**
- * The + button: type anything ("2 glasses water", "30 min walk", "patty"),
- * or tap what you want to log. The order follows the time of day and what's due.
+ * The + button: the same logging card as the Dashboard (type anything, or tap
+ * a shortcut), plus two suggestions for right now.
  */
 export default function LogSheet({ date, onClose }) {
   const { weights, today, mode } = useApp()
@@ -44,7 +44,7 @@ export default function LogSheet({ date, onClose }) {
 
   return (
     <Sheet title="Log" onClose={onClose}>
-      <QuickLogField q={q} />
+      <LogDock date={date} bare onDone={onClose} className="sheet-dock" />
 
       <div className="list-header">Suggested</div>
       <div className="list">
@@ -64,26 +64,6 @@ export default function LogSheet({ date, onClose }) {
         ))}
       </div>
 
-      <div className="list-header">Everything</div>
-      <div className="log-grid">
-        {Object.entries(ACTIONS).map(([id, a], i) => (
-          <button key={id} className="log-tile rise" style={{ '--i': i, '--c': a.color }} onClick={() => open(id)}>
-            <span className="log-tile-icon">
-              <Icon name={a.icon} strokeWidth={2.2} />
-            </span>
-            <span className="log-tile-label">{a.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="list-header">
-        Water · <span className="no-caps">{formatWater(water.ml)} of {formatWater(waterTarget)}</span>
-      </div>
-      <div className="grid3">
-        <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => water.add(GLASS_ML)}>+ Glass</button>
-        <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => water.add(BOTTLE_ML)}>+ Bottle</button>
-        <button className="btn gray" disabled={water.ml <= 0} onClick={() => water.add(-GLASS_ML)}>− Glass</button>
-      </div>
     </Sheet>
   )
 }

@@ -489,10 +489,20 @@ export function homeWorkoutKcal({ weightKg, minutes, activity, intensity = 'mode
   return Math.round(((met - 1) * weightKg * minutes) / 60)
 }
 
+// Any other activity (cycling, swimming, sport...): its moderate MET, scaled
+// for effort. Net of resting, like the rest of the app.
+export const EFFORT_SCALE = { light: 0.75, moderate: 1, hard: 1.25 }
+export function activityKcal({ weightKg, minutes, met, intensity = 'moderate' }) {
+  if (!weightKg || !minutes || !(met > 0)) return 0
+  const m = met * (EFFORT_SCALE[intensity] ?? 1)
+  return Math.max(0, Math.round(((m - 1) * weightKg * minutes) / 60))
+}
+
+/** w.met (from the workout type) is used for kind 'other'. */
 export function estimateWorkoutKcal(w, weightKg) {
-  return w.kind === 'treadmill'
-    ? treadmillKcal({ weightKg, minutes: w.duration_min, speedKmh: w.speed_kmh, inclinePct: w.incline_pct, mode: w.mode })
-    : homeWorkoutKcal({ weightKg, minutes: w.duration_min, activity: w.activity, intensity: w.intensity })
+  if (w.kind === 'treadmill') return treadmillKcal({ weightKg, minutes: w.duration_min, speedKmh: w.speed_kmh, inclinePct: w.incline_pct, mode: w.mode })
+  if (w.kind === 'other') return activityKcal({ weightKg, minutes: w.duration_min, met: w.met ?? 4, intensity: w.intensity })
+  return homeWorkoutKcal({ weightKg, minutes: w.duration_min, activity: w.activity, intensity: w.intensity })
 }
 
 // How much of today's exercise to add to the food target (0, 25, 50 or 100 %).
