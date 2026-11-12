@@ -14,7 +14,8 @@ import Settings from './components/Settings.jsx'
 import AddFood from './components/AddFood.jsx'
 import LogSheet from './components/LogSheet.jsx'
 import { MealBreakdownSheet } from './components/MealBreakdown.jsx'
-import { WorkoutSheet } from './components/Workouts.jsx'
+import { WorkoutSheet, WorkoutsSheet } from './components/Workouts.jsx'
+import { AppleImportSheet } from './components/AppleImport.jsx'
 import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
 import { MimiBubble, MimiProvider } from './components/MimiCheckin.jsx'
@@ -67,6 +68,8 @@ const SHEETS = {
   log: LogSheet,
   food: AddFood,
   workout: WorkoutSheet,
+  workouts: WorkoutsSheet,
+  appleImport: AppleImportSheet,
   water: WaterSheet,
   mood: MoodSheet,
   weight: WeightSheet,

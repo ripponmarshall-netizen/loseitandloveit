@@ -304,3 +304,46 @@ test('workouts and food are cleaned to the table check constraints, so sync neve
   assert.equal(e.calories, 999999.9)
   assert.equal(e.protein_g, 99999.9)
 })
+
+test('Apple Fitness imports keep their own ids, so a second import adds nothing', async () => {
+  const { engine, sync, remote } = setup()
+  const w = { id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', log_date: '2026-11-02', started_at: '2026-11-02 07:05:12 -0500', kind: 'other', name: 'Outdoor cycle', duration_min: 41.5, distance_km: 14.2, activity: 'hiit', calories_burned: 312, calories_source: 'device', source: 'apple' }
+  assert.deepEqual(await engine.importWorkouts([w]), { added: 1, skipped: 0 })
+  assert.deepEqual(await engine.importWorkouts([w]), { added: 0, skipped: 1 })
+  const [row] = await engine.listWorkouts('2026-11-02', '2026-11-02')
+  assert.equal(row.id, w.id)
+  assert.equal(row.kind, 'other')
+  assert.equal(row.distance_km, 14.2)
+  assert.equal(row.calories_source, 'device')
+  assert.equal(row.source, 'apple')
+  assert.equal(row.created_at, '2026-11-02T12:05:12.000Z')
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.workouts[0].id, w.id)
+  assert.equal(remote.tables.workouts[0].kind, 'other')
+})
+
+test('before migration 0006, an imported workout syncs as an at-home one instead of being dropped', async () => {
+  const remote = fakeRemote()
+  remote.reject = (table, row) =>
+    table === 'workouts' && (row.kind === 'other' || row.calories_source === 'device')
+      ? new RemoteError('new row violates check constraint "workouts_kind_check"', { permanent: true, code: '23514' })
+      : null
+  const { engine, sync } = setup({ remote })
+  await engine.importWorkouts([{ id: 'aaaaaaaa-bbbb-4ccc-8ddd-000000000001', log_date: '2026-11-02', kind: 'other', name: 'Swim', duration_min: 30, distance_km: 1, activity: 'hiit', calories_burned: 250, calories_source: 'device', source: 'apple' }])
+  assert.equal(await sync.flush(), true)
+  const [r] = remote.tables.workouts
+  assert.equal(r.kind, 'home')
+  assert.equal(r.activity, 'hiit')
+  assert.equal(r.distance_km, null)
+  assert.equal(r.calories_source, 'manual')
+  assert.equal(r.calories_burned, 250)
+})
+
+test('unknown workout kinds and calorie sources are cleaned to what the table allows', async () => {
+  const eng = createEngine({ persist: () => {} })
+  const w = await eng.addWorkout({ log_date: '2026-11-01', kind: 'zumba', calories_source: 'guess', distance_km: 3 })
+  assert.equal(w.kind, 'home')
+  assert.equal(w.calories_source, 'estimate')
+  assert.equal(w.distance_km, null)
+  assert.equal(w.source, null)
+})

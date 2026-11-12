@@ -123,6 +123,10 @@ export function createSync({ engine, remote, userId, emit = () => {}, now = () =
           // Another device already made this day's row: update that one.
           const { id, ...rest } = attempt
           return await remote.upsert(name, [rest], { onConflict: 'user_id,log_date' })
+        } else if (e.code === '23514' && table === 'workouts' && (attempt.kind === 'other' || attempt.calories_source === 'device')) {
+          // Before 0006 the table only knows treadmill/home and estimate/manual:
+          // keep the workout as an at-home one rather than lose it.
+          attempt = { ...attempt, kind: attempt.kind === 'other' ? 'home' : attempt.kind, distance_km: attempt.kind === 'other' ? null : attempt.distance_km, calories_source: attempt.calories_source === 'device' ? 'manual' : attempt.calories_source }
         } else if (e.code === '23503' && attempt.food_id) {
           attempt = { ...attempt, food_id: null } // the saved food was deleted elsewhere
         } else throw e

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { HOME_ACTIVITIES, estimateWorkoutKcal, kmhToMph, mphToKmh } from '../lib/calc.js'
-import { formatDayLabel } from '../lib/dates.js'
+import { HOME_ACTIVITIES, estimateWorkoutKcal, exerciseAllowance, kmhToMph, mphToKmh, workoutSummary } from '../lib/calc.js'
+import { addDays, formatDayLabel, formatShortDate } from '../lib/dates.js'
+import { useDay } from '../lib/useDay.js'
 import { HOME_PRESETS, TREADMILL_PRESETS } from '../data/workouts.js'
-import { Icon, Segmented, Sheet } from './ui.jsx'
+import { Icon, Segmented, Sheet, Spinner } from './ui.jsx'
 
 const r1 = (n) => Math.round(n * 10) / 10
 const INTENSITY = [
@@ -12,7 +13,10 @@ const INTENSITY = [
   ['hard', 'Hard'],
 ]
 
+const distanceText = (km, units) => (km ? (units === 'imperial' ? `${r1(kmhToMph(Number(km)))} mi` : `${r1(Number(km))} km`) : null)
+
 export function workoutDetail(w, units) {
+  if (w.kind === 'other') return [`${Math.round(w.duration_min)} min`, distanceText(w.distance_km, units)].filter(Boolean).join(' · ')
   if (w.kind === 'treadmill') {
     const speed = w.speed_kmh ? (units === 'imperial' ? `${r1(kmhToMph(w.speed_kmh))} mph` : `${r1(w.speed_kmh)} km/h`) : null
     const incline = w.incline_pct ? `${r1(w.incline_pct)}% incline` : null
@@ -22,7 +26,31 @@ export function workoutDetail(w, units) {
   return [`${Math.round(w.duration_min)} min`, a?.label, w.intensity].filter(Boolean).join(' · ')
 }
 
-/** The day's workouts plus an Add button (in the Dashboard's Exercise sheet). */
+export const workoutLook = (w) =>
+  w.kind === 'treadmill' ? { icon: 'run', color: 'var(--red)' }
+    : w.kind === 'other' ? { icon: 'bolt', color: 'var(--green)' }
+      : { icon: w.source === 'apple' ? 'flame' : 'house', color: 'var(--orange)' }
+
+function WorkoutRow({ w, units, onEdit, showDate }) {
+  const look = workoutLook(w)
+  return (
+    <button className="list-row has-icon" onClick={() => onEdit(w)}>
+      <span className="row-icon" style={{ '--c': look.color }}>
+        <Icon name={look.icon} />
+      </span>
+      <span className="label">
+        <span className="ellipsis" style={{ display: 'block' }}>
+          {w.name}
+          {w.source === 'apple' && <> <span className="badge fitness">Fitness</span></>}
+        </span>
+        <span className="sub ellipsis">{showDate ? `${formatShortDate(w.log_date)} · ` : ''}{workoutDetail(w, units)}</span>
+      </span>
+      <span className="entry-kcal">{w.calories_burned}</span>
+    </button>
+  )
+}
+
+/** The day's workouts plus an Add button (in the Workouts sheet). */
 export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
   const { units } = useApp()
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
@@ -32,16 +60,7 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
       <div className="list">
         {error && <div className="list-row small danger-text">{error}</div>}
         {workouts.map((w) => (
-          <button key={w.id} className="list-row has-icon" onClick={() => onEdit(w)}>
-            <span className="row-icon" style={{ '--c': w.kind === 'treadmill' ? 'var(--red)' : 'var(--orange)' }}>
-              <Icon name={w.kind === 'treadmill' ? 'run' : 'house'} />
-            </span>
-            <span className="label">
-              <span className="ellipsis" style={{ display: 'block' }}>{w.name}</span>
-              <span className="sub ellipsis">{workoutDetail(w, units)}</span>
-            </span>
-            <span className="entry-kcal">{w.calories_burned}</span>
-          </button>
+          <WorkoutRow key={w.id} w={w} units={units} onEdit={onEdit} />
         ))}
         <button className="list-row meal-row add-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
           <span className="dot" />
@@ -59,6 +78,71 @@ export function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
         </div>
       )}
     </section>
+  )
+}
+
+/**
+ * The Workouts section: the day's sessions, Apple Fitness import and the last
+ * 30 days. Opened from the Dashboard, so the Dashboard itself stays small.
+ */
+export function WorkoutsSheet({ date, onClose }) {
+  const { store, units, profile, today, openSheet, dataVersion } = useApp()
+  const day = useDay(date)
+  const [recent, setRecent] = useState(null)
+  const isToday = date === today
+  const workouts = day?.workouts || []
+  const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
+  const allowance = exerciseAllowance(burned, profile.exercise_eatback_pct)
+
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listWorkouts(addDays(today, -29), today)
+      .then((w) => !cancelled && setRecent(w))
+      .catch(() => !cancelled && setRecent([]))
+    return () => {
+      cancelled = true
+    }
+  }, [store, today, dataVersion])
+
+  const others = (recent || []).filter((w) => w.log_date !== date).sort((a, b) => (a.log_date < b.log_date ? 1 : a.log_date > b.log_date ? -1 : 0))
+  const month = workoutSummary(recent || [])
+  const edit = (w) => openSheet('workout', { date: w.log_date, workout: w })
+
+  return (
+    <Sheet title={`Workouts${isToday ? '' : ` · ${formatDayLabel(date, today)}`}`} onClose={onClose}>
+      <ExerciseCard workouts={workouts} error={day?.workoutError} allowance={allowance} onAdd={() => openSheet('workout', { date })} onEdit={edit} />
+
+      <div className="list" style={{ marginTop: 14 }}>
+        <button className="list-row has-icon" onClick={() => openSheet('appleImport')}>
+          <span className="row-icon fitness-icon" aria-hidden="true">
+            <Icon name="heart" strokeWidth={2.4} />
+          </span>
+          <span className="label">
+            Import from Apple Fitness
+            <span className="sub">Search your Health export and pick workouts</span>
+          </span>
+          <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
+            <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="list-header">
+        Last 30 days{month.sessions ? <span className="no-caps"> · {month.sessions} sessions · {month.minutes} min · {month.kcal.toLocaleString('en-GB')} kcal</span> : ''}
+      </div>
+      {recent === null ? (
+        <div className="center" style={{ padding: 20, color: 'var(--text-3)' }}><Spinner /></div>
+      ) : others.length ? (
+        <div className="list">
+          {others.slice(0, 40).map((w) => (
+            <WorkoutRow key={w.id} w={w} units={units} onEdit={edit} showDate />
+          ))}
+        </div>
+      ) : (
+        <p className="list-footer">Nothing else in the last 30 days yet.</p>
+      )}
+    </Sheet>
   )
 }
 
@@ -91,7 +175,8 @@ function fromWorkout(w, units) {
     activity: w.activity || 'bodyweight',
     intensity: w.intensity || 'moderate',
     exercises: (w.exercises || []).map((x) => ({ name: x.name, sets: x.sets ?? '', reps: x.reps ?? '' })),
-    manualKcal: w.calories_source === 'manual' ? String(w.calories_burned) : '',
+    manualKcal: w.calories_source === 'manual' || w.calories_source === 'device' ? String(w.calories_burned) : '',
+    distance_km: w.distance_km,
     notes: w.notes || '',
   }
 }
@@ -106,7 +191,7 @@ function fromPreset(p = {}) {
 }
 
 export function WorkoutSheet({ date, workout, preset, onClose }) {
-  const { store, units, currentWeightKg, profile, bumpData, toast, today } = useApp()
+  const { store, units, currentWeightKg, profile, bumpData, toast, today, openSheet } = useApp()
   const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : fromPreset(preset)))
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
@@ -124,7 +209,9 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
       notes: f.notes.trim() || null,
     }
     const w =
-      f.kind === 'treadmill'
+      f.kind === 'other'
+        ? { ...base, name: f.name.trim() || workout?.name || 'Workout', activity: f.activity, intensity: f.intensity, distance_km: f.distance_km ?? null }
+        : f.kind === 'treadmill'
         ? {
             ...base,
             name: f.name.trim() || (f.mode === 'run' ? 'Treadmill run' : 'Treadmill walk'),
@@ -142,8 +229,16 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
           }
     const estimate = estimateWorkoutKcal(w, weightKg)
     const manual = f.manualKcal !== '' && !Number.isNaN(Number(f.manualKcal))
-    return { ...w, calories_burned: manual ? Math.round(Number(f.manualKcal)) : estimate, calories_source: manual ? 'manual' : 'estimate', estimate }
-  }, [f, date, minutes, speedKmh, weightKg])
+    // Apple's own figure stays marked as from the watch until it's changed.
+    const fromDevice = workout?.calories_source === 'device' && manual && Math.round(Number(f.manualKcal)) === Number(workout.calories_burned)
+    return {
+      ...w,
+      source: workout?.source ?? null,
+      calories_burned: manual ? Math.round(Number(f.manualKcal)) : estimate,
+      calories_source: fromDevice ? 'device' : manual ? 'manual' : 'estimate',
+      estimate,
+    }
+  }, [f, date, minutes, speedKmh, weightKg, workout])
 
   function onSpeed(e) {
     const v = e.target.value
@@ -210,7 +305,8 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
     label: 'Undo',
     run: async () => {
       try {
-        await store.addWorkout(workout)
+        // Imported workouts keep their id, so a later import still knows them.
+        await (workout.source === 'apple' ? store.importWorkouts([workout]) : store.addWorkout(workout))
         bumpData()
       } catch (e) {
         toast(e.message, 'error')
@@ -233,20 +329,37 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
         </div>
       )}
 
-      <div className="chips" style={{ marginBottom: 12 }}>
+      {!workout && (
+        <button type="button" className="link small fitness-link" onClick={() => openSheet('appleImport')}>
+          <Icon name="heart" size={15} strokeWidth={2.4} /> Import from Apple Fitness instead
+        </button>
+      )}
+
+      {f.kind !== 'other' && <div className="chips" style={{ marginBottom: 12 }}>
         {(f.kind === 'treadmill' ? TREADMILL_PRESETS : HOME_PRESETS).map((p) => (
           <button key={p.name} type="button" className="chip tinted" style={{ '--c': f.kind === 'treadmill' ? 'var(--red)' : 'var(--orange)' }} onClick={() => (f.kind === 'treadmill' ? applyTreadmillPreset(p) : applyHomePreset(p))}>
             {p.name}
           </button>
         ))}
-      </div>
+      </div>}
 
       <label className="field">
         <span>Name (optional)</span>
         <input className="input" value={f.name} onChange={set('name')} placeholder={f.kind === 'treadmill' ? 'Treadmill walk' : 'Home workout'} />
       </label>
 
-      {f.kind === 'treadmill' ? (
+      {f.kind === 'other' ? (
+        <div className="grid2">
+          <label className="field">
+            <span>Minutes</span>
+            <input className="input" inputMode="decimal" value={f.duration_min} onChange={set('duration_min')} />
+          </label>
+          <div className="field">
+            <span>Distance</span>
+            <div className="input readonly num">{distanceText(f.distance_km, units) || '—'}</div>
+          </div>
+        </div>
+      ) : f.kind === 'treadmill' ? (
         <>
           <div className="grid3">
             <label className="field">
@@ -336,7 +449,9 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
           <input className="input" inputMode="numeric" placeholder="e.g. from the treadmill screen" value={f.manualKcal} onChange={set('manualKcal')} />
         </label>
         <p className="tiny muted" style={{ margin: '6px 0 0' }}>
-          Net calories above resting, from {f.kind === 'treadmill' ? 'the ACSM treadmill equations' : 'published MET values'} and your weight. Treadmill screens usually show gross calories and read higher.
+          {record.calories_source === 'device'
+            ? 'Using Apple’s active energy for this workout: calories above resting, as the app counts them.'
+            : `Net calories above resting, from ${f.kind === 'treadmill' ? 'the ACSM treadmill equations' : 'published MET values'} and your weight. Treadmill screens usually show gross calories and read higher.`}
         </p>
       </div>
 

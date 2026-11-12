@@ -117,7 +117,7 @@ export function suggestLogActions({ hour, onGlp1, dose, weighed, moodLogged, wat
       score: waterMl < expected - 250 ? 68 : 42,
       reason: waterMl < expected - 250 ? 'Behind for this time of day' : 'Add a glass',
     },
-    { id: 'exercise', score: 45, reason: 'Treadmill or home' },
+    { id: 'exercise', score: 45, reason: 'Log one or import from Apple Fitness' },
     { id: 'mood', score: moodLogged ? 12 : hour >= 17 ? 74 : 35, reason: moodLogged ? 'Update check-in' : 'How are you today?' },
     { id: 'weight', score: weighed ? 8 : hour < 11 ? 80 : 30, reason: weighed ? 'Already weighed' : hour < 11 ? 'Morning weigh-in' : 'Weigh-in' },
     {

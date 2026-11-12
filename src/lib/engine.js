@@ -37,7 +37,8 @@ export const TABLES = {
   weights: { remote: 'weights', cols: ['id', 'log_date', 'weight_kg', 'note'], perDay: true },
   workouts: {
     remote: 'workouts',
-    cols: ['id', 'log_date', 'kind', 'name', 'duration_min', 'speed_kmh', 'incline_pct', 'distance_km', 'mode', 'activity', 'intensity', 'exercises', 'calories_burned', 'calories_source', 'notes', 'created_at'],
+    // source: 0006 (Apple Fitness imports)
+    cols: ['id', 'log_date', 'kind', 'name', 'duration_min', 'speed_kmh', 'incline_pct', 'distance_km', 'mode', 'activity', 'intensity', 'exercises', 'calories_burned', 'calories_source', 'notes', 'source', 'created_at'],
     dated: true,
     migration: 'supabase/migrations/0002_workouts.sql',
   },
@@ -85,30 +86,44 @@ const INTENSITY_SET = new Set(['light', 'moderate', 'hard'])
 const servingsOf = (v) => Math.min(50, Math.max(0.01, Number(v ?? 1) || 1))
 const clamp15 = (v) => (v == null || v === '' ? null : Math.max(1, Math.min(5, Math.round(Number(v)))))
 
+// kind: 'treadmill' | 'home' | 'other' (0006: imported types such as cycling or
+// swimming). An 'other' row still carries a valid at-home activity, which sync
+// falls back to if the database hasn't had 0006 yet.
+const KIND_SET = new Set(['treadmill', 'home', 'other'])
+const CAL_SOURCE_SET = new Set(['estimate', 'manual', 'device'])
+
 function cleanWorkout(w) {
-  const treadmill = w.kind === 'treadmill'
+  const kind = KIND_SET.has(w.kind) ? w.kind : 'home'
+  const treadmill = kind === 'treadmill'
   return {
     log_date: w.log_date,
-    kind: treadmill ? 'treadmill' : 'home',
-    name: String(w.name || (treadmill ? 'Treadmill' : 'Home workout')).slice(0, 120),
+    kind,
+    name: String(w.name || (treadmill ? 'Treadmill' : kind === 'other' ? 'Workout' : 'Home workout')).slice(0, 120),
     // Within the table's check constraints: a row the server rejects is dropped by sync.
     duration_min: between(Math.round((Number(w.duration_min) > 0 ? Number(w.duration_min) : 1) * 10) / 10, 0.1, 600),
     speed_kmh: treadmill && num(w.speed_kmh) > 0 ? Math.min(25, Math.round(num(w.speed_kmh) * 10) / 10) || 0.1 : null,
     incline_pct: treadmill ? between(num(w.incline_pct) ?? 0, -5, 40) : null,
-    distance_km: treadmill && num(w.distance_km) != null ? between(Math.round(num(w.distance_km) * 100) / 100, 0, 100) : null,
+    distance_km: kind !== 'home' && num(w.distance_km) != null ? between(Math.round(num(w.distance_km) * 100) / 100, 0, 100) : null,
     mode: treadmill ? (w.mode === 'run' ? 'run' : 'walk') : null,
     activity: treadmill ? null : ACTIVITY_SET.has(w.activity) ? w.activity : 'bodyweight',
     intensity: treadmill ? null : INTENSITY_SET.has(w.intensity) ? w.intensity : 'moderate',
-    exercises: treadmill
+    exercises: kind !== 'home'
       ? []
       : (w.exercises || [])
           .filter((x) => x && String(x.name || '').trim())
           .slice(0, 30)
           .map((x) => ({ name: String(x.name).slice(0, 80), sets: num(x.sets), reps: String(x.reps ?? '').slice(0, 20) })),
     calories_burned: Math.max(0, Math.min(5000, Math.round(Number(w.calories_burned) || 0))),
-    calories_source: w.calories_source === 'manual' ? 'manual' : 'estimate',
+    calories_source: CAL_SOURCE_SET.has(w.calories_source) ? w.calories_source : 'estimate',
     notes: w.notes ? String(w.notes).slice(0, 1000) : null,
+    source: w.source === 'apple' ? 'apple' : null,
   }
+}
+
+// '2026-11-02 07:05:12 -0500' -> ISO, so imported workouts sort by when they happened.
+function appleTime(s) {
+  const t = Date.parse(String(s).replace(' ', 'T').replace(/ ([+-]\d{2})(\d{2})$/, '$1:$2'))
+  return Number.isFinite(t) ? new Date(t).toISOString() : null
 }
 
 function cleanDose(d, nowIso) {
@@ -383,6 +398,24 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     },
     async deleteWorkout(id) {
       remove('workouts', id)
+    },
+    /**
+     * Add workouts that carry their own id (Apple Fitness imports use a stable
+     * id per workout), skipping any already here. Returns { added, skipped }.
+     */
+    async importWorkouts(list) {
+      const have = new Set(db.workouts.map((w) => w.id))
+      let added = 0
+      for (const w of list || []) {
+        if (!w?.id || !w.log_date || have.has(w.id)) continue
+        const row = { ...cleanWorkout(w), id: String(w.id), created_at: w.started_at ? appleTime(w.started_at) || now() : now() }
+        db.workouts.push(row)
+        have.add(row.id)
+        wrote('workouts', 'upsert', row.id)
+        added++
+      }
+      if (added) save()
+      return { added, skipped: (list?.length || 0) - added }
     },
 
     // GLP-1 doses
