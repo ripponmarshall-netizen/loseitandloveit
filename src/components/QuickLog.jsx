@@ -178,7 +178,7 @@ export function LogDock({ date, onDone, autoFocus = false, bare = false, classNa
   return (
     <section className={`${bare ? '' : 'card '}log-dock ${className}`} style={style}>
       <QuickLogField q={q} autoFocus={autoFocus} placeholder={mode === 'cloud' ? 'What did you eat or do?' : 'Patty, 2 glasses water…'} />
-      <div className="dock-row" style={{ '--n': items.length }}>
+      <div className="dock-row">
         {items.map((it) => (
           <button key={it.id} type="button" className={`dock-item${it.done ? ' done' : ''}${it.alert ? ' alert' : ''}`} style={{ '--c': it.color }} onClick={it.onClick} aria-label={it.aria}>
             <span className="dock-icon" aria-hidden="true">
