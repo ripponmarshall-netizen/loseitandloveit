@@ -80,11 +80,11 @@ const SHEETS = {
 }
 
 /**
- * Safari-style tab bar: slides away while you scroll down to read, and
+ * Safari-style: the nav button slides away while you scroll down to read, and
  * comes back when you scroll up, reach the top or bottom, or touch the
  * bottom edge of the screen.
  */
-function useAutoHideTabBar(enabled, resetKey) {
+function useAutoHideNav(enabled, resetKey) {
   const [hidden, setHidden] = useState(false)
   const holdUntil = useRef(0)
   // Switching tabs (and the smooth scroll that can follow, e.g. Dashboard →
@@ -383,7 +383,7 @@ export default function App() {
     },
     [goTab],
   )
-  const [tabbarHidden, setTabbarHidden] = useAutoHideTabBar(tab !== 'coach' && !!store && !!profile, tab)
+  const [navHidden, setNavHidden] = useAutoHideNav(tab !== 'coach' && !!store && !!profile, tab)
 
   const enterLocalMode = useCallback(() => {
     writeMode('local')
@@ -452,10 +452,10 @@ export default function App() {
       <MimiProvider>
         <SyncPill sync={sync} />
         {['today', 'progress', 'coach', 'settings'].map(show)}
-        {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={tabbarHidden} />}
-        {/* Touching the bottom edge brings a hidden tab bar back. */}
-        {tabbarHidden && <div className="tabbar-reveal" onTouchStart={() => setTabbarHidden(false)} onClick={() => setTabbarHidden(false)} aria-hidden="true" />}
-        <NavDock tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} hidden={tabbarHidden} />
+        {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={navHidden} />}
+        {/* Touching the bottom edge brings the hidden nav button back. */}
+        {navHidden && <div className="nav-reveal" onTouchStart={() => setNavHidden(false)} onClick={() => setNavHidden(false)} aria-hidden="true" />}
+        <NavDock tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} hidden={navHidden} />
         {sheet && SHEETS[sheet.type] && (() => {
           const S = SHEETS[sheet.type]
           return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />

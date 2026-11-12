@@ -13,7 +13,7 @@ import { Icon } from './ui.jsx'
  * "Log anything": one phrase -> the right action. Shared by the Dashboard's
  * composer and the + sheet. Food goes to the AI estimate in cloud mode.
  */
-export function useQuickLog(date, { onDone } = {}) {
+function useQuickLog(date, { onDone } = {}) {
   const { openSheet, profile, today, units, store, reloadWeights, toast, mode } = useApp()
   const day = useDay(date)
   const plan = glp1Plan(profile)
@@ -81,11 +81,11 @@ export function useQuickLog(date, { onDone } = {}) {
     food: preview.drink || mode !== 'cloud' ? `Search ${preview.drink ? 'drinks' : 'food'} for “${preview.query}”` : `Estimate “${preview.query}” with AI`,
   }[preview.type]
 
-  return { text, setText, submit, hint, open, day, water, plan }
+  return { text, setText, submit, hint, day, water, plan }
 }
 
 /** The input itself: sparkle, field, send. */
-export function QuickLogField({ q, placeholder = 'Patty, 2 glasses water…', className = '', autoFocus = false }) {
+function QuickLogField({ q, placeholder = 'Patty, 2 glasses water…', className = '', autoFocus = false }) {
   return (
     <>
       <form onSubmit={q.submit} className={`quick-log ${className}`}>

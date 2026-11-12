@@ -347,3 +347,21 @@ test('unknown workout kinds and calorie sources are cleaned to what the table al
   assert.equal(w.distance_km, null)
   assert.equal(w.source, null)
 })
+
+test('repeating a workout copies it to the new day as your own entry, and syncs', async () => {
+  const { engine, sync, remote } = setup()
+  await engine.importWorkouts([{ id: 'aaaaaaaa-bbbb-4ccc-8ddd-000000000009', log_date: '2026-11-02', kind: 'other', name: 'Outdoor cycle', duration_min: 45, distance_km: 14, activity: 'hiit', intensity: 'hard', calories_burned: 410, calories_source: 'device', source: 'apple' }])
+  const r = await engine.repeatWorkout('aaaaaaaa-bbbb-4ccc-8ddd-000000000009', '2026-11-05')
+  assert.notEqual(r.id, 'aaaaaaaa-bbbb-4ccc-8ddd-000000000009')
+  assert.equal(r.log_date, '2026-11-05')
+  assert.equal(r.name, 'Outdoor cycle')
+  assert.equal(r.duration_min, 45)
+  assert.equal(r.intensity, 'hard')
+  assert.equal(r.calories_burned, 410)
+  assert.equal(r.calories_source, 'manual') // not from the watch any more
+  assert.equal(r.source, null)
+  assert.equal((await engine.listWorkouts('2026-11-01', '2026-11-30')).length, 2)
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.workouts.length, 2)
+  await assert.rejects(engine.repeatWorkout('nope', '2026-11-05'), /not found|Workout/i)
+})

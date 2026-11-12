@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { GROUPS, matchesWorkout, readAppleWorkouts } from '../lib/appleHealth.js'
+import { matchesWorkout, readAppleWorkouts } from '../lib/appleHealth.js'
+import { WORKOUT_GROUPS as GROUPS } from '../data/appleWorkouts.js'
 import { addDays } from '../lib/dates.js'
 import { workoutDetail } from './Workouts.jsx'
 import { Icon, Segmented, Sheet } from './ui.jsx'
