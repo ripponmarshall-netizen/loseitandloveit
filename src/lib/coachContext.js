@@ -5,15 +5,21 @@ import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summar
 
 // The compact snapshot of the user's data sent with each coach message.
 // Keep it small: it is re-sent every turn and billed as input tokens.
+const moodsOn = (moods, date) => {
+  const list = moods.filter((m) => m.log_date === date)
+  return list.length > 1 ? list.map((m) => MOOD_BY_V[m.mood]?.label).join(' → ') : undefined
+}
+
 export async function buildCoachContext({ store, profile, series, targets, today }) {
   const entries = await store.listEntries(addDays(today, -27), today)
   const daily = dailyTotals(entries)
   // Workouts are optional: if the table isn't there yet, coach without them.
   const workouts = await store.listWorkouts(addDays(today, -13), today).catch(() => [])
   // GLP-1 and check-ins are optional too (migration 0003).
-  const [doses, logs] = await Promise.all([
+  const [doses, logs, moods] = await Promise.all([
     store.listRecentDoses(12).catch(() => []),
     store.listDailyLogs(addDays(today, -13), today).catch(() => []),
+    store.listMoods ? store.listMoods(addDays(today, -13), today).catch(() => []) : [],
   ])
   const last = series[series.length - 1]
   const rate = weeklyRate(series)
@@ -96,10 +102,12 @@ export async function buildCoachContext({ store, profile, series, targets, today
             avg_appetite_1to5_3_is_normal: appetite,
             avg_water_ml: waterMl,
             symptom_days: Object.fromEntries(symptoms.map(([id, n]) => [SYMPTOM_BY_ID[id]?.label || id, n])),
-          }))(summariseDailyLogs(logs)),
+          }))(summariseDailyLogs(logs, moods)),
           days: logs.map((l) => ({
             date: l.log_date,
             mood: l.mood ? MOOD_BY_V[l.mood]?.label : undefined,
+            // Several check-ins that day: how the mood moved (oldest first).
+            mood_through_day: moodsOn(moods, l.log_date),
             energy: l.energy || undefined,
             appetite: l.appetite || undefined,
             water_ml: l.water_ml || undefined,

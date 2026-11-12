@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { APPETITE, ENERGY, MOODS, SYMPTOMS } from '../data/glp1.js'
+import { APPETITE, ENERGY, MOOD_BY_V, MOODS, SYMPTOMS } from '../data/glp1.js'
 import { BOTTLE_ML, GLASS_ML, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
 import { displayWeight, inputToKg, isValidWeightKg, weightUnit, weightValue } from '../lib/calc.js'
-import { addDays, formatDayLabel } from '../lib/dates.js'
+import { addDays, formatDayLabel, formatTime, logTimeToIso, timeInputValue, timeMs } from '../lib/dates.js'
 import { Icon, Segmented, Sheet } from './ui.jsx'
 
 /** The day's water goal from the profile and current weight. */
@@ -97,27 +97,66 @@ export function WaterSheet({ date, daily, onClose }) {
   )
 }
 
-/** Mood, energy, appetite and symptoms for one day. */
+/** Today's mood check-ins so far, for the mood sheet. */
+function useMoods(date) {
+  const { store, dataVersion } = useApp()
+  const [moods, setMoods] = useState(null)
+  const [error, setError] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listMoods(date, date)
+      .then((rows) => !cancelled && (setMoods(rows), setError(null)))
+      .catch((e) => !cancelled && (setMoods([]), setError(e.message)))
+    return () => {
+      cancelled = true
+    }
+  }, [store, date, dataVersion])
+  return { moods, error }
+}
+
+/**
+ * A mood check-in (mood and energy right now, as often as you like through
+ * the day) plus the day's appetite, symptoms and note.
+ */
 export function MoodSheet({ date, daily, onClose, initialMood }) {
   const { store, bumpData, toast, today, profile } = useApp()
   const onGlp1 = !!glp1Plan(profile)
-  const [mood, setMood] = useState(initialMood ?? daily?.mood ?? null)
-  const [energy, setEnergy] = useState(daily?.energy ?? null)
+  const isToday = date === today
+  const { moods, error: moodError } = useMoods(date)
+  const [mood, setMood] = useState(initialMood ?? null)
+  const [energy, setEnergy] = useState(null)
+  const [time, setTime] = useState(() => (isToday ? '' : '12:00'))
   const [appetite, setAppetite] = useState(daily?.appetite ?? null)
   const [symptoms, setSymptoms] = useState(daily?.symptoms || [])
   const [note, setNote] = useState(daily?.note || '')
   const [busy, setBusy] = useState(false)
   const day = formatDayLabel(date, today)
   const urgent = symptoms.some((s) => SYMPTOMS.find((x) => x.id === s)?.urgent)
+  // A day logged before moods could repeat shows its one mood as a check-in.
+  // Only once the check-ins have loaded (and loaded fine), or it would stand in for real ones.
+  const list = moods?.length ? moods : moods && !moodError && daily?.mood ? [{ id: 'legacy', mood: daily.mood, energy: daily.energy, legacy: true }] : []
 
-  const toggle = (id) => setSymptoms((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]))
+  const dayChanged =
+    (appetite ?? null) !== (daily?.appetite ?? null) ||
+    note.trim() !== (daily?.note || '') ||
+    [...symptoms].sort().join() !== [...(daily?.symptoms || [])].sort().join()
+
+  const toggle = (id) => setSymptoms((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
   async function save() {
+    if (mood == null && !dayChanged) return onClose()
+    // Blank = now today; midday on a past day (never today's clock on an old date).
+    const loggedAt = mood == null ? undefined : time || !isToday ? logTimeToIso(date, time || '12:00', profile.day_start_hour ?? 4) : undefined
+    if (loggedAt && Date.parse(loggedAt) > Date.now() + 5 * 60e3) return toast('That time hasn’t happened yet.', 'error')
     setBusy(true)
     try {
-      await store.saveDailyLog(date, { mood, energy, appetite, symptoms, note: note.trim() || null })
+      if (mood != null) {
+        await store.addMood(date, { mood, energy, logged_at: loggedAt })
+      }
+      if (dayChanged) await store.saveDailyLog(date, { appetite, symptoms, note: note.trim() || null })
       bumpData()
-      toast('Check-in saved')
+      toast(mood != null ? `Feeling ${MOOD_BY_V[mood].label.toLowerCase()}, saved` : 'Check-in saved')
       onClose()
     } catch (e) {
       toast(e.message, 'error')
@@ -125,8 +164,20 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
     }
   }
 
+  async function remove(m) {
+    if (!window.confirm(`Delete the ${m.logged_at ? `${formatTime(m.logged_at)} ` : ''}check-in (${MOOD_BY_V[m.mood]?.label})?`)) return
+    try {
+      if (m.legacy) await store.saveDailyLog(date, { mood: null, energy: null })
+      else await store.deleteMood(m.id)
+      bumpData()
+      toast('Check-in deleted')
+    } catch (e) {
+      toast(e.message, 'error')
+    }
+  }
+
   return (
-    <Sheet title={`How are you${day === 'Today' ? ' today' : ` · ${day}`}?`} onClose={onClose}>
+    <Sheet title={`How are you feeling${isToday ? ' now' : ` · ${day}`}?`} onClose={onClose}>
       <div className="mood-row" role="radiogroup" aria-label="Mood">
         {MOODS.map((m) => (
           <button
@@ -147,10 +198,40 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
       <div className="list-header">Energy</div>
       <Segmented label="Energy" value={energy} onChange={(v) => setEnergy(v === energy ? null : v)} options={ENERGY} />
 
-      <div className="list-header">Appetite{onGlp1 ? ' (GLP-1 often lowers it)' : ''}</div>
+      <label className="field" style={{ marginTop: 12 }}>
+        <span>Time{isToday ? ' (leave blank for now)' : !time ? ' (12:00 pm if left blank)' : ''}</span>
+        <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+      </label>
+
+      {list.length > 0 && (
+        <>
+          <div className="list-header">{isToday ? 'Earlier today' : 'Check-ins that day'}</div>
+          <div className="checkin-list">
+            {[...list].reverse().map((m) => {
+              const mv = MOOD_BY_V[m.mood]
+              const en = ENERGY.find(([v]) => v === m.energy)?.[1]
+              return (
+                <div key={m.id} className="list-row" style={{ padding: '8px 2px' }}>
+                  <span aria-hidden="true" style={{ fontSize: 22, marginRight: 10 }}>{mv?.emoji}</span>
+                  <span className="label">
+                    {mv?.label}
+                    <span className="sub">{[m.logged_at ? formatTime(m.logged_at) : m.legacy ? 'Earlier' : '', en && `Energy: ${en.toLowerCase()}`].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <button type="button" className="btn sm gray" onClick={() => remove(m)} aria-label={`Delete ${mv?.label} check-in`}>
+                    <Icon name="trash" size={16} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+      {moodError && <p className="small muted">Couldn’t load earlier check-ins: {moodError}</p>}
+
+      <div className="list-header">Appetite today{onGlp1 ? ' (GLP-1 often lowers it)' : ''}</div>
       <Segmented label="Appetite" value={appetite} onChange={(v) => setAppetite(v === appetite ? null : v)} options={APPETITE} />
 
-      <div className="list-header">Anything bothering you?</div>
+      <div className="list-header">Anything bothering you today?</div>
       <div className="chip-wrap">
         {SYMPTOMS.map((s) => (
           <button
@@ -173,10 +254,13 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
       )}
 
       <label className="field" style={{ marginTop: 16 }}>
-        <span>Note (optional)</span>
+        <span>Note for the day (optional)</span>
         <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Slept badly after night shift…" maxLength={1000} />
       </label>
-      <button className="btn block" disabled={busy} onClick={save}>Save check-in</button>
+      <button className="btn block" disabled={busy} onClick={save}>
+        {mood != null ? 'Save check-in' : dayChanged ? 'Save' : 'Done'}
+      </button>
+      <p className="list-footer" style={{ margin: '12px 4px 0' }}>Check in as often as you like. Your latest mood is the one shown for the day.</p>
     </Sheet>
   )
 }
@@ -197,13 +281,17 @@ export function weightDelta(kg, prevKg, units) {
 }
 
 /**
- * Log a weigh-in on any day up to today, or edit an existing one: its date,
- * weight and note. `weight` = the weigh-in to edit; `date` = default day.
+ * Log a weigh-in on any day up to today (as many a day as you like), or edit
+ * an existing one: its date, time, weight and note. `weight` = the weigh-in to
+ * edit; `date` = default day.
  */
 export function WeightSheet({ weight, date: initialDate, initialValue, onClose }) {
-  const { store, today, units, weights, reloadWeights, toast } = useApp()
+  const { store, today, units, weights, reloadWeights, toast, profile, openSheet } = useApp()
   const editing = Boolean(weight)
+  const dayStart = profile?.day_start_hour ?? 4
   const [date, setDate] = useState(weight?.log_date || (initialDate && initialDate <= today ? initialDate : today))
+  // Blank = now (new weigh-ins today); otherwise the time it was taken.
+  const [time, setTime] = useState(weight?.weighed_at ? timeInputValue(weight.weighed_at) : '')
   const [val, setVal] = useState(
     weight ? String(r1(weightValue(Number(weight.weight_kg), units))) : initialValue != null ? String(initialValue) : '',
   )
@@ -212,9 +300,17 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
 
   const kg = inputToKg(val, units)
   const future = date > today
-  const clash = weights.find((w) => w.log_date === date && w.id !== weight?.id)
-  const valid = Boolean(date) && !future && kg != null && isValidWeightKg(kg) && !(editing && clash)
-  const prev = [...weights].reverse().find((w) => w.log_date < date && w.id !== weight?.id)
+  const needsTime = !time && date !== today && !(editing && date === weight.log_date)
+  // A weigh-in moved to today with no time is stamped now; to another day, 7:00 am.
+  const movedToToday = editing && !time && date === today && date !== weight.log_date
+  const weighedAt = time ? logTimeToIso(date, time, dayStart) : needsTime ? logTimeToIso(date, '07:00', dayStart) : movedToToday ? new Date().toISOString() : null
+  const futureTime = Boolean(weighedAt) && Date.parse(weighedAt) > Date.now() + 5 * 60e3
+  const valid = Boolean(date) && !future && !futureTime && kg != null && isValidWeightKg(kg)
+  const sameDay = weights.filter((w) => w.log_date === date && w.id !== weight?.id)
+  // The weigh-in just before this one (weights are sorted by day, then time).
+  const at = timeMs
+  const myTime = weighedAt ? at(weighedAt) : editing && date === weight.log_date ? at(weight.weighed_at) : Date.now()
+  const prev = [...weights].reverse().find((w) => w.id !== weight?.id && (w.log_date < date || (w.log_date === date && at(w.weighed_at) < myTime)))
 
   async function run(fn, msg) {
     setBusy(true)
@@ -232,12 +328,13 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
   function save(e) {
     e.preventDefault()
     if (!valid) return
-    const row = { log_date: date, weight_kg: kg, note }
-    run(() => (editing ? store.updateWeight(weight.id, row) : store.upsertWeight(row)), editing ? 'Weigh-in updated' : 'Weight saved')
+    const row = { log_date: date, weight_kg: kg, note, weighed_at: weighedAt }
+    run(() => (editing ? store.updateWeight(weight.id, row) : store.addWeight(row)), editing ? 'Weigh-in updated' : 'Weight saved')
   }
 
   function remove() {
-    if (!window.confirm(`Delete the weigh-in for ${formatDayLabel(weight.log_date, today)}?`)) return
+    const at = weight.weighed_at ? ` at ${formatTime(weight.weighed_at)}` : ''
+    if (!window.confirm(`Delete the weigh-in for ${formatDayLabel(weight.log_date, today)}${at}?`)) return
     run(() => store.deleteWeight(weight.id), 'Weigh-in deleted')
   }
 
@@ -264,7 +361,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
           {val && kg != null && !isValidWeightKg(kg) && <small className="danger-text">That doesn’t look like a realistic adult weight.</small>}
           {prev && kg != null && isValidWeightKg(kg) && (
             <small className="muted">
-              {weightDelta(kg, prev.weight_kg, units)} vs {relDay(prev.log_date, today)} ({displayWeight(Number(prev.weight_kg), units)})
+              {weightDelta(kg, prev.weight_kg, units)} vs {prev.log_date === date && prev.weighed_at ? formatTime(prev.weighed_at) : relDay(prev.log_date, today)} ({displayWeight(Number(prev.weight_kg), units)})
             </small>
           )}
         </label>
@@ -283,27 +380,46 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
         {future && <p className="small danger-text">That date is in the future.</p>}
 
         <label className="field">
+          <span>Time{needsTime ? ' (7:00 am if left blank)' : !time && !editing ? ' (leave blank for now)' : ''}</span>
+          <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+          {futureTime && !future && <small className="danger-text">That time hasn’t happened yet.</small>}
+        </label>
+
+        <label className="field">
           <span>Note (optional)</span>
           <input className="input" maxLength={300} placeholder="After night shift, salty dinner, period week…" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
 
-        {clash && (
-          <p className={`small ${editing ? 'danger-text' : 'muted'}`}>
-            {editing
-              ? `You already have ${displayWeight(Number(clash.weight_kg), units)} on that day. Pick another date or edit that one.`
-              : `This replaces ${displayWeight(Number(clash.weight_kg), units)} already logged that day.`}
-          </p>
+        {sameDay.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="list-header" style={{ marginTop: 0 }}>Also logged {relDay(date, today)}</div>
+            {sameDay.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className="list-row tap"
+                style={{ padding: '8px 2px', width: '100%', background: 'none', border: 0, textAlign: 'left', color: 'var(--text)' }}
+                onClick={() => openSheet('weight', { weight: w })}
+                aria-label={`Edit the ${formatTime(w.weighed_at) || 'earlier'} weigh-in`}
+              >
+                <span className="label">{formatTime(w.weighed_at) || 'Earlier'}</span>
+                <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
+              </button>
+            ))}
+          </div>
         )}
 
         <button className="btn block" disabled={busy || !valid}>
-          {editing ? 'Save changes' : clash ? 'Replace weigh-in' : 'Save'}
+          {editing ? 'Save changes' : 'Save'}
         </button>
         {editing && (
           <button type="button" className="btn destructive block" style={{ marginTop: 10 }} disabled={busy} onClick={remove}>
             Delete weigh-in
           </button>
         )}
-        <p className="list-footer" style={{ margin: '12px 4px 0' }}>One weigh-in per day. Morning, after the toilet, before food. The trend matters more than any one day.</p>
+        <p className="list-footer" style={{ margin: '12px 4px 0' }}>
+          Log as many as you like. Your trend uses each day’s first weigh-in, so for the fairest comparison weigh in the morning, after the toilet, before food.
+        </p>
       </form>
     </Sheet>
   )

@@ -162,7 +162,7 @@ export function createCloudStore(userId) {
   }
 
   // Days older than what the device keeps (only after storage ran short).
-  for (const [name, table] of [['listEntries', 'entries'], ['listWorkouts', 'workouts'], ['listDoses', 'doses'], ['listDailyLogs', 'daily_logs']]) {
+  for (const [name, table] of [['listEntries', 'entries'], ['listWorkouts', 'workouts'], ['listDoses', 'doses'], ['listDailyLogs', 'daily_logs'], ['listMoods', 'mood_logs']]) {
     const base = store[name]
     store[name] = async (from, to) => {
       await ready()

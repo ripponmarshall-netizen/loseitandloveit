@@ -207,7 +207,7 @@ export default function Settings() {
           label="Current weight"
           sub={latestWeighIn ? (latestWeighIn.log_date === today ? 'Weighed today' : `Weighed ${formatShortDate(latestWeighIn.log_date)}`) : 'From your weigh-ins'}
           value={weightKg ? displayWeight(weightKg, units) : '—'}
-          onClick={() => openSheet('weight', latestWeighIn?.log_date === today ? { weight: latestWeighIn } : {})}
+          onClick={() => openSheet('weight')}
         />
         <ListRow icon="ruler" color="var(--purple)" label="Units">
           <div style={{ width: 140 }}>

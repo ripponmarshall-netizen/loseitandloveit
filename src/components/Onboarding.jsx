@@ -13,7 +13,7 @@ const STEPS = [
 ]
 
 export default function Onboarding() {
-  const { saveProfile, store, reloadWeights, today, signOut, mode, toast } = useApp()
+  const { saveProfile, store, reloadWeights, today, signOut, mode, toast, weights } = useApp()
   const form = useProfileForm({})
   const [step, setStep] = useState(0)
   const [err, setErr] = useState(null)
@@ -36,8 +36,12 @@ export default function Onboarding() {
     try {
       // Save the profile last: it flips the app from onboarding to the main screens.
       // The first weigh-in is the weight as typed (weigh-ins keep 0.01 kg), so 230 lb doesn't become 229.9.
-      await store.upsertWeight({ log_date: today, weight_kg: Math.round(exactWeightKg(v.start_weight_kg, v.units) * 100) / 100 })
-      await reloadWeights()
+      // A retry after a failed save mustn't log the same weigh-in twice.
+      const kg = Math.round(exactWeightKg(v.start_weight_kg, v.units) * 100) / 100
+      if (!weights.some((w) => w.log_date === today && Math.abs(Number(w.weight_kg) - kg) < 0.01)) {
+        await store.addWeight({ log_date: today, weight_kg: kg })
+        await reloadWeights()
+      }
       const med = MED_BY_ID[glp1.med]
       await saveProfile(
         glp1.on && Number(glp1.dose) > 0

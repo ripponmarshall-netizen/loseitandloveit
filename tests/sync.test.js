@@ -196,20 +196,117 @@ test('a change the server refuses is dropped, reported and undone by the next pu
   assert.deepEqual((await engine.listEntries('2026-11-10', '2026-11-10')).map((r) => r.name).sort(), ['Fine', 'Good'])
 })
 
-test("a day's row made on two devices merges instead of failing", async () => {
-  const { engine, sync, remote } = setup()
+test('a second weigh-in on a database without 0007 is refused with a message naming the migration', async () => {
+  const { engine, sync, remote, events } = setup()
   await sync.pull({ full: true })
-  remote.tables.weights = [{ id: 'server-id', user_id: USER, log_date: '2026-11-10', weight_kg: 100 }]
-  remote.reject = (table, row, opts) =>
-    table === 'weights' && !opts?.onConflict ? new RemoteError('duplicate key', { permanent: true, code: '23505', status: 409 }) : null
-  await engine.upsertWeight({ log_date: '2026-11-10', weight_kg: 99.5 })
+  // Before 0007: one row per day and no weighed_at column.
+  remote.reject = (table, row) => {
+    if (table !== 'weights') return null
+    if ('weighed_at' in row) return new RemoteError("Could not find the 'weighed_at' column of 'weights' in the schema cache", { permanent: true, code: 'PGRST204', status: 400 })
+    if (remote.tables.weights?.some((x) => x.log_date === row.log_date && x.id !== row.id)) return new RemoteError('duplicate key', { permanent: true, code: '23505', status: 409 })
+    return null
+  }
+  await engine.addWeight({ log_date: '2026-11-10', weight_kg: 100 })
   assert.equal(await sync.flush(), true)
   assert.equal(remote.tables.weights.length, 1)
-  assert.equal(remote.tables.weights[0].weight_kg, 99.5)
-  await sync.pull()
+  await engine.addWeight({ log_date: '2026-11-10', weight_kg: 99.5 })
+  await sync.flush()
+  assert.equal(remote.tables.weights.length, 1)
+  assert.equal(remote.tables.weights[0].weight_kg, 100) // never overwrites the first
+  assert.ok(events.some((e) => e.type === 'error' && /0007_multiple_checkins/.test(e.message)), JSON.stringify(events))
+})
+
+test('several weigh-ins a day: each kept, sorted by time, synced with weighed_at', async () => {
+  const { engine, sync, remote } = setup()
+  await sync.pull({ full: true })
+  await engine.addWeight({ log_date: '2026-11-10', weight_kg: 101, weighed_at: '2026-11-10T22:00:00.000Z' })
+  await engine.addWeight({ log_date: '2026-11-10', weight_kg: 100, weighed_at: '2026-11-10T11:30:00.000Z' })
+  await engine.addWeight({ log_date: '2026-11-09', weight_kg: 100.4 })
   const w = await engine.listWeights()
-  assert.equal(w.length, 1)
-  assert.equal(w[0].id, 'server-id')
+  assert.deepEqual(w.map((x) => x.weight_kg), [100.4, 100, 101])
+  assert.ok(w[0].weighed_at, 'a new weigh-in gets the time it was logged')
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.weights.length, 3)
+  assert.ok(remote.tables.weights.every((x) => x.weighed_at))
+  // Supabase sends '+00:00' timestamps; order must still be by instant.
+  remote.tables.weights.find((x) => x.weight_kg === 101).weighed_at = '2026-11-10T22:00:00+00:00'
+  remote.tables.weights.find((x) => x.weight_kg === 100).weighed_at = '2026-11-10T11:30:00+00:00'
+  await sync.pull({ full: true })
+  assert.deepEqual((await engine.listWeights()).map((x) => x.weight_kg), [100.4, 100, 101])
+  // Editing without a time keeps the one it had; an older row without one stays without.
+  const [first] = await engine.listWeights()
+  const edited = await engine.updateWeight(first.id, { log_date: '2026-11-09', weight_kg: 100.2 })
+  assert.equal(edited.weighed_at, first.weighed_at)
+})
+
+test('mood check-ins: many a day, the daily row mirrors the latest, delete falls back', async () => {
+  const { engine, sync, remote } = setup()
+  await sync.pull({ full: true })
+  await engine.addMood('2026-11-10', { mood: 4, energy: 3, logged_at: '2026-11-10T12:00:00.000Z' })
+  await engine.addMood('2026-11-10', { mood: 2, logged_at: '2026-11-10T20:00:00.000Z' })
+  const late = await engine.addMood('2026-11-10', { mood: 5, energy: 9, logged_at: '2026-11-10T23:00:00.000Z' })
+  assert.equal(late.energy, 5) // clamped to the check constraint
+  await assert.rejects(engine.addMood('2026-11-10', { mood: null }), /Pick a mood/)
+  let [daily] = await engine.listDailyLogs('2026-11-10', '2026-11-10')
+  assert.equal(daily.mood, 5)
+  assert.equal(daily.energy, 5)
+  assert.deepEqual((await engine.listMoods('2026-11-10', '2026-11-10')).map((m) => m.mood), [4, 2, 5])
+  await engine.deleteMood(late.id)
+  ;[daily] = await engine.listDailyLogs('2026-11-10', '2026-11-10')
+  assert.equal(daily.mood, 2)
+  assert.equal(daily.energy, null)
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.mood_logs.length, 2)
+  assert.equal(remote.tables.daily_logs[0].mood, 2)
+  // Water and symptoms on the same day are untouched by mood check-ins.
+  await engine.saveDailyLog('2026-11-10', { water_ml: 750, symptoms: ['nausea'] })
+  await engine.addMood('2026-11-10', { mood: 3, logged_at: '2026-11-10T23:30:00.000Z' })
+  ;[daily] = await engine.listDailyLogs('2026-11-10', '2026-11-10')
+  assert.equal(daily.water_ml, 750)
+  assert.deepEqual(daily.symptoms, ['nausea'])
+  assert.equal(daily.mood, 3)
+})
+
+test("a day's one mood from before 0007 becomes its first check-in, with the daily row's id", async () => {
+  const engine = createEngine({ persist: () => {} })
+  const d = await engine.saveDailyLog('2026-11-01', { mood: 2, energy: 1 })
+  await engine.addMood('2026-11-01', { mood: 4, logged_at: new Date(Date.parse(d.updated_at) + 60e3).toISOString() })
+  const list = await engine.listMoods('2026-11-01', '2026-11-01')
+  assert.deepEqual(list.map((m) => m.mood), [2, 4])
+  assert.equal(list[0].id, d.id) // same id the migration's backfill uses, so it is never doubled
+  // A day that already has check-ins is not backfilled again.
+  await engine.addMood('2026-11-01', { mood: 3, logged_at: new Date(Date.parse(d.updated_at) + 120e3).toISOString() })
+  assert.equal((await engine.listMoods('2026-11-01', '2026-11-01')).length, 3)
+})
+
+test('mood check-ins sync is skipped, not fatal, before the table exists', async () => {
+  const remote = fakeRemote()
+  const fetch = remote.fetch
+  remote.fetch = async (table, opts) => {
+    if (table === 'mood_logs') throw new RemoteError('relation "public.mood_logs" does not exist', { permanent: true, code: '42P01', status: 404 })
+    return fetch(table, opts)
+  }
+  const { engine, sync } = setup({ remote })
+  assert.equal(await sync.pull({ full: true }), true)
+  await engine.addMood('2026-11-10', { mood: 4 })
+  assert.equal((await engine.listMoods('2026-11-10', '2026-11-10')).length, 1)
+})
+
+test('importing a backup twice does not double weigh-ins or mood check-ins', async () => {
+  const engine = createEngine({ persist: () => {} })
+  const data = {
+    weights: [
+      { log_date: '2026-11-01', weight_kg: 100, weighed_at: '2026-11-01T11:00:00.000Z' },
+      { log_date: '2026-11-01', weight_kg: 101, weighed_at: '2026-11-01T23:00:00.000Z' },
+      { log_date: '2026-11-02', weight_kg: 5 }, // bad row: skipped, not fatal
+    ],
+    mood_logs: [{ log_date: '2026-11-01', mood: 4, logged_at: '2026-11-01T12:00:00.000Z' }],
+  }
+  await engine.importAll(data)
+  await engine.importAll(data)
+  assert.equal((await engine.listWeights()).length, 2)
+  assert.equal((await engine.listMoods('2026-11-01', '2026-11-01')).length, 1)
+  assert.equal((await engine.listDailyLogs('2026-11-01', '2026-11-01'))[0].mood, 4)
 })
 
 test('profile: saved offline, kept through a pull, then pushed without unknown columns', async () => {
@@ -276,10 +373,12 @@ test('engine: one implementation behaves like the old local store', async () => 
   assert.ok(all[1].servings > 0)
   await engine.deleteFood(food.id)
   assert.equal((await engine.listEntries('2026-11-10', '2026-11-10'))[0].food_id, null)
-  await engine.upsertWeight({ log_date: '2026-11-09', weight_kg: 100 })
-  const w = await engine.upsertWeight({ log_date: '2026-11-10', weight_kg: 99 })
-  await assert.rejects(engine.updateWeight(w.id, { log_date: '2026-11-09', weight_kg: 99 }), /already have a weigh-in/)
-  await assert.rejects(engine.upsertWeight({ log_date: '2026-11-10', weight_kg: 5 }), /realistic/)
+  await engine.addWeight({ log_date: '2026-11-09', weight_kg: 100 })
+  const w = await engine.addWeight({ log_date: '2026-11-10', weight_kg: 99 })
+  // Two on one day is fine now.
+  await engine.updateWeight(w.id, { log_date: '2026-11-09', weight_kg: 99 })
+  assert.equal((await engine.listWeights()).filter((x) => x.log_date === '2026-11-09').length, 2)
+  await assert.rejects(engine.addWeight({ log_date: '2026-11-10', weight_kg: 5 }), /realistic/)
   assert.match(newId(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 })
 
@@ -364,4 +463,30 @@ test('repeating a workout copies it to the new day as your own entry, and syncs'
   assert.equal(await sync.flush(), true)
   assert.equal(remote.tables.workouts.length, 2)
   await assert.rejects(engine.repeatWorkout('nope', '2026-11-05'), /not found|Workout/i)
+})
+
+test('an old mood never outranks a new check-in, even when water moved the daily row later', async () => {
+  let clock = '2026-11-11T22:00:00.000Z'
+  const engine = createEngine({ persist: () => {}, now: () => clock })
+  await engine.saveDailyLog('2026-11-11', { mood: 2 }) // updated_at 22:00 (e.g. a late water tap)
+  clock = '2026-11-12T15:00:00.000Z'
+  await engine.addMood('2026-11-11', { mood: 5, logged_at: '2026-11-11T17:00:00.000Z' }) // midday Jamaica
+  assert.equal((await engine.listDailyLogs('2026-11-11', '2026-11-11'))[0].mood, 5)
+  assert.deepEqual((await engine.listMoods('2026-11-11', '2026-11-11')).map((m) => m.mood), [2, 5])
+})
+
+test('moving a weigh-in to another day without a time drops the old time', async () => {
+  const engine = createEngine({ persist: () => {} })
+  const w = await engine.addWeight({ log_date: '2026-11-10', weight_kg: 100, weighed_at: '2026-11-10T12:00:00Z' })
+  assert.equal((await engine.updateWeight(w.id, { log_date: '2026-11-10', weight_kg: 99 })).weighed_at, '2026-11-10T12:00:00.000Z')
+  assert.equal((await engine.updateWeight(w.id, { log_date: '2026-11-11', weight_kg: 99 })).weighed_at, null)
+})
+
+test('restoring a backup matches weigh-in times however the server wrote them', async () => {
+  const engine = createEngine({
+    persist: () => {},
+    initial: { weights: [{ id: 'w1', log_date: '2026-11-01', weight_kg: 100, weighed_at: '2026-11-01T11:00:00+00:00' }] },
+  })
+  await engine.importAll({ weights: [{ log_date: '2026-11-01', weight_kg: 100, weighed_at: '2026-11-01T11:00:00.000Z' }] })
+  assert.equal((await engine.listWeights()).length, 1)
 })

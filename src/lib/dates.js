@@ -75,3 +75,38 @@ export function formatTimeUntil(iso, todayIso) {
   const months = Math.round(days / 30.44)
   return months < 24 ? `in ${months} months` : `in ${Math.round(months / 12)} years`
 }
+
+// ---------- times of day (weigh-ins, mood check-ins) ----------
+
+/** A timestamp as milliseconds (0 if missing). Supabase sends '+00:00', the device writes 'Z'. */
+export const timeMs = (iso) => (iso ? Date.parse(iso) || 0 : 0)
+
+const TIME_FMT = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true })
+
+/** "6:40 am" for an ISO timestamp, or '' if there isn't one. */
+export function formatTime(iso) {
+  const t = iso ? Date.parse(iso) : NaN
+  return Number.isFinite(t) ? TIME_FMT.format(new Date(t)).replace(/\s?([ap])\.?m\.?$/i, ' $1m').toLowerCase() : ''
+}
+
+/** "HH:MM" (local) for an <input type="time">. */
+export function timeInputValue(iso = new Date().toISOString()) {
+  const d = new Date(Date.parse(iso))
+  return Number.isFinite(d.getTime()) ? `${pad(d.getHours())}:${pad(d.getMinutes())}` : ''
+}
+
+/**
+ * A logged day plus a local "HH:MM" -> ISO timestamp. With a day start hour
+ * (shift workers), times before it belong to the next calendar morning:
+ * 2:00 am on Tuesday's log is Wednesday 2:00 am.
+ */
+export function logTimeToIso(iso, hhmm, dayStartHour = 0) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm || ''))
+  if (!iso || !m) return null
+  const [h, min] = [Number(m[1]), Number(m[2])]
+  if (h > 23 || min > 59) return null
+  const d = parseISODate(iso)
+  if (h < dayStartHour) d.setDate(d.getDate() + 1)
+  d.setHours(h, min, 0, 0)
+  return d.toISOString()
+}

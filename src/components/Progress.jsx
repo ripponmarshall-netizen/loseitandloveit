@@ -10,7 +10,7 @@ import { MOOD_BY_V, SYMPTOM_BY_ID } from '../data/glp1.js'
 import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } from '../lib/glp1.js'
 import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget, weightDelta } from './Checkin.jsx'
-import { addDays, formatEta, formatShortDate, formatTimeUntil, lastNDates } from '../lib/dates.js'
+import { addDays, formatEta, formatShortDate, formatTime, formatTimeUntil, lastNDates } from '../lib/dates.js'
 import { Sparkline, TrendChart } from './Charts.jsx'
 import { Icon, Segmented } from './ui.jsx'
 
@@ -483,6 +483,7 @@ function Wellbeing({ today }) {
   const { store, dataVersion, openSheet } = useApp()
   const waterTarget = useWaterTarget()
   const [logs, setLogs] = useState(null)
+  const [moods, setMoods] = useState([])
   const dates = lastNDates(today, 14)
   useEffect(() => {
     let cancelled = false
@@ -490,6 +491,10 @@ function Wellbeing({ today }) {
       .listDailyLogs(dates[0], today)
       .then((rows) => !cancelled && setLogs(rows))
       .catch(() => !cancelled && setLogs([]))
+    store
+      .listMoods(dates[0], today)
+      .then((rows) => !cancelled && setMoods(rows))
+      .catch(() => !cancelled && setMoods([]))
     return () => {
       cancelled = true
     }
@@ -497,7 +502,9 @@ function Wellbeing({ today }) {
   }, [store, today, dataVersion])
   if (!logs) return null
   const byDate = Object.fromEntries(logs.map((l) => [l.log_date, l]))
-  const sum = summariseDailyLogs(logs)
+  const sum = summariseDailyLogs(logs, moods)
+  const checkins = {}
+  for (const m of moods) checkins[m.log_date] = (checkins[m.log_date] || 0) + 1
   return (
     <section className="card">
       <div className="row between" style={{ marginBottom: 12 }}>
@@ -508,7 +515,7 @@ function Wellbeing({ today }) {
         {dates.map((d) => {
           const m = MOOD_BY_V[byDate[d]?.mood]
           return (
-            <span key={d} className={`mood-cell${m ? ' has' : ''}`} title={`${formatShortDate(d)}: ${m ? m.label : 'no check-in'}`} style={{ '--c': m?.color }}>
+            <span key={d} className={`mood-cell${m ? ' has' : ''}`} title={`${formatShortDate(d)}: ${m ? `${m.label}${checkins[d] > 1 ? ` (latest of ${checkins[d]})` : ''}` : 'no check-in'}`} style={{ '--c': m?.color }}>
               {m ? m.emoji : ''}
             </span>
           )
@@ -580,11 +587,11 @@ function WeighIns({ weights }) {
             className="list-row weigh-row tap"
             style={{ padding: '10px 2px', width: '100%', background: 'none', border: 0, textAlign: 'left', color: 'var(--text)' }}
             onClick={() => openSheet('weight', { weight: w })}
-            aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}`}
+            aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}${w.weighed_at ? ` at ${formatTime(w.weighed_at)}` : ''}`}
           >
             <span className="label">
               {w.log_date === today ? 'Today' : formatShortDate(w.log_date)}
-              {w.note && <span className="sub ellipsis">{w.note}</span>}
+              {(w.weighed_at || w.note) && <span className="sub ellipsis">{[formatTime(w.weighed_at), w.note].filter(Boolean).join(' · ')}</span>}
             </span>
             {prev && <span className="delta num">{weightDelta(w.weight_kg, prev.weight_kg, units)}</span>}
             <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
@@ -599,7 +606,7 @@ function WeighIns({ weights }) {
           {showAll ? 'Show less' : `Show all ${list.length}`}
         </button>
       )}
-      {list.length > 0 && <p className="tiny muted" style={{ margin: '8px 0 0' }}>Tap a weigh-in to change its weight, date or note, or delete it.</p>}
+      {list.length > 0 && <p className="tiny muted" style={{ margin: '8px 0 0' }}>Tap a weigh-in to change its weight, date, time or note, or delete it. The trend uses each day’s first weigh-in.</p>}
     </section>
   )
 }
