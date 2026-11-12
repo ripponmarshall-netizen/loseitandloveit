@@ -2,16 +2,17 @@ import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { displayWeight, entryTotals, exerciseAllowance, sumEntries, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
-import { addDays, formatDayLabel, formatLongDate, formatShortDate } from '../lib/dates.js'
+import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
 import { MOOD_BY_V } from '../data/glp1.js'
-import { GLASS_ML, dailyNudge, doseStatusLabel, formatDose, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
+import { dailyNudge, doseStatusLabel, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
+import { guessMeal } from '../lib/quicklog.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
+import { QuickLogField, useQuickLog } from './QuickLog.jsx'
 import { Avatar, Icon, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
-import { ExerciseCard } from './Workouts.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
-import { Sparkline } from './Charts.jsx'
 
+const RING_C = 2 * Math.PI * 16.5
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
 
 export default function Today() {
@@ -19,7 +20,6 @@ export default function Today() {
   const day = useDay(date)
   const [editing, setEditing] = useState(null)
   const [copying, setCopying] = useState(false)
-  const [showExercise, setShowExercise] = useState(false)
   const entries = day?.entries ?? null
   const workouts = day?.workouts || []
   const daily = day?.daily || null
@@ -84,85 +84,34 @@ export default function Today() {
   const signedRate =
     rate == null ? null : `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(weightValue(rate, units)).toFixed(1)} ${weightUnit(units)}/wk`
 
-  // Small cards: weight, GLP-1 (if on one), water, mood. Exercise sits full width below.
-  const small = [
-    <Tile
-      key="weight"
-      icon="scale"
-      color="var(--indigo)"
-      label="Weight"
-      value={lastTrend ? displayWeight(lastTrend.weight, units) : 'Weigh in'}
-      sub={lastTrend ? (signedRate ? `Trend ${signedRate}` : weighIn ? 'Weighed today' : `Weighed ${formatShortDate(lastTrend.date)}`) : 'Morning is best'}
-      done={!!weighIn}
-      onClick={() => (series.length ? openProgress('weight') : openSheet('weight', { date }))}
-      onPlus={() => openSheet('weight', weighIn ? { weight: weighIn } : { date })}
-      plusLabel={weighIn ? 'Edit this weigh-in' : 'Log a weigh-in'}
-      footer={trendPts.length >= 2 ? <Sparkline values={trendPts.map((p) => weightValue(p.trend, units))} color="var(--indigo)" width={120} height={30} /> : null}
-    />,
-    plan && (
-      <Tile
-        key="glp1"
-        icon={plan.route === 'oral' ? 'pill' : 'syringe'}
-        color="var(--purple)"
-        label="GLP-1"
-        value={dose ? doseStatusLabel(dose) : '…'}
-        sub={`${plan.name} ${formatDose(plan.dose, plan.unit)}`}
-        alert={dose?.state === 'due' || dose?.state === 'overdue'}
-        done={dose?.state === 'taken'}
-        onClick={() => openSheet('dose', { date })}
-      />
-    ),
-    <Tile
-      key="water"
-      icon="drop"
-      color="var(--cyan)"
-      label="Water"
-      value={formatWater(water.ml)}
-      sub={`of ${formatWater(waterTarget)}`}
-      pct={water.ml / waterTarget}
-      onClick={() => openSheet('water', { date, daily })}
-      onPlus={() => water.add(GLASS_ML)}
-      plusLabel="Add a glass of water"
-    />,
-    <Tile
-      key="mood"
-      icon={mood ? null : 'smile'}
-      emoji={mood?.emoji}
-      color={mood?.color || 'var(--yellow)'}
-      label="Mood"
-      value={mood ? mood.label : 'Check in'}
-      sub={daily?.symptoms?.length ? `${daily.symptoms.length} symptom${daily.symptoms.length > 1 ? 's' : ''}` : 'How are you?'}
-      onClick={() => openSheet('mood', { date, daily })}
-    />,
+  const nextMeal = isToday ? guessMeal() : 'dinner'
+  // One row of shortcuts that double as status: what's logged, at a glance.
+  const dock = [
+    { id: 'meal', icon: 'fork', color: 'var(--orange)', label: 'Meal', value: MEAL_LABEL[nextMeal], onClick: () => openAdd({ meal: nextMeal }), aria: `Log ${MEAL_LABEL[nextMeal]}` },
+    {
+      id: 'water', icon: 'drop', color: 'var(--cyan)', label: 'Water', value: formatWater(water.ml), pct: water.ml / waterTarget,
+      done: water.ml >= waterTarget, onClick: () => openSheet('water', { date, daily }), aria: `Water: ${formatWater(water.ml)} of ${formatWater(waterTarget)}`,
+    },
+    {
+      id: 'workout', icon: 'run', color: 'var(--red)', label: 'Workout', value: workouts.length ? fmt(burned) : '—', unit: workouts.length ? 'kcal' : '',
+      done: workouts.length > 0, alert: !!day?.workoutError, onClick: () => openSheet('workouts', { date }),
+      aria: workouts.length ? `Workouts: ${workouts.length}, ${fmt(burned)} kcal` : 'Workouts: none yet',
+    },
+    {
+      id: 'mood', icon: mood ? null : 'smile', emoji: mood?.emoji, color: mood?.color || 'var(--yellow)', label: 'Mood', value: mood ? mood.label : '—',
+      done: !!mood, onClick: () => openSheet('mood', { date, daily }), aria: `Mood: ${mood ? mood.label : 'not checked in'}`,
+    },
+    {
+      id: 'weight', icon: 'scale', color: 'var(--indigo)', label: 'Weight', value: lastTrend ? weightValue(lastTrend.weight, units).toFixed(1) : '—', unit: lastTrend ? weightUnit(units) : '',
+      done: !!weighIn, onClick: () => openSheet('weight', weighIn ? { weight: weighIn } : { date }),
+      aria: lastTrend ? `Weight ${displayWeight(lastTrend.weight, units)}${signedRate ? `, trend ${signedRate}` : ''}` : 'Log a weigh-in',
+    },
+    plan && {
+      id: 'dose', icon: plan.route === 'oral' ? 'pill' : 'syringe', color: 'var(--purple)', label: 'GLP-1', value: dose ? shortDose(dose) : '…',
+      done: dose?.state === 'taken', alert: dose?.state === 'due' || dose?.state === 'overdue', onClick: () => openSheet('dose', { date }),
+      aria: `GLP-1: ${dose ? doseStatusLabel(dose) : ''}`,
+    },
   ].filter(Boolean)
-
-  const exercise = {
-    onClick: () => (workouts.length ? setShowExercise(true) : openSheet('workout', { date })),
-    value: workouts.length ? `${fmt(burned)} kcal` : 'Not yet',
-    sub: day?.workoutError
-      ? day.workoutError
-      : workouts.length
-        ? `${workouts.length} session${workouts.length > 1 ? 's' : ''}${allowance > 0 ? ` · +${fmt(allowance)} to target` : ''}`
-        : 'Treadmill or home workout',
-  }
-  // With an odd number of small cards the last row would be half empty, so
-  // Exercise joins the grid as a small card; otherwise it sits full width below.
-  const exerciseInGrid = small.length % 2 === 1
-  if (exerciseInGrid) {
-    small.push(
-      <Tile
-        key="exercise"
-        icon="run"
-        color="var(--red)"
-        label="Exercise"
-        value={exercise.value}
-        sub={!day?.workoutError && allowance > 0 ? `+${fmt(allowance)} to target` : exercise.sub}
-        onClick={exercise.onClick}
-        onPlus={() => openSheet('workout', { date })}
-        plusLabel="Add workout"
-      />,
-    )
-  }
 
   return (
     <div className="dashboard">
@@ -212,27 +161,7 @@ export default function Today() {
         </button>
       </section>
 
-      <div className="bento">
-        {small.map((t, i) => (
-          <div key={t.key} className="rise" style={{ '--i': i + 1 }}>{t}</div>
-        ))}
-      </div>
-
-      {!exerciseInGrid && (
-        <div className="tile wide rise" style={{ '--c': 'var(--red)', '--i': small.length + 1 }}>
-          <button className="tile-main row-tile" onClick={exercise.onClick} aria-label={workouts.length ? `Exercise: ${burned} kcal burned` : 'Log exercise'}>
-            <span className="tile-icon" aria-hidden="true"><Icon name="run" strokeWidth={2.2} /></span>
-            <span className="grow">
-              <span className="tile-label">Exercise</span>
-              <span className="tile-value">{exercise.value}</span>
-              <span className="tile-sub ellipsis">{exercise.sub}</span>
-            </span>
-          </button>
-          <button className="tile-plus" aria-label="Add workout" onClick={() => openSheet('workout', { date })}>
-            <Icon name="plus" strokeWidth={3} />
-          </button>
-        </div>
-      )}
+      <LogDock date={date} items={dock} />
 
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
@@ -303,23 +232,6 @@ export default function Today() {
       )}
 
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
-      {showExercise && (
-        <Sheet title={`Exercise${isToday ? '' : ` · ${formatDayLabel(date, today)}`}`} onClose={() => setShowExercise(false)}>
-          <ExerciseCard
-            workouts={workouts}
-            error={day?.workoutError}
-            allowance={allowance}
-            onAdd={() => {
-              setShowExercise(false)
-              openSheet('workout', { date })
-            }}
-            onEdit={(w) => {
-              setShowExercise(false)
-              openSheet('workout', { date, workout: w })
-            }}
-          />
-        </Sheet>
-      )}
     </div>
   )
 }
@@ -341,32 +253,45 @@ function MacroMini({ label, value, target, color }) {
   )
 }
 
-/** A concise Dashboard card. The + acts without opening anything. */
-function Tile({ icon, emoji, color, value, sub, label, pct, onClick, onPlus, plusLabel, alert, done, footer }) {
+// "Due today" -> "Due"; the full label is in the dose sheet.
+function shortDose(dose) {
+  if (dose.state === 'taken') return 'Taken'
+  if (dose.state === 'overdue') return 'Overdue'
+  if (dose.state === 'none') return 'Start'
+  if (dose.state === 'due') return 'Due'
+  return doseStatusLabel(dose).replace(/^Next\s*/i, '')
+}
+
+/**
+ * The Dashboard's one logging surface: type anything (AI handles food), or tap
+ * a shortcut. The shortcuts show the day's status, so no separate cards.
+ */
+function LogDock({ date, items }) {
+  const { mode } = useApp()
+  const q = useQuickLog(date)
   return (
-    <div className={`tile${alert ? ' alert' : ''}${done ? ' done' : ''}`} style={{ '--c': color }}>
-      <button className="tile-main" onClick={onClick} aria-label={`${label}: ${value}, ${sub}`}>
-        <span className="tile-top">
-          <span className="tile-icon" aria-hidden="true">
-            {emoji ? <span className="tile-emoji">{emoji}</span> : <Icon name={icon} strokeWidth={2.2} />}
-          </span>
-          <span className="tile-label">{label}</span>
-        </span>
-        <span className="tile-value">{value}</span>
-        <span className="tile-sub ellipsis">{sub}</span>
-        {pct != null && (
-          <span className="tile-bar" aria-hidden="true">
-            <i style={{ width: `${Math.min(100, Math.round(pct * 100))}%` }} />
-          </span>
-        )}
-        {footer && <span className="tile-footer">{footer}</span>}
-      </button>
-      {onPlus && (
-        <button className="tile-plus" aria-label={plusLabel} onClick={onPlus}>
-          <Icon name="plus" strokeWidth={3} />
-        </button>
-      )}
-    </div>
+    <section className="card log-dock rise" style={{ '--i': 1 }}>
+      <QuickLogField q={q} placeholder={mode === 'cloud' ? 'What did you eat or do?' : 'Patty, 2 glasses water…'} />
+      <div className="dock-row" style={{ '--n': items.length }}>
+        {items.map((it) => (
+          <button key={it.id} type="button" className={`dock-item${it.done ? ' done' : ''}${it.alert ? ' alert' : ''}`} style={{ '--c': it.color }} onClick={it.onClick} aria-label={it.aria}>
+            <span className="dock-icon" aria-hidden="true">
+              {it.emoji ? <span className="dock-emoji">{it.emoji}</span> : <Icon name={it.icon} size={18} strokeWidth={2.2} />}
+              {it.pct != null && (
+                <svg className="dock-ring" viewBox="0 0 36 36">
+                  <circle cx="18" cy="18" r="16.5" strokeDasharray={`${Math.min(1, it.pct) * RING_C} ${RING_C}`} />
+                </svg>
+              )}
+            </span>
+            <span className="dock-value num ellipsis">
+              {it.value}
+              {it.unit && <span className="dock-unit"> {it.unit}</span>}
+            </span>
+            <span className="dock-label ellipsis">{it.label}</span>
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 

@@ -257,6 +257,13 @@ export default function Settings() {
           options={EATBACK_OPTIONS}
           onChange={(v) => saveField({ exercise_eatback_pct: Number(v) })}
         />
+        <ListRow
+          icon="heart"
+          color="var(--pink)"
+          label="Apple Fitness"
+          sub="Import workouts from a Health export"
+          onClick={() => openSheet('appleImport')}
+        />
         <MenuRow
           icon="drop"
           color="var(--cyan)"
