@@ -49,7 +49,7 @@ export function toForm(p = {}) {
     goal_weight: w(p.goal_weight_kg),
     activity_level: p.activity_level || 'light',
     weekly_rate_kg: p.weekly_rate_kg != null ? snapPace(Number(p.weekly_rate_kg), units) : PACES[units][1][0],
-    day_start_hour: p.day_start_hour ?? 4,
+    day_start_hour: p.day_start_hour ?? 0,
     coach_notes: p.coach_notes || '',
     calorie_target_override: p.calorie_target_override ? String(p.calorie_target_override) : '',
     protein_target_override: p.protein_target_override ? String(p.protein_target_override) : '',

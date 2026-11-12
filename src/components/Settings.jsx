@@ -244,7 +244,7 @@ export default function Settings() {
           icon="moon"
           color="var(--indigo)"
           label="Day starts at"
-          value={String(profile.day_start_hour ?? 4)}
+          value={String(profile.day_start_hour ?? 0)}
           options={DAY_START_OPTIONS}
           onChange={(v) => saveField({ day_start_hour: Number(v) })}
         />

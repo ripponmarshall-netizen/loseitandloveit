@@ -147,7 +147,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
   async function save() {
     if (mood == null && !dayChanged) return onClose()
     // Blank = now today; midday on a past day (never today's clock on an old date).
-    const loggedAt = mood == null ? undefined : time || !isToday ? logTimeToIso(date, time || '12:00', profile.day_start_hour ?? 4) : undefined
+    const loggedAt = mood == null ? undefined : time || !isToday ? logTimeToIso(date, time || '12:00', profile.day_start_hour ?? 0) : undefined
     if (loggedAt && Date.parse(loggedAt) > Date.now() + 5 * 60e3) return toast('That time hasn’t happened yet.', 'error')
     setBusy(true)
     try {
@@ -288,7 +288,7 @@ export function weightDelta(kg, prevKg, units) {
 export function WeightSheet({ weight, date: initialDate, initialValue, onClose }) {
   const { store, today, units, weights, reloadWeights, toast, profile, openSheet } = useApp()
   const editing = Boolean(weight)
-  const dayStart = profile?.day_start_hour ?? 4
+  const dayStart = profile?.day_start_hour ?? 0
   const [date, setDate] = useState(weight?.log_date || (initialDate && initialDate <= today ? initialDate : today))
   // Blank = now (new weigh-ins today); otherwise the time it was taken.
   const [time, setTime] = useState(weight?.weighed_at ? timeInputValue(weight.weighed_at) : '')
