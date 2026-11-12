@@ -48,7 +48,7 @@ export function AppleImportSheet({ onClose }) {
     let last = 0
     try {
       const list = await readAppleWorkouts(file, {
-        dayStartHour: profile.day_start_hour ?? 4,
+        dayStartHour: profile.day_start_hour ?? 0,
         weightKg: currentWeightKg || Number(profile.start_weight_kg) || null,
         onProgress: (p, n) => {
           // Keep re-renders to a few a second on a big file.

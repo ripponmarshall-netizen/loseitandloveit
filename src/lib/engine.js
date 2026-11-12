@@ -9,6 +9,7 @@
 // Pure: no browser or Supabase imports. Storage is injected so it runs in tests.
 
 import { cleanConditions } from './calc.js'
+import { timeMs as ms } from './dates.js'
 
 export const PROFILE_FIELDS = [
   'display_name', 'sex', 'birth_year', 'height_cm', 'start_weight_kg', 'goal_weight_kg',
@@ -25,6 +26,8 @@ export const PROFILE_FIELDS = [
 // Local table -> Supabase table and the columns that are synced.
 //   dated:   has log_date; routine syncs only fetch a recent window
 //   perDay:  one row per day (unique on user_id + log_date)
+//   requires: a newer migration whose absence shows up as a duplicate-key
+//             error (sync names it instead of a raw database message)
 //   recent:  only the newest N rows are kept on the device
 //   migration: the file to run if the table is missing
 export const TABLES = {
@@ -34,7 +37,8 @@ export const TABLES = {
     cols: ['id', 'log_date', 'meal', 'name', 'serving', 'servings', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'source', 'food_id', 'created_at'],
     dated: true,
   },
-  weights: { remote: 'weights', cols: ['id', 'log_date', 'weight_kg', 'note'], perDay: true },
+  // Several a day since 0007 (weighed_at orders them; the trend uses each day's first).
+  weights: { remote: 'weights', cols: ['id', 'log_date', 'weighed_at', 'weight_kg', 'note'], requires: 'supabase/migrations/0007_multiple_checkins.sql' },
   workouts: {
     remote: 'workouts',
     // source: 0006 (Apple Fitness imports)
@@ -55,6 +59,13 @@ export const TABLES = {
     perDay: true,
     migration: 'supabase/migrations/0003_glp1_checkins.sql',
   },
+  // Each mood check-in through the day; daily_logs.mood/energy mirror the latest.
+  mood_logs: {
+    remote: 'mood_logs',
+    cols: ['id', 'log_date', 'logged_at', 'mood', 'energy', 'note', 'created_at'],
+    dated: true,
+    migration: 'supabase/migrations/0007_multiple_checkins.sql',
+  },
   coach_messages: { remote: 'coach_messages', cols: ['id', 'role', 'content', 'created_at'], recent: 100 },
   insights: {
     remote: 'coach_insights',
@@ -65,7 +76,7 @@ export const TABLES = {
 }
 export const TABLE_NAMES = Object.keys(TABLES)
 
-export const emptyDb = () => ({ profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], coach_messages: [], insights: [] })
+export const emptyDb = () => ({ profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], mood_logs: [], coach_messages: [], insights: [] })
 
 // ---------- cleaning: the same rules the database enforces ----------
 
@@ -172,15 +183,26 @@ export function pickProfile(p) {
   return out
 }
 
-function cleanWeight({ log_date, weight_kg, note }) {
+// A valid timestamp as ISO, or null.
+const isoTime = (v) => {
+  const t = v == null || v === '' ? NaN : Date.parse(v)
+  return Number.isFinite(t) ? new Date(t).toISOString() : null
+}
+
+function cleanWeight({ log_date, weight_kg, note, weighed_at }) {
   const kg = Math.round(Number(weight_kg) * 100) / 100
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(log_date || ''))) throw new Error('Pick a date for the weigh-in.')
   if (!(kg >= 30 && kg <= 350)) throw new Error('Enter a realistic weight.')
   const n = note == null ? '' : String(note).trim().slice(0, 300)
-  return { log_date, weight_kg: kg, note: n || null }
+  return { log_date, weighed_at: isoTime(weighed_at), weight_kg: kg, note: n || null }
 }
 
-const duplicateWeighIn = (date) => new Error(`You already have a weigh-in on ${date}. Edit or delete that one instead.`)
+function cleanMood({ mood, energy, note, logged_at }, nowIso) {
+  const m = clamp15(mood)
+  if (m == null) throw new Error('Pick a mood.')
+  const n = note == null ? '' : String(note).trim().slice(0, 300)
+  return { mood: m, energy: clamp15(energy), note: n || null, logged_at: isoTime(logged_at) || nowIso }
+}
 
 function cleanEntry(e) {
   return {
@@ -260,6 +282,10 @@ export function newId() {
 
 const byCreated = (a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0)
 const byDate = (a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : 0)
+// Weigh-ins: by day, then by time (older rows without a time come first).
+// Times are compared as instants (ms): Supabase sends '+00:00', the device writes 'Z'.
+const byWeighed = (a, b) => byDate(a, b) || ms(a.weighed_at) - ms(b.weighed_at)
+const byLogged = (a, b) => byDate(a, b) || ms(a.logged_at) - ms(b.logged_at)
 const byTakenDesc = (a, b) => (a.taken_at < b.taken_at ? 1 : a.taken_at > b.taken_at ? -1 : 0)
 const copy = (row) => (row ? { ...row } : row)
 
@@ -285,6 +311,22 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     db[table] = db[table].filter((x) => x.id !== id)
     wrote(table, 'delete', id)
     save()
+  }
+
+  // Point the day's daily_logs mood/energy at its latest mood check-in.
+  const syncDailyMood = (log_date) => {
+    const latest = db.mood_logs.filter((m) => m.log_date === log_date).sort(byLogged).pop()
+    let row = db.daily_logs.find((l) => l.log_date === log_date)
+    const mood = latest?.mood ?? null
+    const energy = latest?.energy ?? null
+    if (!row) {
+      if (mood == null) return
+      row = { id: newId(), log_date, mood: null, energy: null, appetite: null, water_ml: 0, symptoms: [], note: null }
+      db.daily_logs.push(row)
+    }
+    if (row.mood === mood && row.energy === energy) return
+    Object.assign(row, { mood, energy, updated_at: now() })
+    wrote('daily_logs', 'upsert', row.id)
   }
 
   const api = {
@@ -350,17 +392,13 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     },
 
     async listWeights() {
-      return [...db.weights].sort(byDate).map(copy)
+      return [...db.weights].sort(byWeighed).map(copy)
     },
-    // One weigh-in per day: logging the same date again replaces it.
-    async upsertWeight(input) {
+    // Any number a day, each with its own time (now, unless given).
+    async addWeight(input) {
       const row = cleanWeight(input)
-      let w = db.weights.find((x) => x.log_date === row.log_date)
-      if (w) Object.assign(w, row)
-      else {
-        w = { id: newId(), ...row }
-        db.weights.push(w)
-      }
+      const w = { id: newId(), ...row, weighed_at: row.weighed_at || now() }
+      db.weights.push(w)
       wrote('weights', 'upsert', w.id)
       save()
       return copy(w)
@@ -368,8 +406,8 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     async updateWeight(id, input) {
       const row = cleanWeight(input)
       const w = find('weights', id, 'Weigh-in')
-      if (db.weights.some((x) => x.id !== id && x.log_date === row.log_date)) throw duplicateWeighIn(row.log_date)
-      Object.assign(w, row)
+      // Keep the time it already had when the edit doesn't give one (and stays on the same day).
+      Object.assign(w, row, { weighed_at: row.weighed_at || (row.log_date === w.log_date ? w.weighed_at : null) || null })
       wrote('weights', 'upsert', id)
       save()
       return copy(w)
@@ -475,6 +513,41 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       return copy(row)
     },
 
+    // Mood check-ins: as many a day as you like. The day's daily_logs row
+    // keeps the latest mood and energy, which is what the rest of the app reads.
+    async listMoods(from, to) {
+      return db.mood_logs.filter((m) => m.log_date >= from && m.log_date <= to).sort(byLogged).map(copy)
+    },
+    async addMood(log_date, input) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(log_date || ''))) throw new Error('Pick a date for the check-in.')
+      const clean = cleanMood(input, now())
+      const daily = db.daily_logs.find((l) => l.log_date === log_date)
+      // A day logged before moods could repeat: its one mood becomes the first
+      // check-in, with the daily row's id (the 0007 migration does the same).
+      // Its time is unknown (updated_at moves with every water tap), so it goes
+      // just before this one at the latest: the new check-in is the latest.
+      if (daily?.mood && !db.mood_logs.some((m) => m.log_date === log_date || m.id === daily.id)) {
+        const before = ms(clean.logged_at) - 60e3
+        const at = Math.min(ms(daily.updated_at) || before, before)
+        const legacy = { id: daily.id, log_date, logged_at: new Date(at).toISOString(), mood: daily.mood, energy: daily.energy ?? null, note: null, created_at: now() }
+        db.mood_logs.push(legacy)
+        wrote('mood_logs', 'upsert', legacy.id)
+      }
+      const row = { id: newId(), log_date, ...clean, created_at: now() }
+      db.mood_logs.push(row)
+      wrote('mood_logs', 'upsert', row.id)
+      syncDailyMood(log_date)
+      save()
+      return copy(row)
+    },
+    async deleteMood(id) {
+      const row = find('mood_logs', id, 'Check-in')
+      db.mood_logs = db.mood_logs.filter((x) => x.id !== id)
+      wrote('mood_logs', 'delete', id)
+      syncDailyMood(row.log_date)
+      save()
+    },
+
     async listCoachMessages(limit = 60) {
       return [...db.coach_messages].sort(byCreated).slice(-limit).map(copy)
     },
@@ -531,10 +604,45 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
         if (f.id) foodIds.set(f.id, saved.id)
       }
       await api.addEntries(remapEntries(data.entries, foodIds))
-      for (const w of data.weights || []) await api.upsertWeight(w)
+      // Weigh-ins already here (same day, weight and time) aren't added twice.
+      const weightKey = (w) => `${w.log_date}|${Number(w.weight_kg)}|${ms(w.weighed_at)}`
+      const haveWeight = new Set(db.weights.map(weightKey))
+      for (const w of data.weights || []) {
+        let clean
+        try {
+          clean = cleanWeight(w)
+        } catch {
+          continue // a bad row in an old backup shouldn't stop the rest
+        }
+        if (haveWeight.has(weightKey(clean))) continue
+        haveWeight.add(weightKey(clean))
+        const row = { id: newId(), ...clean }
+        db.weights.push(row)
+        wrote('weights', 'upsert', row.id)
+      }
+      save()
       for (const w of data.workouts || []) await api.addWorkout(w)
       for (const d of data.doses || []) await api.addDose(d)
       for (const l of data.daily_logs || []) await api.saveDailyLog(l.log_date, l)
+      const moodKey = (m) => `${m.log_date}|${ms(m.logged_at)}|${m.mood}`
+      const haveMood = new Set(db.mood_logs.map(moodKey))
+      const moodDays = new Set()
+      for (const m of data.mood_logs || []) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(m?.log_date || ''))) continue
+        let row
+        try {
+          row = { id: newId(), log_date: m.log_date, ...cleanMood(m, now()), created_at: now() }
+        } catch {
+          continue // a bad row in an old backup shouldn't stop the rest
+        }
+        if (haveMood.has(moodKey(row))) continue
+        haveMood.add(moodKey(row))
+        db.mood_logs.push(row)
+        wrote('mood_logs', 'upsert', row.id)
+        moodDays.add(row.log_date)
+      }
+      for (const d of moodDays) syncDailyMood(d)
+      save()
     },
 
     /** Forget everything on this device. */

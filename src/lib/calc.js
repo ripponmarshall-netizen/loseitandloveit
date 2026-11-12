@@ -1,4 +1,4 @@
-import { addDays, daysBetween } from './dates.js'
+import { addDays, daysBetween, timeMs } from './dates.js'
 
 // ~7700 kcal per kg of body-fat loss. A rule of thumb, not physics:
 // early weeks include water/glycogen, so real-world loss is front-loaded.
@@ -299,10 +299,24 @@ export function dailyTotals(entries) {
 // so someone who weighs weekly still gets a sensible trend.
 export const TREND_ALPHA = 0.1
 
+//
+// Several weigh-ins on one day count once: the day's first (by weighed_at;
+// rows without a time count as earliest). Morning-to-morning is the fairest
+// comparison, and a heavier evening reading shouldn't move the trend.
+const weighMs = (w) => timeMs(w.weighed_at)
+
+export function firstWeighInPerDay(weights) {
+  const byDay = new Map()
+  for (const w of weights || []) {
+    if (!w || !w.log_date || !(Number(w.weight_kg) > 0)) continue
+    const have = byDay.get(w.log_date)
+    if (!have || weighMs(w) < weighMs(have)) byDay.set(w.log_date, w)
+  }
+  return [...byDay.values()].sort((a, b) => (a.log_date < b.log_date ? -1 : 1))
+}
+
 export function trendSeries(weights) {
-  const sorted = [...weights]
-    .filter((w) => w && w.log_date && Number(w.weight_kg) > 0)
-    .sort((a, b) => (a.log_date < b.log_date ? -1 : 1))
+  const sorted = firstWeighInPerDay(weights)
   const out = []
   let trend = null
   let prevDate = null

@@ -167,9 +167,19 @@ export function dailyNudge({ onGlp1, hour, eatenKcal, proteinG, targets, sex, wa
 const avg = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : null)
 
 /** Averages and symptom counts from daily logs. */
-export function summariseDailyLogs(logs = []) {
-  const moods = logs.map((l) => Number(l.mood)).filter((n) => n >= 1)
-  const energy = logs.map((l) => Number(l.energy)).filter((n) => n >= 1)
+// moodLogs (optional): every mood check-in. A day with several counts as the
+// average of them, so a day with five check-ins doesn't outweigh the rest.
+export function summariseDailyLogs(logs = [], moodLogs = []) {
+  const perDay = (key) => {
+    const byDay = {}
+    for (const m of moodLogs) if (Number(m[key]) >= 1) (byDay[m.log_date] ||= []).push(Number(m[key]))
+    const out = logs.map((l) => (byDay[l.log_date] ? avg(byDay[l.log_date]) : Number(l[key])))
+    const logged = new Set(logs.map((l) => l.log_date))
+    for (const [d, list] of Object.entries(byDay)) if (!logged.has(d)) out.push(avg(list))
+    return out.filter((n) => n >= 1)
+  }
+  const moods = perDay('mood')
+  const energy = perDay('energy')
   const appetite = logs.map((l) => Number(l.appetite)).filter((n) => n >= 1)
   const water = logs.map((l) => Number(l.water_ml)).filter((n) => n > 0)
   const counts = {}

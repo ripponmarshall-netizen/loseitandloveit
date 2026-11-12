@@ -315,7 +315,7 @@ export default function App() {
     () => (profile ? computeTargets(profile, currentWeight) : null),
     [profile, currentWeight],
   )
-  const today = useMemo(() => logicalToday(profile?.day_start_hour ?? 4, new Date(clock)), [profile, clock])
+  const today = useMemo(() => logicalToday(profile?.day_start_hour ?? 0, new Date(clock)), [profile, clock])
 
   // A weigh-in that moves the trend past a milestone gets a cheer straight away.
   // The baseline resets when the plan (start, goal, units) changes, so editing

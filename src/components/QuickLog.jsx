@@ -52,7 +52,7 @@ function useQuickLog(date, { onDone } = {}) {
       const kg = p.unit === 'kg' ? p.value : lbToKg(p.value)
       if (kg >= 30 && kg <= 350) {
         try {
-          await store.upsertWeight({ log_date: today, weight_kg: Math.round(kg * 100) / 100 })
+          await store.addWeight({ log_date: today, weight_kg: Math.round(kg * 100) / 100 })
           await reloadWeights()
           toast('Weight saved')
           onDone?.()
@@ -132,7 +132,7 @@ function useDockItems(date, q) {
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
   const mood = MOOD_BY_V[daily?.mood]
   const dose = plan && day ? planDoseStatus(plan, day.doses, date) : null
-  const weighIn = weights.find((w) => w.log_date === date)
+  const weighIn = weights.some((w) => w.log_date === date)
   const upTo = series.filter((p) => p.date <= date)
   const lastTrend = upTo[upTo.length - 1]
   const rate = weeklyRate(upTo)
@@ -156,7 +156,7 @@ function useDockItems(date, q) {
     },
     {
       id: 'weight', icon: 'scale', color: 'var(--indigo)', label: 'Weight', value: lastTrend ? weightValue(lastTrend.weight, units).toFixed(1) : '—', unit: lastTrend ? weightUnit(units) : '',
-      done: !!weighIn, onClick: () => openSheet('weight', weighIn ? { weight: weighIn } : { date }),
+      done: weighIn, onClick: () => openSheet('weight', { date }),
       aria: lastTrend ? `Weight ${displayWeight(lastTrend.weight, units)}${signedRate ? `, trend ${signedRate}` : ''}` : 'Log a weigh-in',
     },
     plan && {

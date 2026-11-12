@@ -378,3 +378,19 @@ test('other activities use their MET, scaled for effort, net of resting', () => 
   assert.equal(estimateWorkoutKcal({ kind: 'other', duration_min: 30, met: 7, intensity: 'moderate' }, 100), 300)
   assert.equal(estimateWorkoutKcal({ kind: 'other', duration_min: 60 }, 100), 300) // unknown type: MET 4
 })
+
+test('trendSeries: several weigh-ins on a day count once, as the first of the day', () => {
+  const s = trendSeries([
+    { log_date: '2026-11-02', weight_kg: 101.5, weighed_at: '2026-11-02T23:00:00.000Z' }, // evening
+    { log_date: '2026-11-01', weight_kg: 100 },
+    { log_date: '2026-11-02', weight_kg: 99.8, weighed_at: '2026-11-02T11:00:00+00:00' }, // morning
+  ])
+  assert.equal(s.length, 2)
+  assert.equal(s[1].weight, 99.8)
+  // A row without a time (logged before times existed) counts as the earliest.
+  const t = trendSeries([
+    { log_date: '2026-11-02', weight_kg: 99, weighed_at: '2026-11-02T06:00:00Z' },
+    { log_date: '2026-11-02', weight_kg: 98 },
+  ])
+  assert.equal(t[0].weight, 98)
+})

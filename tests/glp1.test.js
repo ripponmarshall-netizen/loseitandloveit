@@ -155,3 +155,19 @@ test('doseLevels: mixed units keep the newest unit only', () => {
   const { taken } = doseLevels({ doses, from: '2026-11-01', to: '2026-11-04', frequency: 'daily' })
   assert.deepEqual(taken, [{ date: '2026-11-03', value: 1.2 }])
 })
+
+test('daily log summary: a day with several mood check-ins counts once, as their average', () => {
+  const s = summariseDailyLogs(
+    [
+      { log_date: '2026-11-10', mood: 1, energy: 2 }, // latest of 5, 1 below
+      { log_date: '2026-11-11', mood: 4, energy: 4 }, // logged before moods could repeat
+    ],
+    [
+      { log_date: '2026-11-10', mood: 5, energy: 4 },
+      { log_date: '2026-11-10', mood: 1, energy: null },
+      { log_date: '2026-11-12', mood: 2, energy: 2 }, // no daily row yet
+    ],
+  )
+  assert.equal(s.mood, 3) // (3 + 4 + 2) / 3
+  assert.equal(s.energy, 3.3) // (4 + 4 + 2) / 3
+})

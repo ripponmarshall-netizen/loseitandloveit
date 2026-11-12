@@ -39,6 +39,7 @@ const missingColumn = (e) => e.message.match(/Could not find the '(\w+)' column/
 function friendly(table, e) {
   const t = TABLES[table]
   if (t?.migration && missing(e)) return `Some changes can't sync until the database is updated: run ${t.migration} in the Supabase SQL Editor.`
+  if (t?.requires && e.code === '23505') return `Your account's database only allows one of these a day: run ${t.requires} in the Supabase SQL Editor, then log it again.`
   return `A change couldn't be saved to your account and was undone: ${e.message}`
 }
 
