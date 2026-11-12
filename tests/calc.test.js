@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  activityKcal,
   bmr,
   computeTargets,
   entryTotals,
@@ -365,4 +366,15 @@ test('latestWeight is the most recent weigh-in, not the smoothed trend', () => {
   ])
   assert.equal(latestWeight(s), 98)
   assert.notEqual(s[s.length - 1].trend, 98)
+})
+
+test('other activities use their MET, scaled for effort, net of resting', () => {
+  // Cycling (MET 7), 100 kg, 60 min: (7 - 1) x 100 = 600 kcal
+  assert.equal(activityKcal({ weightKg: 100, minutes: 60, met: 7 }), 600)
+  assert.equal(activityKcal({ weightKg: 100, minutes: 60, met: 7, intensity: 'hard' }), 775) // 8.75 MET
+  assert.equal(activityKcal({ weightKg: 100, minutes: 60, met: 7, intensity: 'light' }), 425) // 5.25 MET
+  assert.equal(activityKcal({ weightKg: 100, minutes: 30, met: 1.1, intensity: 'light' }), 0) // never negative
+  assert.equal(activityKcal({ weightKg: 0, minutes: 30, met: 7 }), 0)
+  assert.equal(estimateWorkoutKcal({ kind: 'other', duration_min: 30, met: 7, intensity: 'moderate' }, 100), 300)
+  assert.equal(estimateWorkoutKcal({ kind: 'other', duration_min: 60 }, 100), 300) // unknown type: MET 4
 })

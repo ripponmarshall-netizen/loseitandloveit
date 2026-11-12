@@ -1,6 +1,7 @@
 // "Log anything": turn a short phrase into an action, and order the Log
 // sheet's options by what's most likely needed right now. Pure and tested.
 import { GLP1_MEDS } from '../data/glp1.js'
+import { WORKOUT_TYPES } from '../data/appleWorkouts.js'
 import { BOTTLE_ML, GLASS_ML, waterPaceFraction } from './glp1.js'
 
 export function guessMeal(date = new Date()) {
@@ -50,6 +51,16 @@ const EXERCISE = [
   [/\b(workout|work out|push-?ups?|squats?|exercise|training)\b/, { kind: 'home', activity: 'bodyweight' }],
 ]
 
+// Every Apple workout type by its label, variants and HealthKit name
+// ("table tennis", "cycling", "pool swim"), longest first so the most
+// specific wins.
+const splitKey = (k) => k.replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase()
+const OTHER_WORKOUTS = WORKOUT_TYPES.flatMap((t) =>
+  [...new Set([t.label, splitKey(t.key), ...(t.variants || [])].map((n) => n.toLowerCase()))]
+    .filter((n) => n !== 'other' && n !== 'other workout' && n !== 'play')
+    .map((n) => ({ n, re: new RegExp(`\\b${n.replace(/[-\s]+/g, '[-\\s]?')}\\b`), type: t })),
+).sort((a, b) => b.n.length - a.n.length)
+
 const MOOD_WORDS = [
   [/\b(awful|terrible|horrible|miserable)\b/, 1],
   [/\b(bad|low|down|sad|rough|meh)\b/, 2],
@@ -63,7 +74,7 @@ const DRINK = /\b(juice|soda|pop|tea|coffee|milk|latte|drink|smoothie|shake|beer
 /**
  * Parse a phrase. Returns one of:
  *   { type: 'water', ml } | { type: 'weight', value, unit } | { type: 'mood', mood }
- *   { type: 'exercise', minutes, kind, mode?, activity? } | { type: 'dose', med, dose }
+ *   { type: 'exercise', minutes, kind, mode?, activity?, typeKey?, name? } | { type: 'dose', med, dose }
  *   { type: 'food', query, drink } | null for empty input
  */
 export function parseQuickLog(input) {
@@ -96,6 +107,14 @@ export function parseQuickLog(input) {
   if (ex && (minutes || !DRINK.test(text))) {
     const mins = minutes ? toNum(minutes[1]) * (/\bh/.test(minutes[0].replace(/^[\d.,\s]+/, '')) ? 60 : 1) : null
     return { type: 'exercise', minutes: mins, ...ex[1] }
+  }
+
+  // Any other workout ("45 min cycling", "tennis"): needs a duration, or to be
+  // the whole phrase, so foods are never mistaken for sport.
+  const other = OTHER_WORKOUTS.find((o) => o.re.test(text))
+  if (other && (minutes || text === other.n)) {
+    const mins = minutes ? toNum(minutes[1]) * (/\bh/.test(minutes[0].replace(/^[\d.,\s]+/, '')) ? 60 : 1) : null
+    return { type: 'exercise', minutes: mins, kind: 'other', typeKey: other.type.key, name: other.type.label }
   }
 
   return { type: 'food', query: input.trim(), drink: DRINK.test(text) }

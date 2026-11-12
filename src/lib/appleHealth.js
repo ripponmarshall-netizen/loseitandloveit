@@ -9,65 +9,13 @@
 // TextDecoderStream), which Safari 16.4+ and Node 18+ both have.
 
 import { addDays } from './dates.js'
+import { WORKOUT_GROUPS, WORKOUT_TYPE_BY_KEY } from '../data/appleWorkouts.js'
 
-// Apple type -> how the app stores it. Types that fit the existing forms map
-// onto them (indoor walk/run -> treadmill, strength -> weights...), so they can
-// be edited like any other workout; everything else is kind 'other'.
-// `fallback` is the at-home activity used if the database hasn't had 0006 yet.
-const TYPES = {
-  Walking: { label: 'Walk', group: 'walk', fallback: 'bodyweight', met: 3.5, inOut: true },
-  Running: { label: 'Run', group: 'run', fallback: 'hiit', met: 9, inOut: true },
-  Hiking: { label: 'Hike', group: 'walk', fallback: 'bodyweight', met: 6 },
-  Cycling: { label: 'Cycle', group: 'cycle', fallback: 'hiit', met: 7, inOut: true },
-  HandCycling: { label: 'Hand cycle', group: 'cycle', fallback: 'hiit', met: 5 },
-  Swimming: { label: 'Swim', group: 'swim', fallback: 'hiit', met: 7 },
-  Elliptical: { label: 'Elliptical', group: 'cardio', fallback: 'hiit', met: 5 },
-  Rowing: { label: 'Rowing', group: 'cardio', fallback: 'hiit', met: 7 },
-  StairClimbing: { label: 'Stair stepper', group: 'cardio', fallback: 'hiit', met: 8 },
-  Stairs: { label: 'Stairs', group: 'cardio', fallback: 'hiit', met: 8 },
-  StepTraining: { label: 'Step training', group: 'cardio', fallback: 'hiit', met: 7 },
-  MixedCardio: { label: 'Mixed cardio', group: 'cardio', fallback: 'hiit', met: 6 },
-  MixedMetabolicCardioTraining: { label: 'Mixed cardio', group: 'cardio', fallback: 'hiit', met: 6 },
-  HighIntensityIntervalTraining: { label: 'HIIT', group: 'strength', home: 'hiit', fallback: 'hiit', met: 8 },
-  TraditionalStrengthTraining: { label: 'Strength training', group: 'strength', home: 'weights', fallback: 'weights', met: 5 },
-  FunctionalStrengthTraining: { label: 'Functional strength', group: 'strength', home: 'bodyweight', fallback: 'bodyweight', met: 5 },
-  CoreTraining: { label: 'Core training', group: 'strength', home: 'bodyweight', fallback: 'bodyweight', met: 4 },
-  CrossTraining: { label: 'Cross training', group: 'strength', home: 'hiit', fallback: 'hiit', met: 7 },
-  JumpRope: { label: 'Jump rope', group: 'cardio', home: 'skipping', fallback: 'skipping', met: 11.8 },
-  Yoga: { label: 'Yoga', group: 'mind', home: 'mobility', fallback: 'mobility', met: 2.5 },
-  Flexibility: { label: 'Flexibility', group: 'mind', home: 'mobility', fallback: 'mobility', met: 2.3 },
-  Cooldown: { label: 'Cooldown', group: 'mind', home: 'mobility', fallback: 'mobility', met: 2.3 },
-  MindAndBody: { label: 'Mind and body', group: 'mind', home: 'mobility', fallback: 'mobility', met: 2.5 },
-  Pilates: { label: 'Pilates', group: 'mind', fallback: 'mobility', met: 3 },
-  Barre: { label: 'Barre', group: 'mind', fallback: 'mobility', met: 3.5 },
-  TaiChi: { label: 'Tai chi', group: 'mind', fallback: 'mobility', met: 3 },
-  Dance: { label: 'Dance', group: 'cardio', fallback: 'hiit', met: 5 },
-  CardioDance: { label: 'Dance', group: 'cardio', fallback: 'hiit', met: 5 },
-  SocialDance: { label: 'Social dance', group: 'cardio', fallback: 'hiit', met: 4.5 },
-  Boxing: { label: 'Boxing', group: 'sport', fallback: 'hiit', met: 7.8 },
-  Kickboxing: { label: 'Kickboxing', group: 'sport', fallback: 'hiit', met: 7.3 },
-  MartialArts: { label: 'Martial arts', group: 'sport', fallback: 'hiit', met: 7.3 },
-  Basketball: { label: 'Basketball', group: 'sport', fallback: 'hiit', met: 6.5 },
-  Soccer: { label: 'Football', group: 'sport', fallback: 'hiit', met: 7 },
-  Cricket: { label: 'Cricket', group: 'sport', fallback: 'bodyweight', met: 4.8 },
-  Tennis: { label: 'Tennis', group: 'sport', fallback: 'hiit', met: 7 },
-  Volleyball: { label: 'Volleyball', group: 'sport', fallback: 'bodyweight', met: 4 },
-  Netball: { label: 'Netball', group: 'sport', fallback: 'hiit', met: 6 },
-  Golf: { label: 'Golf', group: 'sport', fallback: 'bodyweight', met: 3.5 },
-  Other: { label: 'Workout', group: 'other', fallback: 'bodyweight', met: 4 },
-}
-
-export const GROUPS = {
-  walk: { label: 'Walks', icon: 'run', color: 'var(--green)' },
-  run: { label: 'Runs', icon: 'run', color: 'var(--red)' },
-  cycle: { label: 'Cycling', icon: 'bolt', color: 'var(--orange)' },
-  swim: { label: 'Swims', icon: 'drop', color: 'var(--cyan)' },
-  cardio: { label: 'Cardio', icon: 'heart', color: 'var(--pink)' },
-  strength: { label: 'Strength', icon: 'flame', color: 'var(--orange)' },
-  mind: { label: 'Yoga & mobility', icon: 'leaf', color: 'var(--mint)' },
-  sport: { label: 'Sport', icon: 'target', color: 'var(--indigo)' },
-  other: { label: 'Other', icon: 'run', color: 'var(--text-2)' },
-}
+// Apple type -> how the app stores it (see src/data/appleWorkouts.js). Types
+// that fit the existing forms map onto them (indoor walk/run -> treadmill,
+// strength -> weights...), so they can be edited like any other workout;
+// everything else is kind 'other'.
+export const GROUPS = WORKOUT_GROUPS
 
 const PREFIX = 'HKWorkoutActivityType'
 const splitWords = (s) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase())
@@ -75,8 +23,8 @@ const splitWords = (s) => s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c
 /** 'HKWorkoutActivityTypeTraditionalStrengthTraining' -> its row in TYPES (or a generic one). */
 export function appleType(raw) {
   const key = String(raw || '').replace(PREFIX, '') || 'Other'
-  const t = TYPES[key]
-  if (t) return { key, ...t }
+  const t = WORKOUT_TYPE_BY_KEY[key]
+  if (t) return t
   const label = splitWords(key)
   return { key, label: label.charAt(0) + label.slice(1).toLowerCase(), group: 'other', fallback: 'bodyweight', met: 4 }
 }

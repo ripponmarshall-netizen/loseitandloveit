@@ -20,6 +20,7 @@ import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
 import { MimiBubble, MimiProvider } from './components/MimiCheckin.jsx'
 import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
+import NavDock from './components/NavDock.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
 import { watchKeyboard } from './lib/viewport.js'
@@ -454,17 +455,7 @@ export default function App() {
         {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={tabbarHidden} />}
         {/* Touching the bottom edge brings a hidden tab bar back. */}
         {tabbarHidden && <div className="tabbar-reveal" onTouchStart={() => setTabbarHidden(false)} onClick={() => setTabbarHidden(false)} aria-hidden="true" />}
-        <nav className={`tabbar${tabbarHidden ? ' hidden' : ''}`} aria-label="Main">
-          <div className="tabbar-inner">
-            <TabBtn id="today" icon="grid" label="Dashboard" tab={tab} setTab={goTab} />
-            <TabBtn id="progress" icon="trend" label="Progress" tab={tab} setTab={goTab} />
-            <button className="tab-add" aria-label="Log food, drink, water, exercise, mood or a dose" onClick={() => openSheet('log', { date })}>
-              <Icon name="plus" strokeWidth={2.8} />
-            </button>
-            <TabBtn id="coach" label="Mimi" tab={tab} setTab={goTab} face />
-            <TabBtn id="settings" icon="gear" label="Settings" tab={tab} setTab={goTab} />
-          </div>
-        </nav>
+        <NavDock tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} hidden={tabbarHidden} />
         {sheet && SHEETS[sheet.type] && (() => {
           const S = SHEETS[sheet.type]
           return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />
@@ -524,14 +515,5 @@ function SyncPill({ sync }) {
       <Icon name={offline ? 'cloudOff' : 'cloud'} size={15} strokeWidth={2} />
       {text}
     </div>
-  )
-}
-
-function TabBtn({ id, icon, label, tab, setTab, face }) {
-  return (
-    <button className={`tab${tab === id ? ' on' : ''}${face ? ' tab-face' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-      {face ? <PenguinFace size={28} /> : <Icon name={icon} strokeWidth={tab === id ? 2.3 : 1.8} />}
-      {label}
-    </button>
   )
 }

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { HOME_ACTIVITIES, estimateWorkoutKcal, exerciseAllowance, kmhToMph, mphToKmh, workoutSummary } from '../lib/calc.js'
+import { HOME_ACTIVITIES, activityKcal, estimateWorkoutKcal, exerciseAllowance, kmhToMph, mphToKmh, workoutSummary } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatShortDate } from '../lib/dates.js'
 import { useDay } from '../lib/useDay.js'
 import { HOME_PRESETS, TREADMILL_PRESETS } from '../data/workouts.js'
+import { WORKOUT_CHOICES, WORKOUT_GROUPS, WORKOUT_TYPE_BY_KEY, workoutTypeForName } from '../data/appleWorkouts.js'
 import { Icon, Segmented, Sheet, Spinner } from './ui.jsx'
 
 const r1 = (n) => Math.round(n * 10) / 10
@@ -114,6 +115,18 @@ export function WorkoutsSheet({ date, onClose }) {
       <ExerciseCard workouts={workouts} error={day?.workoutError} allowance={allowance} onAdd={() => openSheet('workout', { date })} onEdit={edit} />
 
       <div className="list" style={{ marginTop: 14 }}>
+        <button className="list-row has-icon" onClick={() => openSheet('workout', { date, preset: { kind: 'other' } })}>
+          <span className="row-icon" style={{ '--c': 'var(--indigo)' }} aria-hidden="true">
+            <Icon name="grid" strokeWidth={2.2} />
+          </span>
+          <span className="label">
+            Browse {WORKOUT_CHOICES.length} workout types
+            <span className="sub">Cycling, swimming, dance, cricket, tennis…</span>
+          </span>
+          <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
+            <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
         <button className="list-row has-icon" onClick={() => openSheet('appleImport')}>
           <span className="row-icon fitness-icon" aria-hidden="true">
             <Icon name="heart" strokeWidth={2.4} />
@@ -146,11 +159,58 @@ export function WorkoutsSheet({ date, onClose }) {
   )
 }
 
+/**
+ * Every workout type Apple's Workout app offers, searchable and grouped, with
+ * a rough burn for 30 minutes at your weight.
+ */
+function WorkoutPicker({ onPick, weightKg }) {
+  const [q, setQ] = useState('')
+  const [group, setGroup] = useState('all')
+  const query = q.toLowerCase().trim()
+  const shown = WORKOUT_CHOICES.filter((c) => (group === 'all' || c.type.group === group) && (!query || `${c.name} ${WORKOUT_GROUPS[c.type.group].label}`.toLowerCase().includes(query)))
+  const groups = Object.keys(WORKOUT_GROUPS).filter((g) => shown.some((c) => c.type.group === g))
+  return (
+    <div className="workout-picker">
+      <div className="search-field" style={{ marginBottom: 10 }}>
+        <Icon name="search" />
+        <input className="input" type="search" placeholder={`Search ${WORKOUT_CHOICES.length} workouts`} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search workout types" />
+      </div>
+      <div className="chips" style={{ marginBottom: 4 }}>
+        <button type="button" className={`chip${group === 'all' ? ' tinted' : ''}`} onClick={() => setGroup('all')}>All</button>
+        {Object.entries(WORKOUT_GROUPS).map(([g, info]) => (
+          <button key={g} type="button" className={`chip${group === g ? ' tinted' : ''}`} style={{ '--c': info.color }} onClick={() => setGroup(group === g ? 'all' : g)}>
+            {info.label}
+          </button>
+        ))}
+      </div>
+      {groups.map((g) => (
+        <div key={g}>
+          <div className="list-header">{WORKOUT_GROUPS[g].label}</div>
+          <div className="list">
+            {shown.filter((c) => c.type.group === g).map((c) => (
+              <button key={c.id} type="button" className="list-row has-icon" onClick={() => onPick(c)}>
+                <span className="row-icon" style={{ '--c': WORKOUT_GROUPS[g].color }}>
+                  <Icon name={WORKOUT_GROUPS[g].icon} strokeWidth={2.2} />
+                </span>
+                <span className="label">{c.name}</span>
+                {weightKg ? <span className="value small num">≈ {activityKcal({ weightKg, minutes: 30, met: c.type.met })} kcal</span> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      {groups.length > 0 && weightKg ? <p className="list-footer">Burn shown for 30 minutes at a moderate effort, for your weight.</p> : null}
+      {!groups.length && <p className="list-footer">No workout called “{q}”. Pick Other workout and name it yourself.</p>}
+    </div>
+  )
+}
+
 function emptyForm(kind) {
   return {
     kind,
     name: '',
-    duration_min: kind === 'treadmill' ? '30' : '20',
+    duration_min: kind === 'home' ? '20' : '30',
+    type: null, // kind 'other': the chosen entry in WORKOUT_TYPES
     speed: '',
     incline_pct: '0',
     mode: 'walk',
@@ -177,13 +237,15 @@ function fromWorkout(w, units) {
     exercises: (w.exercises || []).map((x) => ({ name: x.name, sets: x.sets ?? '', reps: x.reps ?? '' })),
     manualKcal: w.calories_source === 'manual' || w.calories_source === 'device' ? String(w.calories_burned) : '',
     distance_km: w.distance_km,
+    type: w.kind === 'other' ? workoutTypeForName(w.name) : null,
     notes: w.notes || '',
   }
 }
 
 /** Add or edit a workout. */
 function fromPreset(p = {}) {
-  const f = emptyForm(p.kind === 'home' ? 'home' : 'treadmill')
+  const f = emptyForm(p.kind === 'home' || p.kind === 'other' ? p.kind : 'treadmill')
+  if (p.typeKey && WORKOUT_TYPE_BY_KEY[p.typeKey]) Object.assign(f, { type: WORKOUT_TYPE_BY_KEY[p.typeKey], choice: p.name || null })
   if (p.duration_min) f.duration_min = String(p.duration_min)
   if (p.mode) Object.assign(f, { mode: p.mode, modeTouched: true })
   if (p.activity) f.activity = p.activity
@@ -210,7 +272,14 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
     }
     const w =
       f.kind === 'other'
-        ? { ...base, name: f.name.trim() || workout?.name || 'Workout', activity: f.activity, intensity: f.intensity, distance_km: f.distance_km ?? null }
+        ? {
+            ...base,
+            name: f.name.trim() || f.choice || workout?.name || f.type?.label || 'Workout',
+            activity: f.type?.fallback || f.activity,
+            intensity: f.intensity,
+            distance_km: f.distance_km ?? null,
+            met: f.type?.met,
+          }
         : f.kind === 'treadmill'
         ? {
             ...base,
@@ -300,7 +369,8 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
             : f.manualKcal !== '' && (Number.isNaN(Number(f.manualKcal)) || Number(f.manualKcal) < 0 || Number(f.manualKcal) > 5000) ? 'Your own number should be 0–5000 kcal.'
               : null
   const needsSpeed = f.kind === 'treadmill' && !(speedKmh > 0)
-  const valid = !problem && minutes > 0 && !needsSpeed
+  const picking = f.kind === 'other' && !f.type && !workout
+  const valid = !problem && minutes > 0 && !needsSpeed && !picking
   const undoDelete = workout && {
     label: 'Undo',
     run: async () => {
@@ -323,7 +393,8 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
             onChange={(k) => setF((s) => ({ ...emptyForm(k), notes: s.notes }))}
             options={[
               ['treadmill', 'Treadmill'],
-              ['home', 'Home workout'],
+              ['home', 'Home'],
+              ['other', `All ${WORKOUT_CHOICES.length}`],
             ]}
           />
         </div>
@@ -335,6 +406,13 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
         </button>
       )}
 
+      {picking ? (
+        <WorkoutPicker
+          weightKg={weightKg}
+          onPick={(c) => setF((st) => ({ ...st, type: c.type, choice: c.name, name: '', manualKcal: '' }))}
+        />
+      ) : (
+        <>
       {f.kind !== 'other' && <div className="chips" style={{ marginBottom: 12 }}>
         {(f.kind === 'treadmill' ? TREADMILL_PRESETS : HOME_PRESETS).map((p) => (
           <button key={p.name} type="button" className="chip tinted" style={{ '--c': f.kind === 'treadmill' ? 'var(--red)' : 'var(--orange)' }} onClick={() => (f.kind === 'treadmill' ? applyTreadmillPreset(p) : applyHomePreset(p))}>
@@ -343,22 +421,50 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
         ))}
       </div>}
 
+      {f.kind === 'other' && !workout && f.type && (
+        <div className="list" style={{ marginBottom: 14 }}>
+          <button type="button" className="list-row has-icon" onClick={() => setF((st) => ({ ...st, type: null, choice: null }))}>
+            <span className="row-icon" style={{ '--c': WORKOUT_GROUPS[f.type.group].color }}>
+              <Icon name={WORKOUT_GROUPS[f.type.group].icon} strokeWidth={2.2} />
+            </span>
+            <span className="label">
+              {f.choice || f.type.label}
+              <span className="sub">{WORKOUT_GROUPS[f.type.group].label}</span>
+            </span>
+            <span className="value" style={{ color: 'var(--tint)' }}>Change</span>
+          </button>
+        </div>
+      )}
+
       <label className="field">
         <span>Name (optional)</span>
-        <input className="input" value={f.name} onChange={set('name')} placeholder={f.kind === 'treadmill' ? 'Treadmill walk' : 'Home workout'} />
+        <input className="input" value={f.name} onChange={set('name')} placeholder={f.kind === 'treadmill' ? 'Treadmill walk' : f.kind === 'other' ? f.choice || f.type?.label || 'Workout' : 'Home workout'} />
       </label>
 
       {f.kind === 'other' ? (
-        <div className="grid2">
-          <label className="field">
-            <span>Minutes</span>
-            <input className="input" inputMode="decimal" value={f.duration_min} onChange={set('duration_min')} />
-          </label>
-          <div className="field">
-            <span>Distance</span>
-            <div className="input readonly num">{distanceText(f.distance_km, units) || '—'}</div>
+        <>
+          <div className="grid2">
+            <label className="field">
+              <span>Minutes</span>
+              <input className="input" inputMode="decimal" value={f.duration_min} onChange={set('duration_min')} />
+            </label>
+            {f.distance_km ? (
+              <div className="field">
+                <span>Distance</span>
+                <div className="input readonly num">{distanceText(f.distance_km, units)}</div>
+              </div>
+            ) : (
+              <label className="field">
+                <span>Effort</span>
+                <select className="input" value={f.intensity} onChange={set('intensity')}>
+                  {INTENSITY.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
-        </div>
+        </>
       ) : f.kind === 'treadmill' ? (
         <>
           <div className="grid3">
@@ -446,12 +552,14 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
         </div>
         <label className="field" style={{ margin: '8px 0 0' }}>
           <span>Use your own number instead (optional)</span>
-          <input className="input" inputMode="numeric" placeholder="e.g. from the treadmill screen" value={f.manualKcal} onChange={set('manualKcal')} />
+          <input className="input" inputMode="numeric" placeholder={f.kind === 'treadmill' ? 'e.g. from the treadmill screen' : 'e.g. from your watch'} value={f.manualKcal} onChange={set('manualKcal')} />
         </label>
         <p className="tiny muted" style={{ margin: '6px 0 0' }}>
           {record.calories_source === 'device'
             ? 'Using Apple’s active energy for this workout: calories above resting, as the app counts them.'
-            : `Net calories above resting, from ${f.kind === 'treadmill' ? 'the ACSM treadmill equations' : 'published MET values'} and your weight. Treadmill screens usually show gross calories and read higher.`}
+            : f.kind === 'treadmill'
+              ? 'Net calories above resting, from the ACSM treadmill equations and your weight. Treadmill screens usually show gross calories and read higher.'
+              : 'Net calories above resting, from published MET values for this activity, your effort and your weight.'}
         </p>
       </div>
 
@@ -477,6 +585,8 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
           </button>
         )}
       </div>
+        </>
+      )}
     </Sheet>
   )
 }

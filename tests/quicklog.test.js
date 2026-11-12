@@ -49,3 +49,17 @@ test('water crackers are food, not water', () => {
   assert.deepEqual(parseQuickLog('2 glasses water'), { type: 'water', ml: 500 })
   assert.equal(parseQuickLog('water').type, 'water')
 })
+
+test('any Apple workout type is recognised when it has a duration or stands alone', () => {
+  assert.deepEqual(parseQuickLog('45 min cycling'), { type: 'exercise', minutes: 45, kind: 'other', typeKey: 'Cycling', name: 'Cycle' })
+  assert.deepEqual(parseQuickLog('1 hr cricket'), { type: 'exercise', minutes: 60, kind: 'other', typeKey: 'Cricket', name: 'Cricket' })
+  assert.equal(parseQuickLog('30 mins table tennis').typeKey, 'TableTennis') // not plain Tennis
+  assert.equal(parseQuickLog('pilates').typeKey, 'Pilates')
+  assert.equal(parseQuickLog('20 min pool swim').typeKey, 'Swimming')
+  // Existing at-home and treadmill words keep their forms.
+  assert.equal(parseQuickLog('20 min yoga').kind, 'home')
+  assert.equal(parseQuickLog('30 min walk').kind, 'treadmill')
+  // Foods are never sport.
+  assert.equal(parseQuickLog('golf ball cake').type, 'food')
+  assert.equal(parseQuickLog('curling iron').type, 'food')
+})

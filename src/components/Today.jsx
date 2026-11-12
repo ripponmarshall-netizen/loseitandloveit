@@ -1,22 +1,19 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
-import { displayWeight, entryTotals, exerciseAllowance, sumEntries, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
+import { entryTotals, exerciseAllowance, sumEntries } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
-import { MOOD_BY_V } from '../data/glp1.js'
-import { dailyNudge, doseStatusLabel, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
-import { guessMeal } from '../lib/quicklog.js'
+import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
-import { QuickLogField, useQuickLog } from './QuickLog.jsx'
+import { LogDock } from './QuickLog.jsx'
 import { Avatar, Icon, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
 
-const RING_C = 2 * Math.PI * 16.5
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
 
 export default function Today() {
-  const { store, date, setDate, today, targets, weights, series, units, bumpData, openAdd, openSheet, openProgress, toast, profile, setTab } = useApp()
+  const { store, date, setDate, today, targets, bumpData, openAdd, openSheet, openProgress, toast, profile, setTab } = useApp()
   const day = useDay(date)
   const [editing, setEditing] = useState(null)
   const [copying, setCopying] = useState(false)
@@ -32,14 +29,8 @@ export default function Today() {
   const isToday = date === today
 
   const plan = glp1Plan(profile)
-  const dose = plan && day ? planDoseStatus(plan, day.doses, date) : null
   const waterTarget = useWaterTarget()
   const water = useWater(date, daily)
-  const mood = MOOD_BY_V[daily?.mood]
-  const weighIn = weights.find((w) => w.log_date === date)
-  const trendPts = series.filter((p) => p.date <= date).slice(-21)
-  const lastTrend = trendPts[trendPts.length - 1]
-  const rate = weeklyRate(series.filter((p) => p.date <= date))
   const now = new Date()
   const nudge = isToday
     ? dailyNudge({
@@ -80,38 +71,6 @@ export default function Today() {
       setCopying(false)
     }
   }
-
-  const signedRate =
-    rate == null ? null : `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(weightValue(rate, units)).toFixed(1)} ${weightUnit(units)}/wk`
-
-  const nextMeal = isToday ? guessMeal() : 'dinner'
-  // One row of shortcuts that double as status: what's logged, at a glance.
-  const dock = [
-    { id: 'meal', icon: 'fork', color: 'var(--orange)', label: 'Meal', value: MEAL_LABEL[nextMeal], onClick: () => openAdd({ meal: nextMeal }), aria: `Log ${MEAL_LABEL[nextMeal]}` },
-    {
-      id: 'water', icon: 'drop', color: 'var(--cyan)', label: 'Water', value: formatWater(water.ml), pct: water.ml / waterTarget,
-      done: water.ml >= waterTarget, onClick: () => openSheet('water', { date, daily }), aria: `Water: ${formatWater(water.ml)} of ${formatWater(waterTarget)}`,
-    },
-    {
-      id: 'workout', icon: 'run', color: 'var(--red)', label: 'Workout', value: workouts.length ? fmt(burned) : '—', unit: workouts.length ? 'kcal' : '',
-      done: workouts.length > 0, alert: !!day?.workoutError, onClick: () => openSheet('workouts', { date }),
-      aria: workouts.length ? `Workouts: ${workouts.length}, ${fmt(burned)} kcal` : 'Workouts: none yet',
-    },
-    {
-      id: 'mood', icon: mood ? null : 'smile', emoji: mood?.emoji, color: mood?.color || 'var(--yellow)', label: 'Mood', value: mood ? mood.label : '—',
-      done: !!mood, onClick: () => openSheet('mood', { date, daily }), aria: `Mood: ${mood ? mood.label : 'not checked in'}`,
-    },
-    {
-      id: 'weight', icon: 'scale', color: 'var(--indigo)', label: 'Weight', value: lastTrend ? weightValue(lastTrend.weight, units).toFixed(1) : '—', unit: lastTrend ? weightUnit(units) : '',
-      done: !!weighIn, onClick: () => openSheet('weight', weighIn ? { weight: weighIn } : { date }),
-      aria: lastTrend ? `Weight ${displayWeight(lastTrend.weight, units)}${signedRate ? `, trend ${signedRate}` : ''}` : 'Log a weigh-in',
-    },
-    plan && {
-      id: 'dose', icon: plan.route === 'oral' ? 'pill' : 'syringe', color: 'var(--purple)', label: 'GLP-1', value: dose ? shortDose(dose) : '…',
-      done: dose?.state === 'taken', alert: dose?.state === 'due' || dose?.state === 'overdue', onClick: () => openSheet('dose', { date }),
-      aria: `GLP-1: ${dose ? doseStatusLabel(dose) : ''}`,
-    },
-  ].filter(Boolean)
 
   return (
     <div className="dashboard">
@@ -161,7 +120,7 @@ export default function Today() {
         </button>
       </section>
 
-      <LogDock date={date} items={dock} />
+      <LogDock date={date} className="rise" style={{ '--i': 1 }} />
 
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
@@ -250,48 +209,6 @@ function MacroMini({ label, value, target, color }) {
         <i style={{ width: `${pct}%` }} />
       </span>
     </span>
-  )
-}
-
-// "Due today" -> "Due"; the full label is in the dose sheet.
-function shortDose(dose) {
-  if (dose.state === 'taken') return 'Taken'
-  if (dose.state === 'overdue') return 'Overdue'
-  if (dose.state === 'none') return 'Start'
-  if (dose.state === 'due') return 'Due'
-  return doseStatusLabel(dose).replace(/^Next\s*/i, '')
-}
-
-/**
- * The Dashboard's one logging surface: type anything (AI handles food), or tap
- * a shortcut. The shortcuts show the day's status, so no separate cards.
- */
-function LogDock({ date, items }) {
-  const { mode } = useApp()
-  const q = useQuickLog(date)
-  return (
-    <section className="card log-dock rise" style={{ '--i': 1 }}>
-      <QuickLogField q={q} placeholder={mode === 'cloud' ? 'What did you eat or do?' : 'Patty, 2 glasses water…'} />
-      <div className="dock-row" style={{ '--n': items.length }}>
-        {items.map((it) => (
-          <button key={it.id} type="button" className={`dock-item${it.done ? ' done' : ''}${it.alert ? ' alert' : ''}`} style={{ '--c': it.color }} onClick={it.onClick} aria-label={it.aria}>
-            <span className="dock-icon" aria-hidden="true">
-              {it.emoji ? <span className="dock-emoji">{it.emoji}</span> : <Icon name={it.icon} size={18} strokeWidth={2.2} />}
-              {it.pct != null && (
-                <svg className="dock-ring" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="16.5" strokeDasharray={`${Math.min(1, it.pct) * RING_C} ${RING_C}`} />
-                </svg>
-              )}
-            </span>
-            <span className="dock-value num ellipsis">
-              {it.value}
-              {it.unit && <span className="dock-unit"> {it.unit}</span>}
-            </span>
-            <span className="dock-label ellipsis">{it.label}</span>
-          </button>
-        ))}
-      </div>
-    </section>
   )
 }
 
