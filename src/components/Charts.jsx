@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { parseISODate } from '../lib/dates.js'
 
 const W = 340
@@ -69,6 +69,8 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
   const id = useId().replace(/:/g, '')
   const svgRef = useRef()
   const [hover, setHover] = useState(null)
+  const hideTimer = useRef()
+  useEffect(() => () => clearTimeout(hideTimer.current), [])
 
   const geo = useMemo(() => {
     const vals = buckets.map((b) => b.value).filter((v) => v != null)
@@ -128,10 +130,17 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
         viewBox={`0 0 ${W} ${H}`}
         role="img"
         aria-label={ariaLabel}
-        onPointerDown={(e) => pick(e.clientX)}
+        onPointerDown={(e) => {
+          clearTimeout(hideTimer.current)
+          pick(e.clientX)
+        }}
         onPointerMove={(e) => (e.pointerType === 'mouse' || e.buttons) && pick(e.clientX)}
         onPointerLeave={() => setHover(null)}
-        onPointerUp={(e) => e.pointerType !== 'mouse' && setTimeout(() => setHover(null), 1600)}
+        onPointerUp={(e) => {
+          if (e.pointerType === 'mouse') return
+          clearTimeout(hideTimer.current)
+          hideTimer.current = setTimeout(() => setHover(null), 1600)
+        }}
       >
         <defs>
           <linearGradient id={`line-${id}`} x1="0" y1="0" x2="1" y2="0">

@@ -225,7 +225,7 @@ export function createSync({ engine, remote, userId, emit = () => {}, now = () =
     return flushing
   }
 
-  function merge(table, serverRows, { since = null, partial = false } = {}) {
+  function merge(table, serverRows, { since = null } = {}) {
     const t = TABLES[table]
     const pendingUpsert = new Set()
     const pendingDelete = new Set()
@@ -249,7 +249,7 @@ export function createSync({ engine, remote, userId, emit = () => {}, now = () =
     }
     for (const row of db[table]) {
       if (seen.has(row.id)) continue
-      const outsideWindow = (since && row.log_date < since) || partial
+      const outsideWindow = since && row.log_date < since
       if (mine(row.id) || outsideWindow) out.push(row)
     }
     db[table] = out

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { PENGUIN_FACE, PENGUIN_THINKING, PENGUIN_WORKOUT } from '../assets/penguins.js'
+import { SPRINGS, animateSpring, projectFling, rubberBand, trackVelocity } from '../lib/spring.js'
 
 // ---------------------------------------------------------------- icons
 // Simple line icons drawn for this app (SF Symbols-like, not copies).
@@ -155,11 +156,12 @@ export function Avatar({ profile, name, size = 60, className = '' }) {
 
 const CLOSE_MS = 280
 
-/** Bottom sheet: slides up, swipe down on the header or tap outside to close. */
+/** Bottom sheet: slides up, swipe down on the header (or flick it) or tap outside to close. */
 export function Sheet({ title, onClose, children, action, tall = false }) {
-  const [closing, setClosing] = useState(false)
+  const [closing, setClosing] = useState(false) // false | 'slide' | 'flung'
   const sheetRef = useRef()
   const drag = useRef(null)
+  const anim = useRef(null)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
 
@@ -167,7 +169,8 @@ export function Sheet({ title, onClose, children, action, tall = false }) {
   const close = () => {
     if (closingRef.current) return
     closingRef.current = true
-    setClosing(true)
+    anim.current?.stop()
+    setClosing('slide')
     setTimeout(() => closeRef.current(), CLOSE_MS)
   }
   const animatedClose = useRef(close)
@@ -181,38 +184,62 @@ export function Sheet({ title, onClose, children, action, tall = false }) {
     return () => {
       document.body.style.overflow = prev
       window.removeEventListener('keydown', onKey)
+      anim.current?.stop()
     }
   }, [])
 
+  const offset = (y) => {
+    sheetRef.current.style.transform = y ? `translateY(${y}px)` : ''
+  }
+
   const onTouchStart = (e) => {
-    drag.current = { y: e.touches[0].clientY, dy: 0 }
-    sheetRef.current.style.transition = 'none'
+    if (closingRef.current) return
+    // Catch a sheet that's still springing back: carry on from where it is.
+    const from = anim.current && !anim.current.done ? anim.current.state().value : 0
+    anim.current?.stop()
+    const y = e.touches[0].clientY
+    drag.current = { y0: y - from, dy: from, samples: [{ t: e.timeStamp, v: from }] }
   }
   const onTouchMove = (e) => {
-    if (!drag.current) return
-    const dy = Math.max(0, e.touches[0].clientY - drag.current.y)
-    drag.current.dy = dy
-    sheetRef.current.style.transform = `translateY(${dy}px)`
+    const d = drag.current
+    if (!d) return
+    const raw = e.touches[0].clientY - d.y0
+    // Down follows the finger; up resists, like pulling on elastic.
+    d.dy = raw >= 0 ? raw : rubberBand(raw, sheetRef.current.offsetHeight || 600)
+    d.samples.push({ t: e.timeStamp, v: d.dy })
+    if (d.samples.length > 8) d.samples.shift()
+    offset(d.dy)
   }
   const onTouchEnd = () => {
-    const el = sheetRef.current
-    const dy = drag.current?.dy || 0
+    const d = drag.current
     drag.current = null
-    if (dy > 110) {
-      el.style.setProperty('--drag', `${dy}px`)
-      el.style.transform = ''
-      close()
+    if (!d) return
+    const el = sheetRef.current
+    const h = el.offsetHeight || 600
+    const v = trackVelocity(d.samples) // px/s, down is positive
+    // Where the flick would carry it decides, not just where the finger let go.
+    if (d.dy > 0 && (d.dy + projectFling(v) > h * 0.45 || v > 1100)) {
+      closingRef.current = true
+      setClosing('flung')
+      anim.current = animateSpring({
+        from: d.dy,
+        to: h + 24,
+        velocity: Math.max(v, 600),
+        spring: SPRINGS.smooth,
+        epsilon: 4,
+        onUpdate: offset,
+        onDone: () => closeRef.current(),
+      })
     } else {
-      el.style.transition = 'transform 0.4s var(--spring)'
-      el.style.transform = ''
+      anim.current = animateSpring({ from: d.dy, to: 0, velocity: v, spring: SPRINGS.smooth, onUpdate: offset })
     }
   }
 
   // Portal to <body> so no animated ancestor can trap the fixed backdrop.
   return createPortal(
-    <div className={`sheet-backdrop${closing ? ' closing' : ''}`} onClick={close}>
+    <div className={`sheet-backdrop${closing ? ` closing ${closing}` : ''}`} onClick={close}>
       <div ref={sheetRef} className={`sheet${tall ? ' tall' : ''}`} role="dialog" aria-modal="true" aria-label={title} onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-top" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+        <div className="sheet-top" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
           <div className="sheet-grabber" />
           <div className="sheet-head">
             <h2 className="ellipsis">{title}</h2>

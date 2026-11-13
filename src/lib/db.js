@@ -13,8 +13,6 @@ import { supabase } from './supabase.js'
 import { createEngine, TABLES, TABLE_NAMES } from './engine.js'
 import { createSync, RemoteError } from './sync.js'
 
-export { remapEntries } from './engine.js'
-
 const LOCAL_KEY = 'lili:local:v1'
 const cloudKey = (userId) => `lili:cloud:${userId}:v1`
 

@@ -11,7 +11,7 @@
 import { sumEntries } from './calc.js'
 import { MEALS } from './meals.js'
 
-export const CHECKIN_EVERY_DEFAULT = 3
+const CHECKIN_EVERY_DEFAULT = 3
 export const MAX_PER_DAY = 6
 const HOUR = 3600e3
 

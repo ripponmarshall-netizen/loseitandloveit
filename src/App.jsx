@@ -20,7 +20,7 @@ import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
 import { MimiBubble, MimiProvider } from './components/MimiCheckin.jsx'
 import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
-import NavDock from './components/NavDock.jsx'
+import TabBar from './components/TabBar.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
 import { watchKeyboard } from './lib/viewport.js'
@@ -79,51 +79,6 @@ const SHEETS = {
   meal: MealBreakdownSheet,
 }
 
-/**
- * Safari-style: the nav button slides away while you scroll down to read, and
- * comes back when you scroll up, reach the top or bottom, or touch the
- * bottom edge of the screen.
- */
-function useAutoHideNav(enabled, resetKey) {
-  const [hidden, setHidden] = useState(false)
-  const holdUntil = useRef(0)
-  // Switching tabs (and the smooth scroll that can follow, e.g. Dashboard →
-  // a Progress chart) must never hide the bar: only the user's own scrolling does.
-  useEffect(() => {
-    setHidden(false)
-    holdUntil.current = Date.now() + 1200
-  }, [resetKey])
-  useEffect(() => {
-    if (!enabled) {
-      setHidden(false)
-      return
-    }
-    let lastY = window.scrollY
-    let raf = 0
-    const onScroll = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY
-        if (Date.now() < holdUntil.current) {
-          lastY = y
-          return
-        }
-        const atBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 24
-        if (y < 40 || atBottom) setHidden(false)
-        else if (y > lastY + 6) setHidden(true)
-        else if (y < lastY - 6) setHidden(false)
-        lastY = y
-      })
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('scroll', onScroll)
-    }
-  }, [enabled])
-  return [hidden, setHidden]
-}
-
 export default function App() {
   const [authReady, setAuthReady] = useState(false)
   const [session, setSession] = useState(null)
@@ -177,7 +132,8 @@ export default function App() {
     tabRef.current = t
     setTab(t)
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)))
-    requestAnimationFrame(() => window.scrollTo({ top: scrollPos.current[t] || 0 }))
+    // Mimi always opens on the newest messages (Coach scrolls itself); other tabs come back where you left them.
+    if (t !== 'coach') requestAnimationFrame(() => window.scrollTo({ top: scrollPos.current[t] || 0 }))
   }, [])
 
   useEffect(() => {
@@ -383,8 +339,6 @@ export default function App() {
     },
     [goTab],
   )
-  const [navHidden, setNavHidden] = useAutoHideNav(tab !== 'coach' && !!store && !!profile, tab)
-
   const enterLocalMode = useCallback(() => {
     writeMode('local')
     setLocalMode(true)
@@ -452,10 +406,8 @@ export default function App() {
       <MimiProvider>
         <SyncPill sync={sync} />
         {['today', 'progress', 'coach', 'settings'].map(show)}
-        {(tab === 'today' || tab === 'progress') && <MimiBubble lowered={navHidden} />}
-        {/* Touching the bottom edge brings the hidden nav button back. */}
-        {navHidden && <div className="nav-reveal" onTouchStart={() => setNavHidden(false)} onClick={() => setNavHidden(false)} aria-hidden="true" />}
-        <NavDock tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} hidden={navHidden} />
+        {(tab === 'today' || tab === 'progress') && <MimiBubble />}
+        <TabBar tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} shrink={tab !== 'coach'} />
         {sheet && SHEETS[sheet.type] && (() => {
           const S = SHEETS[sheet.type]
           return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />
