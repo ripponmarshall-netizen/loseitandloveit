@@ -2,19 +2,10 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { FREQUENCY_LABEL, GLP1_MEDS, INJECTION_SITES, MED_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, suggestSite } from '../lib/glp1.js'
-import { daysBetween, formatDayLabel, formatShortDate } from '../lib/dates.js'
+import { daysBetween, formatDayLabel, formatShortDate, logTimeToIso, timeInputValue } from '../lib/dates.js'
 import { displayWeight, trendOn, weightValue, weightUnit } from '../lib/calc.js'
 import { Icon, ListRow, ListSection, Sheet, Switch } from './ui.jsx'
 
-const pad = (n) => String(n).padStart(2, '0')
-const nowTime = () => {
-  const d = new Date()
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-const timeOf = (iso) => {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? nowTime() : `${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 // ---------------------------------------------------------------- body map
 
@@ -144,7 +135,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
     return String(MED_BY_ID[startMed]?.doses[0] ?? '')
   })
   const [day, setDay] = useState(existing?.log_date || date)
-  const [time, setTime] = useState(existing ? timeOf(existing.taken_at) : nowTime())
+  const [time, setTime] = useState(() => (existing && timeInputValue(existing.taken_at)) || timeInputValue())
   const [site, setSite] = useState(existing?.site || null)
   const [siteTouched, setSiteTouched] = useState(!!existing)
   const [notes, setNotes] = useState(existing?.notes || '')
@@ -184,10 +175,11 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
   async function save() {
     if (!(doseNum > 0)) return toast('Enter the dose', 'error')
     setBusy(true)
-    const takenAt = new Date(`${day}T${time || '12:00'}`)
+    // Before the day-start hour, a time belongs to the next calendar morning (night shifts).
+    const takenAt = logTimeToIso(day, time || '12:00', profile.day_start_hour ?? 0)
     const row = {
       log_date: day,
-      taken_at: Number.isNaN(takenAt.getTime()) ? new Date().toISOString() : takenAt.toISOString(),
+      taken_at: takenAt || new Date().toISOString(),
       med,
       med_name: label,
       dose: doseNum,

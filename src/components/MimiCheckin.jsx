@@ -196,7 +196,7 @@ export function MimiProvider({ children }) {
 }
 
 /** Floating penguin on the Dashboard: opens the Mimi section. A dot means a new check-in. */
-export function MimiBubble({ lowered = false }) {
+export function MimiBubble() {
   const { setTab } = useApp()
   const { insight, busy, unseen } = useMimi()
   const [peek, setPeek] = useState(false)
@@ -213,7 +213,7 @@ export function MimiBubble({ lowered = false }) {
 
   const label = unseen ? `Mimi has a new check-in: ${insight.headline}` : busy ? 'Mimi is looking over your day' : 'Open Mimi, your AI coach'
   return (
-    <div className={`mimi-fab-wrap${lowered ? ' lowered' : ''}`}>
+    <div className="mimi-fab-wrap">
       {peek && unseen && (
         <button className="mimi-peek" onClick={() => setTab('coach')} tabIndex={-1} aria-hidden="true">
           <span className="ellipsis">{insight.headline}</span>
@@ -240,7 +240,7 @@ export default function MimiCheckin() {
       case 'protein': return openAdd({ date: today })
       case 'water': return openSheet('water', { date: today, daily: day?.daily })
       case 'move': return openSheet('workout', { date: today })
-      case 'weight': return openSheet('weight')
+      case 'weight': return openSheet('weight', { date: today })
       case 'mood': return openSheet('mood', { date: today, daily: day?.daily })
       case 'dose': return glp1Plan(profile) ? openSheet('dose', { date: today }) : null
       default: return null

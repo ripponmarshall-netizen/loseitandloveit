@@ -202,7 +202,7 @@ const view = async (blob, from, to) => new DataView(await blob.slice(from, to).a
  * Find a file inside a zip without reading the rest of it.
  * Returns { offset, size, method } of the stored data, or null.
  */
-export async function findZipEntry(blob, test) {
+async function findZipEntry(blob, test) {
   const tailLen = Math.min(blob.size, 65557)
   const tail = await view(blob, blob.size - tailLen, blob.size)
   let eocd = -1

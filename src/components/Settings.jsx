@@ -460,11 +460,15 @@ function ChangePassword({ onClose }) {
   async function save(e) {
     e.preventDefault()
     setBusy(true)
-    const { error } = await supabase.auth.updateUser({ password: pw })
-    setBusy(false)
-    if (error) return toast(error.message, 'error')
-    toast('Password updated')
-    onClose()
+    try {
+      const { error } = await supabase.auth.updateUser({ password: pw })
+      if (error) throw error
+      toast('Password updated')
+      onClose()
+    } catch (err) {
+      toast(err.message || 'Could not change the password', 'error')
+      setBusy(false)
+    }
   }
   return (
     <Sheet title="Change password" onClose={onClose}>
