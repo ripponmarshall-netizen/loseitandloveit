@@ -96,6 +96,13 @@ export async function requestCheckin({ context, signal }) {
   return res.json()
 }
 
+/** Mimi's goal-date estimate (Haiku) from the weigh-ins and plan: { eta, earliest, latest, realistic_rate_per_week, confidence, summary }. */
+export async function requestGoalEstimate({ context, signal }) {
+  const res = await post({ action: 'goal_estimate', context }, signal)
+  if (!res.ok) throw await errorFrom(res)
+  return res.json()
+}
+
 /**
  * Search USDA FoodData Central and Open Food Facts (through the Edge Function,
  * which holds the USDA key and isn't blocked by CORS). No AI credit is used.

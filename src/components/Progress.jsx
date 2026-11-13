@@ -12,9 +12,79 @@ import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget, weightDelta } from './Checkin.jsx'
 import { addDays, formatEta, formatShortDate, formatTime, formatTimeUntil, lastNDates } from '../lib/dates.js'
 import { Sparkline, TrendChart } from './Charts.jsx'
-import { Icon, Segmented } from './ui.jsx'
+import { Icon, PenguinFace, Segmented } from './ui.jsx'
+import { requestGoalEstimate } from '../lib/ai.js'
+import { buildGoalContext, cleanGoalEstimate, goalEstimateDue, goalFingerprint } from '../lib/goalEstimate.js'
 
 const fmtN = (n) => Math.round(Number(n) || 0).toLocaleString('en-GB')
+
+const readJson = (key) => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || 'null')
+  } catch {
+    return null
+  }
+}
+const writeJson = (key, v) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(v))
+  } catch {
+    /* private mode: it just asks again next time */
+  }
+}
+
+/**
+ * Mimi's goal date (Haiku reads the weigh-ins and the plan). Asked for only
+ * when the weigh-ins or goal change; the answer is kept on the device.
+ * Returns { result, loading } where result is null until there is one for the current goal.
+ */
+function useGoalEstimate({ enabled, who, profile, series, targets, today, formulaEta, rateKg, goalReached }) {
+  const key = `lili:goal-eta:${who || 'local'}`
+  const [cache, setCache] = useState(() => readJson(key))
+  const [loading, setLoading] = useState(false)
+  const fingerprint = goalFingerprint({ profile, series })
+
+  useEffect(() => {
+    if (!enabled) return
+    const cached = readJson(key)
+    setCache(cached)
+    if (!goalEstimateDue({ cached, fingerprint, series, goalReached })) return
+    const ctl = new AbortController()
+    let alive = true
+    setLoading(true)
+    const plan = glp1Plan(profile)
+    const context = buildGoalContext({
+      profile, series, targets, today, formulaEta, weeklyRateKg: rateKg,
+      glp1: plan ? { medicine: plan.name, dose: formatDose(plan.dose, plan.unit) } : null,
+    })
+    requestGoalEstimate({ context, signal: ctl.signal })
+      .then((raw) => {
+        const result = cleanGoalEstimate(raw, today)
+        if (!result) throw new Error('The estimate came back unusable.')
+        const next = { fingerprint, goalKg: Number(profile.goal_weight_kg), result, at: Date.now() }
+        writeJson(key, next)
+        if (alive) setCache(next)
+      })
+      .catch((e) => {
+        if (e.name === 'AbortError') return
+        console.warn('[goal] estimate skipped:', e.message) // the straight-line date still shows
+        const next = { ...(cached || {}), failedAt: Date.now() }
+        writeJson(key, next)
+        if (alive) setCache(next)
+      })
+      .finally(() => alive && setLoading(false))
+    return () => {
+      alive = false
+      ctl.abort()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, key, fingerprint, goalReached])
+
+  // Only an answer for this goal, and never a date that has already passed.
+  const r = cache?.result
+  const fits = enabled && r && Number(cache.goalKg) === Number(profile.goal_weight_kg) && r.eta >= today
+  return { result: fits ? r : null, loading: enabled && loading }
+}
 
 const GRANULARITY = [
   ['day', 'Daily'],
@@ -47,7 +117,7 @@ async function loadYear(store, today) {
 }
 
 export default function Progress() {
-  const { store, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus, session } = useApp()
+  const { store, mode, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus, session } = useApp()
   const [daily, setDaily] = useState({})
   const [workouts, setWorkouts] = useState([]) // a year, for badges; the exercise card uses the last 28 days
   const [loaded, setLoaded] = useState({ food: false, workouts: false })
@@ -105,6 +175,11 @@ export default function Progress() {
   const celebration = useNewBadges(badges, loaded.food && loaded.workouts, session?.user?.id)
   const rate = weeklyRate(series)
   const eta = projectGoalDate(series, goalKg, today, rate)
+  const ai = useGoalEstimate({
+    enabled: mode === 'cloud', who: session?.user?.id, profile, series, targets, today,
+    formulaEta: eta, rateKg: rate, goalReached: !!last && last.trend <= goalKg,
+  })
+  const etaDate = ai.result?.eta || eta
   const adaptive = adaptiveTdee({ daily, series, endDate: addDays(today, -1) })
 
   const week = lastNDates(addDays(today, -1), 7)
@@ -148,13 +223,20 @@ export default function Progress() {
       <div className="stats" style={{ marginBottom: 18 }}>
         <Stat label="Current" color="var(--blue)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
         <Stat
-          label="To goal"
+          label="Goal"
           color="var(--teal)"
-          value={!last || !goal ? '—' : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)}`}
-          sub={last && goal && !goal.reached ? `${Math.round(goal.fraction * 100)}% of the way` : undefined}
+          value={goalKg ? displayWeight(goalKg, units) : '—'}
+          sub={!last || !goal ? undefined : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)} to go`}
         />
-        <Stat label="Goal ETA" color="var(--pink)" value={eta ? formatEta(eta, today) : '—'} sub={eta ? formatTimeUntil(eta, today) : undefined} />
+        <Stat
+          label="Goal ETA"
+          color="var(--pink)"
+          value={etaDate ? formatEta(etaDate, today) : ai.loading ? '…' : '—'}
+          sub={etaDate ? `${formatTimeUntil(etaDate, today)}${ai.result ? ' · Mimi' : ''}` : ai.loading ? 'Mimi is checking' : undefined}
+        />
       </div>
+
+      {ai.result && <GoalEstimateCard est={ai.result} today={today} units={units} />}
 
       <WeightTrend
         open={open.weight}
@@ -611,3 +693,27 @@ function WeighIns({ weights }) {
   )
 }
 
+
+/** Mimi's read of the weigh-ins: the likely date, a range, and why. */
+function GoalEstimateCard({ est, today, units }) {
+  const range = est.earliest !== est.latest ? `${formatEta(est.earliest, today)} – ${formatEta(est.latest, today)}` : null
+  return (
+    <section className="card goal-est rise" aria-label="Mimi’s goal estimate">
+      <div className="row" style={{ gap: 10, marginBottom: 8 }}>
+        <PenguinFace size={30} />
+        <div className="grow">
+          <div className="eyebrow">Mimi’s estimate</div>
+          <div className="headline">
+            Goal around {formatShortDate(est.eta)} {est.eta.slice(0, 4)}
+          </div>
+        </div>
+        <span className={`badge ${est.confidence === 'high' ? 'jam' : est.confidence === 'low' ? 'off' : 'usda'}`}>{est.confidence} confidence</span>
+      </div>
+      {est.summary && <p className="small" style={{ margin: '0 0 6px' }}>{est.summary}</p>}
+      <p className="tiny muted" style={{ margin: 0 }}>
+        {[range && `Likely ${range}`, est.ratePerWeek && `about ${est.ratePerWeek} ${weightUnit(units)} a week`].filter(Boolean).join(' · ')}
+        {range || est.ratePerWeek ? '. ' : ''}Updates after each weigh-in.
+      </p>
+    </section>
+  )
+}
