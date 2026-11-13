@@ -132,7 +132,8 @@ export default function App() {
     tabRef.current = t
     setTab(t)
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)))
-    requestAnimationFrame(() => window.scrollTo({ top: scrollPos.current[t] || 0 }))
+    // Mimi always opens on the newest messages (Coach scrolls itself); other tabs come back where you left them.
+    if (t !== 'coach') requestAnimationFrame(() => window.scrollTo({ top: scrollPos.current[t] || 0 }))
   }, [])
 
   useEffect(() => {
@@ -406,7 +407,7 @@ export default function App() {
         <SyncPill sync={sync} />
         {['today', 'progress', 'coach', 'settings'].map(show)}
         {(tab === 'today' || tab === 'progress') && <MimiBubble />}
-        <TabBar tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} />
+        <TabBar tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} shrink={tab !== 'coach'} />
         {sheet && SHEETS[sheet.type] && (() => {
           const S = SHEETS[sheet.type]
           return <S key={sheet.id} date={date} {...sheet.props} onClose={closeSheet} />

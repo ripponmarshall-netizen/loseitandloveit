@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SPRINGS, animateSpring } from '../lib/spring.js'
 import { Icon, PenguinFace } from './ui.jsx'
 
@@ -17,8 +17,9 @@ const SCRUB_PX = 8 // a drag this far along the bar slides the lens instead of t
  * slides to the current tab on a spring and stretches with its speed; drag
  * along the bar to slide it yourself and let go on a tab to open it.
  */
-export default function TabBar({ tab, setTab, onLog }) {
+export default function TabBar({ tab, setTab, onLog, shrink = true }) {
   const barRef = useRef()
+  const compact = useCompactOnScroll(shrink, tab)
   const lensRef = useRef()
   const items = useRef({})
   const anim = useRef(null)
@@ -93,6 +94,7 @@ export default function TabBar({ tab, setTab, onLog }) {
 
   const onPointerDown = (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return
+    compact.expand() // full size while you use it, so the lens lines up under your finger
     drag.current = { id: e.pointerId, x0: e.clientX, scrubbing: false }
   }
   const onPointerMove = (e) => {
@@ -130,7 +132,7 @@ export default function TabBar({ tab, setTab, onLog }) {
   return (
     <nav
       ref={barRef}
-      className="tab-bar"
+      className={`tab-bar${compact.on ? ' compact' : ''}`}
       aria-label="Main"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -159,4 +161,42 @@ export default function TabBar({ tab, setTab, onLog }) {
       })}
     </nav>
   )
+}
+
+/**
+ * Like iOS: the bar shrinks a little while you scroll down to read, and comes
+ * back to full size when you scroll up, reach the top or bottom, switch tabs
+ * or touch it.
+ */
+function useCompactOnScroll(enabled, resetKey) {
+  const [on, setOn] = useState(false)
+  const hold = useRef(0)
+  useEffect(() => {
+    setOn(false)
+    hold.current = Date.now() + 800 // the scroll a tab switch causes isn't the user's
+  }, [resetKey])
+  useEffect(() => {
+    if (!enabled) return setOn(false)
+    let lastY = window.scrollY
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const y = window.scrollY
+        const atBottom = window.innerHeight + y >= document.documentElement.scrollHeight - 24
+        if (Date.now() < hold.current) lastY = y
+        else if (y < 60 || atBottom) setOn(false)
+        else if (y > lastY + 8) setOn(true)
+        else if (y < lastY - 8) setOn(false)
+        else return // small jitter: keep lastY so slow scrolls still add up
+        lastY = y
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [enabled])
+  return { on, expand: () => setOn(false) }
 }

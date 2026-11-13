@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { streamCoach } from '../lib/ai.js'
 import { buildCoachContext } from '../lib/coachContext.js'
@@ -67,6 +67,15 @@ export default function Coach({ active = true }) {
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [active])
+
+  // Opening Mimi (or the history arriving) jumps straight to the latest
+  // messages, before paint, so you never see the top of the chat first.
+  const loaded = messages !== null
+  useLayoutEffect(() => {
+    if (!active || !loaded) return
+    stickRef.current = true
+    window.scrollTo({ top: document.documentElement.scrollHeight })
+  }, [active, loaded])
 
   // Scroll the page to its end, not an end marker into view: the page's
   // bottom padding clears the fixed composer and tab bar, so the newest

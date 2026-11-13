@@ -1233,7 +1233,7 @@ input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
   box-shadow: var(--glass-edge), var(--glass-shadow);
   transform: translateX(-50%);
   animation: bar-in 0.8s var(--spring) backwards;
-  transition: opacity 0.2s var(--ease), transform 0.5s var(--spring);
+  transition: opacity 0.2s var(--ease), transform 0.6s var(--spring-snappy);
 }
 /* A soft sheen across the top, the way light catches curved glass */
 .tab-bar::before {
@@ -1241,6 +1241,13 @@ input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
   background: linear-gradient(180deg, rgb(255 255 255 / 0.32), rgb(255 255 255 / 0) 55%);
   opacity: var(--sheen, 1);
 }
+/* Scrolling down: a bit smaller, icons only (labels fade, icons settle to the middle) */
+.tab-bar.compact { transform: translateX(-50%) scale(0.86); }
+.tab-bar { transform-origin: 50% 100%; }
+.tab-label { transition: opacity 0.2s var(--ease); }
+.tab-glyph { transition: transform 0.5s var(--spring-snappy); }
+.tab-bar.compact .tab-label { opacity: 0; }
+.tab-bar.compact .tab-item:not(.log) .tab-glyph { transform: translateY(7px); }
 .kb-open .tab-bar { opacity: 0; pointer-events: none; transform: translate(-50%, 24px); }
 @keyframes bar-in { from { opacity: 0; transform: translate(-50%, 30px) scale(0.94); } }
 
