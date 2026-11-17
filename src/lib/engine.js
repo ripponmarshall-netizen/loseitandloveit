@@ -595,15 +595,44 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       for (const t of TABLE_NAMES) out[t] = db[t].map(copy)
       return out
     },
+    // Restoring the same backup twice (or onto the account it came from) adds
+    // nothing new: a row is skipped when its id, or its content and time, is
+    // already here. Original times are kept, so a day's order survives.
     async importAll(data) {
       if (data.profile) await api.saveProfile(data.profile)
-      // Foods first: they get new ids, so entries must point at the new ones.
+      const keep = (v) => isoTime(v) || now()
+      // Foods first: entries must point at the saved food's id here.
+      const foodKey = (f) => `${String(f.name || '').trim().toLowerCase()}|${Number(f.calories) || 0}`
+      const foodsByKey = new Map(db.foods.map((f) => [foodKey(f), f.id]))
       const foodIds = new Map()
       for (const f of data.foods || []) {
-        const saved = await api.saveFood({ ...f, id: undefined })
-        if (f.id) foodIds.set(f.id, saved.id)
+        if (!f) continue
+        let id = db.foods.some((x) => x.id === f.id) ? f.id : foodsByKey.get(foodKey(cleanFood(f)))
+        if (!id) {
+          const row = { ...cleanFood(f), id: newId(), created_at: keep(f.created_at) }
+          db.foods.push(row)
+          wrote('foods', 'upsert', row.id)
+          foodsByKey.set(foodKey(row), (id = row.id))
+        }
+        if (f.id) foodIds.set(f.id, id)
       }
-      await api.addEntries(remapEntries(data.entries, foodIds))
+      // Entries, workouts and doses: skip what's already here.
+      const addRows = (table, list, clean, keyOf) => {
+        const ids = new Set(db[table].map((r) => r.id))
+        const keys = new Set(db[table].map(keyOf))
+        for (const raw of list || []) {
+          if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(String(raw.log_date || '')) || ids.has(raw.id)) continue
+          const row = { ...clean(raw), id: newId(), created_at: keep(raw.created_at) }
+          const k = keyOf(row)
+          if (keys.has(k)) continue
+          keys.add(k)
+          db[table].push(row)
+          wrote(table, 'upsert', row.id)
+        }
+      }
+      addRows('entries', remapEntries(data.entries, foodIds), cleanEntry, (e) => `${e.log_date}|${e.name}|${Number(e.calories)}|${Number(e.servings)}|${ms(e.created_at)}`)
+      addRows('workouts', data.workouts, cleanWorkout, (w) => `${w.log_date}|${w.kind}|${w.name}|${Number(w.duration_min)}|${ms(w.created_at)}`)
+      addRows('doses', data.doses, (d) => cleanDose(d, now()), (d) => `${d.log_date}|${ms(d.taken_at)}|${Number(d.dose)}|${d.med}`)
       // Weigh-ins already here (same day, weight and time) aren't added twice.
       const weightKey = (w) => `${w.log_date}|${Number(w.weight_kg)}|${ms(w.weighed_at)}`
       const haveWeight = new Set(db.weights.map(weightKey))
@@ -621,8 +650,6 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
         wrote('weights', 'upsert', row.id)
       }
       save()
-      for (const w of data.workouts || []) await api.addWorkout(w)
-      for (const d of data.doses || []) await api.addDose(d)
       for (const l of data.daily_logs || []) await api.saveDailyLog(l.log_date, l)
       const moodKey = (m) => `${m.log_date}|${ms(m.logged_at)}|${m.mood}`
       const haveMood = new Set(db.mood_logs.map(moodKey))

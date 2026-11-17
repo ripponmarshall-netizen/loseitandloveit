@@ -2,6 +2,7 @@
 // stamp, so every deploy installs a fresh cache with the whole app in it.
 const ASSETS = self.__ASSETS
 const CACHE = `lili-${self.__BUILD}`
+const NAV_TIMEOUT_MS = 3500
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png', ...ASSETS]
 
 self.addEventListener('install', (event) => {
@@ -27,19 +28,23 @@ self.addEventListener('fetch', (event) => {
   // Only handle same-origin GETs. Supabase and API calls go straight to the network.
   if (req.method !== 'GET' || url.origin !== self.location.origin) return
 
-  // Pages: network first so deploys show up, cached copy when offline.
+  // Pages: network first so deploys show up, cached copy when offline. On a
+  // weak signal the network can hang for a long time without failing, so the
+  // cached copy is used after a few seconds (the network copy still refreshes
+  // the cache for next time).
   if (req.mode === 'navigate') {
+    const network = fetch(req).then((res) => {
+      // Never let a 404/500 page replace the good offline copy.
+      if (res.ok) {
+        const copy = res.clone()
+        caches.open(CACHE).then((c) => c.put('./index.html', copy))
+      }
+      return res
+    })
+    const cached = () => caches.match('./index.html', { ignoreVary: true })
+    const slow = new Promise((resolve) => setTimeout(resolve, NAV_TIMEOUT_MS)).then(cached)
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          // Never let a 404/500 page replace the good offline copy.
-          if (res.ok) {
-            const copy = res.clone()
-            caches.open(CACHE).then((c) => c.put('./index.html', copy))
-          }
-          return res
-        })
-        .catch(() => caches.match('./index.html', { ignoreVary: true })),
+      Promise.race([network.catch(cached), slow.then((hit) => hit || network)]).then((res) => res || network),
     )
     return
   }

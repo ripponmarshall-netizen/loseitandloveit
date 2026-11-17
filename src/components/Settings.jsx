@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { supabase } from '../lib/supabase.js'
 import { ACTIVITY, CONDITIONS, ageFromBirthYear, cleanConditions, cmToFtIn, displayWeight, entryTotals } from '../lib/calc.js'
-import { formatShortDate } from '../lib/dates.js'
+import { formatShortDate, timeMs } from '../lib/dates.js'
 import { validateProfile, exactWeightKg } from '../lib/profileForm.js'
 import { APP_VERSION } from '../config.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
@@ -110,7 +110,9 @@ export default function Settings() {
     try {
       const { entries } = await store.exportAll()
       const head = ['date', 'meal', 'food', 'serving', 'servings', 'kcal', 'protein_g', 'carbs_g', 'fat_g', 'source']
-      const rows = entries.map((e) => {
+      // The account sends rows in id order: put them back in the order they were logged.
+      const sorted = [...entries].sort((a, b) => (a.log_date < b.log_date ? -1 : a.log_date > b.log_date ? 1 : timeMs(a.created_at) - timeMs(b.created_at)))
+      const rows = sorted.map((e) => {
         const t = entryTotals(e)
         return [e.log_date, e.meal, e.name, e.serving, Number(e.servings), t.calories, t.protein, t.carbs, t.fat, e.source]
       })
@@ -128,7 +130,7 @@ export default function Settings() {
     try {
       const data = JSON.parse(await file.text())
       if (data.app !== 'loseitandloveit') throw new Error('That file is not a Lose It & Love It export.')
-      if (!window.confirm(`Import ${data.entries?.length || 0} food entries and ${data.weights?.length || 0} weigh-ins? Entries are added, not merged, so don't import the same file twice.`)) return
+      if (!window.confirm(`Import ${data.entries?.length || 0} food entries and ${data.weights?.length || 0} weigh-ins? Anything already in your log is skipped, so importing the same file twice is safe.`)) return
       await store.importAll(data)
       const p = await store.getProfile()
       if (p) await saveProfile(p)
