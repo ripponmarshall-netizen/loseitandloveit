@@ -490,3 +490,35 @@ test('restoring a backup matches weigh-in times however the server wrote them', 
   await engine.importAll({ weights: [{ log_date: '2026-11-01', weight_kg: 100, weighed_at: '2026-11-01T11:00:00.000Z' }] })
   assert.equal((await engine.listWeights()).length, 1)
 })
+
+test('restoring a backup twice adds food, workouts and doses once, keeping their times and food links', async () => {
+  const src = createEngine({ persist: () => {} })
+  const food = await src.saveFood({ name: 'Ackee and saltfish', calories: 320 })
+  await src.addEntries([
+    { log_date: '2026-11-01', name: 'Ackee and saltfish', calories: 320, food_id: food.id },
+    { log_date: '2026-11-01', name: 'Fried dumpling', calories: 180 },
+  ])
+  await src.addWorkout({ log_date: '2026-11-01', kind: 'home', duration_min: 20 })
+  await src.addDose({ log_date: '2026-11-01', dose: 2.5, taken_at: '2026-11-01T12:00:00.000Z' })
+  const data = JSON.parse(JSON.stringify(await src.exportAll()))
+
+  // Onto a fresh device, twice.
+  const { engine, sync, remote } = setup()
+  await engine.importAll(data)
+  await engine.importAll(data)
+  const entries = await engine.listEntries('2026-11-01', '2026-11-01')
+  assert.deepEqual(entries.map((e) => e.name), ['Ackee and saltfish', 'Fried dumpling'])
+  assert.deepEqual(entries.map((e) => e.created_at), data.entries.map((e) => e.created_at))
+  const foods = await engine.listFoods()
+  assert.equal(foods.length, 1)
+  assert.equal(entries[0].food_id, foods[0].id)
+  assert.equal((await engine.listWorkouts('2026-11-01', '2026-11-01')).length, 1)
+  assert.equal((await engine.listDoses('2026-11-01', '2026-11-01')).length, 1)
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.food_entries.length, 2)
+
+  // Back onto the device it came from: nothing new.
+  await src.importAll(data)
+  assert.equal((await src.listEntries('2026-11-01', '2026-11-01')).length, 2)
+  assert.equal((await src.listFoods()).length, 1)
+})
