@@ -196,13 +196,17 @@ export function MimiProvider({ children }) {
 }
 
 /** Floating penguin on the Dashboard: opens the Mimi section. A dot means a new check-in. */
-export function MimiBubble() {
+/**
+ * When a new check-in lands, Mimi says its headline for a few seconds in a
+ * bubble above the Mimi tab, then tucks it away. The tab itself carries the
+ * dot (and a spinner while Mimi is thinking), so nothing floats over the page.
+ */
+export function MimiPeek() {
   const { setTab } = useApp()
-  const { insight, busy, unseen } = useMimi()
+  const { insight, unseen } = useMimi()
   const [peek, setPeek] = useState(false)
   const peekedFor = useRef(null)
 
-  // Say hello once when a new check-in lands, then tuck the label away.
   useEffect(() => {
     if (!unseen || peekedFor.current === insight.id) return
     peekedFor.current = insight.id
@@ -211,19 +215,11 @@ export function MimiBubble() {
     return () => clearTimeout(t)
   }, [unseen, insight?.id])
 
-  const label = unseen ? `Mimi has a new check-in: ${insight.headline}` : busy ? 'Mimi is looking over your day' : 'Open Mimi, your AI coach'
+  if (!peek || !unseen) return null
   return (
-    <div className="mimi-fab-wrap">
-      {peek && unseen && (
-        <button className="mimi-peek" onClick={() => setTab('coach')} tabIndex={-1} aria-hidden="true">
-          <span className="ellipsis">{insight.headline}</span>
-        </button>
-      )}
-      <button className={`mimi-fab${busy ? ' busy' : ''}${unseen ? ' unseen' : ''}`} onClick={() => setTab('coach')} aria-label={label}>
-        <PenguinFace size={40} />
-        {unseen && <span className="mimi-dot" aria-hidden="true" />}
-      </button>
-    </div>
+    <button className="mimi-peek" onClick={() => setTab('coach')} tabIndex={-1} aria-hidden="true">
+      <span className="ellipsis">{insight.headline}</span>
+    </button>
   )
 }
 

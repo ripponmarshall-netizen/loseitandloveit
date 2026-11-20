@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { PENGUIN_FACE, PENGUIN_THINKING, PENGUIN_WORKOUT } from '../assets/penguins.js'
 import { SPRINGS, animateSpring, projectFling, rubberBand, trackVelocity } from '../lib/spring.js'
@@ -378,49 +378,6 @@ export function MenuRow({ icon, color, label, sub, value, options, onChange }) {
 }
 
 // ---------------------------------------------------------------- data display
-
-/** Activity-style ring with a green→mint gradient; orange when over. */
-export function Ring({ value, max, size = 140, stroke = 14, color, children }) {
-  const id = useId().replace(/:/g, '')
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const target = max > 0 ? Math.min(value / max, 1) : 0
-  const over = max > 0 && value > max
-  // Start empty, then animate to the value after mount.
-  const [pct, setPct] = useState(0)
-  useEffect(() => {
-    const t = requestAnimationFrame(() => setPct(target))
-    return () => cancelAnimationFrame(t)
-  }, [target])
-  return (
-    <div className="ring-wrap" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <defs>
-          <linearGradient id={`ring-${id}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={color && !over ? color : over ? 'var(--orange)' : 'var(--ring-a)'} />
-            <stop offset="1" stopColor={color && !over ? color : over ? 'var(--red)' : 'var(--ring-b)'} />
-          </linearGradient>
-        </defs>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--fill)" strokeWidth={stroke} />
-        <circle
-          className="ring-arc"
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={`url(#ring-${id})`}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={c * (1 - pct)}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          opacity={pct > 0 ? 1 : 0}
-        />
-      </svg>
-      <div className="ring-center">{children}</div>
-    </div>
-  )
-}
 
 export function MacroBar({ label, value, target, color }) {
   const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0

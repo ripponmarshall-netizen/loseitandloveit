@@ -601,3 +601,134 @@ export function bucketStats(buckets) {
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length
   return { avg, min: Math.min(...vals), max: Math.max(...vals), first: vals[0], last: vals[vals.length - 1], change: vals[vals.length - 1] - vals[0], count: vals.length }
 }
+
+// ---------- Motivation (Today screen) ----------
+
+// A day counts as logged once it has this much food in it: the same bar the
+// badges and adaptive maintenance use, so a stray snack isn't a "day".
+export const LOGGED_DAY_KCAL = 500
+
+export const isLoggedDay = (totals) => (Number(totals?.calories) || 0) >= LOGGED_DAY_KCAL
+
+/**
+ * Days-logged streak that forgives one missed day in any 7 (a rest day), so a
+ * night shift or a day off doesn't wipe out weeks of logging. Two missed days
+ * close together end it. Today never breaks it: until today is logged the
+ * streak runs to yesterday and today is "pending" (and if yesterday was
+ * missed, it is today's rest day: log today to keep the streak).
+ * daily: { 'YYYY-MM-DD': totals }. Returns { days, restDays, todayLogged, since }.
+ */
+export function loggingStreak(daily, today, { graceGap = 7 } = {}) {
+  const logged = (d) => isLoggedDay(daily?.[d])
+  const todayLogged = logged(today)
+  let d = todayLogged ? today : addDays(today, -1)
+  let days = 0
+  let since = null
+  let lastRest = null // the most recent forgiven miss (walking back, so the later one)
+  const rest = []
+  // Walk back no further than the oldest day we were given.
+  const oldest = Object.keys(daily || {}).sort()[0]
+  while (oldest && d >= oldest) {
+    if (logged(d)) {
+      days++
+      since = d
+    } else if ((days > 0 || (!todayLogged && d === addDays(today, -1))) && (!lastRest || daysBetween(d, lastRest) >= graceGap)) {
+      // (Yesterday can be the rest day before today is logged: the streak is still alive today.)
+      // Only forgive a miss with logged days on both sides of it.
+      const before = addDays(d, -1)
+      if (!logged(before)) break
+      lastRest = d
+      rest.push(d)
+    } else break
+    d = addDays(d, -1)
+  }
+  return { days, restDays: rest.filter((r) => since && r > since), todayLogged, since }
+}
+
+/** The 7 days ending today: [{ date, logged, today }]. */
+export function weekDots(daily, today) {
+  const out = []
+  for (let i = 6; i >= 0; i--) {
+    const date = addDays(today, -i)
+    out.push({ date, logged: isLoggedDay(daily?.[date]), today: i === 0 })
+  }
+  return out
+}
+
+/**
+ * Calorie balance for the week so far (Monday to today). Days without enough
+ * food logged are left out rather than counted as zero, which would make the
+ * week look far better than it was.
+ * days: [{ date, eaten, target }] for Monday..today (today may be partial).
+ * Returns { balance, logged, todayBalance, restOfWeek } where balance > 0 means under.
+ */
+export function weekBalance(days, today) {
+  let balance = 0
+  let logged = 0
+  let todayBalance = 0
+  for (const d of days || []) {
+    const eaten = Number(d.eaten) || 0
+    const target = Number(d.target) || 0
+    if (!target) continue
+    if (d.date === today) {
+      todayBalance = target - eaten
+      if (eaten > 0) balance += todayBalance
+      continue
+    }
+    if (eaten < LOGGED_DAY_KCAL) continue
+    logged++
+    balance += target - eaten
+  }
+  return { balance: Math.round(balance), logged, todayBalance: Math.round(todayBalance) }
+}
+
+// Rings close at: calories 90–100% of target (eating far under isn't the
+// goal), protein 90%+, water 100%.
+export const RING_CLOSE = { caloriesMin: 0.9, protein: 0.9, water: 1 }
+
+/** Which of today's three rings are closed. */
+export function ringsClosed({ kcal, kcalTarget, protein, proteinTarget, waterMl, waterTarget }) {
+  const k = Number(kcal) || 0
+  const kt = Number(kcalTarget) || 0
+  const pt = Number(proteinTarget) || 0
+  const wt = Number(waterTarget) || 0
+  return {
+    calories: kt > 0 && k >= kt * RING_CLOSE.caloriesMin && k <= kt,
+    protein: pt > 0 && (Number(protein) || 0) >= pt * RING_CLOSE.protein,
+    water: wt > 0 && (Number(waterMl) || 0) >= wt * RING_CLOSE.water,
+  }
+}
+
+/**
+ * A Monday-to-Sunday week in numbers, for the Sunday recap.
+ * daily: { date: totals }, series: trend points, workouts: [{ log_date }].
+ */
+export function weekRecap({ start, daily = {}, targets, series = [], workouts = [], until }) {
+  const end = addDays(start, 6)
+  const last = until && until < end ? until : end
+  const dates = []
+  for (let d = start; d <= last; d = addDays(d, 1)) dates.push(d)
+  const logged = dates.filter((d) => isLoggedDay(daily[d]))
+  const avgKcal = logged.length ? Math.round(logged.reduce((s, d) => s + daily[d].calories, 0) / logged.length) : null
+  const proteinGoal = targets?.protein ? targets.protein * RING_CLOSE.protein : null
+  const proteinDays = proteinGoal ? logged.filter((d) => daily[d].protein >= proteinGoal).length : 0
+  const kcalTarget = Number(targets?.calories) || 0
+  const onTarget = kcalTarget
+    ? logged.filter((d) => daily[d].calories >= kcalTarget * RING_CLOSE.caloriesMin && daily[d].calories <= kcalTarget).length
+    : 0
+  // Best day: closest to the calorie target without going over, protein as tie-break.
+  let best = null
+  for (const d of logged) {
+    const t = daily[d]
+    const score = kcalTarget ? (t.calories <= kcalTarget ? t.calories / kcalTarget : 0) + (proteinGoal && t.protein >= proteinGoal ? 0.5 : 0) : 0
+    if (!best || score > best.score) best = { date: d, score }
+  }
+  const before = trendOn(series, addDays(start, -1)) || series.find((p) => p.date >= start && p.date <= last) || null
+  const after = trendOn(series, last)
+  const trendChangeKg = before && after && after.date > before.date ? after.trend - before.trend : null
+  const sessions = workouts.filter((w) => w.log_date >= start && w.log_date <= last).length
+  return {
+    start, end, days: dates.length, logged: logged.length, avgKcal, proteinDays, onTarget,
+    bestDay: best && best.score > 0 ? best.date : null, trendChangeKg, workouts: sessions,
+  }
+}

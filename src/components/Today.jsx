@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
-import { entryTotals, exerciseAllowance, sumEntries } from '../lib/calc.js'
+import { entryTotals, exerciseAllowance, ringsClosed, sumEntries } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
 import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
 import { LogDock } from './QuickLog.jsx'
-import { Avatar, Icon, Ring, Sheet, Spinner, Stepper } from './ui.jsx'
+import { Avatar, Icon, PenguinFace, Sheet, Spinner, Stepper } from './ui.jsx'
+import { foodEmoji } from '../lib/foodEmoji.js'
+import { RingStack, WeekBalance, WeekRecapCard, WinsCard, skyFor, useRecentLog, useRingCheer } from './Motivation.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
@@ -72,8 +74,22 @@ export default function Today() {
     }
   }
 
+  const recent = useRecentLog()
+  const proteinTarget = targets?.protein || 0
+  const closed = ringsClosed({ kcal: totals.calories, kcalTarget: target, protein: totals.protein, proteinTarget, waterMl: water.ml, waterTarget })
+  const allClosed = closed.calories && closed.protein && closed.water
+  const cheer = useRingCheer({ date, active: isToday, ready: entries !== null && day?.daily !== undefined, closed })
+  const over = left < 0
+  const rings = [
+    { key: 'calories', value: totals.calories, max: target, a: over ? 'var(--orange)' : 'var(--ring-a)', b: over ? 'var(--red)' : 'var(--ring-b)' },
+    { key: 'protein', value: totals.protein, max: proteinTarget, a: 'var(--pink)', b: 'var(--protein-b)' },
+    { key: 'water', value: water.ml, max: waterTarget, a: 'var(--cyan)', b: 'var(--water-b)' },
+  ]
+  const emptyMeals = entries ? MEALS.filter((m) => !entries.some((e) => e.meal === m)) : []
+
   return (
     <div className="dashboard">
+      <div className="sky" data-sky={skyFor(now.getHours())} aria-hidden="true" />
       <header className="page-head">
         <div className="grow">
           {isToday ? (
@@ -96,31 +112,41 @@ export default function Today() {
         </button>
       </header>
 
-      <section className="card hero-card rise" style={{ '--i': 0 }}>
-        <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label="Today’s nutrition breakdown">
-          <Ring value={totals.calories} max={target} size={132} stroke={13}>
-            <span className="big num">{fmt(Math.abs(left))}</span>
-            <span className="tiny muted">{left >= 0 ? 'kcal left' : 'kcal over'}</span>
-          </Ring>
+      {isToday && <WinsCard recent={recent} />}
+
+      <section className={`card hero-card rise${allClosed && isToday ? ' all-closed' : ''}`} style={{ '--i': 1 }}>
+        <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label={`${fmt(Math.abs(left))} kcal ${over ? 'over' : 'left'}. Open the day’s nutrition breakdown`}>
+          <RingStack rings={rings} cheer={cheer} />
           <div className="grow hero-stats">
-            <div className="kv"><span className="k">Eaten</span><span className="v">{fmt(totals.calories)}</span></div>
-            <div className="kv"><span className="k">Target</span><span className="v">{fmt(target)}</span></div>
+            <div className="hero-left">
+              <span className="hero-big num">{fmt(Math.abs(left))}</span>
+              <span className={`hero-unit${over ? ' over' : ''}`}>{over ? 'kcal over' : 'kcal left'}</span>
+            </div>
+            <RingLegend color="var(--ring-a)" label="Food" value={`${fmt(totals.calories)}`} of={fmt(target)} done={closed.calories} />
+            <RingLegend color="var(--pink)" label="Protein" value={Math.round(totals.protein)} of={`${proteinTarget} g`} done={closed.protein} />
+            <RingLegend color="var(--cyan)" label="Water" value={formatLitres(water.ml)} of={`${formatLitres(waterTarget)} L`} done={closed.water} />
             {burned > 0 && (
-              <div className="kv">
-                <span className="k">Exercise</span>
-                <span className="v" style={{ color: 'var(--orange)' }}>{allowance > 0 ? `+${fmt(allowance)}` : fmt(burned)}</span>
-              </div>
+              <span className="hero-burn num">
+                <Icon name="flame" size={14} /> {allowance > 0 ? `+${fmt(allowance)} from exercise` : `${fmt(burned)} burned`}
+              </span>
             )}
           </div>
         </button>
+        {allClosed && isToday && (
+          <div className="hero-cheer">
+            <PenguinFace size={26} />
+            <span>All three rings closed today. Mimi’s proud of you.</span>
+          </div>
+        )}
         <button className="macro-strip" onClick={() => openProgress('macros')} aria-label="Macros: open trends in Progress">
           <MacroMini label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
           <MacroMini label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
           <MacroMini label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
         </button>
+        <WeekBalance recent={recent} date={date} />
       </section>
 
-      <LogDock date={date} className="rise" style={{ '--i': 1 }} />
+      <LogDock date={date} className="rise" style={{ '--i': 2 }} />
 
       {nudge && (
         <div className={`nudge ${nudge.tone}`} role={nudge.tone === 'urgent' ? 'alert' : 'status'}>
@@ -128,6 +154,8 @@ export default function Today() {
           <span>{nudge.text}</span>
         </div>
       )}
+
+      {isToday && <WeekRecapCard recent={recent} />}
 
       <div className="list-header big">
         Food<span className="list-header-note">{totals.calories > 0 ? `${fmt(totals.calories)} kcal` : ''}</span>
@@ -137,55 +165,71 @@ export default function Today() {
           <Spinner />
         </div>
       ) : (
-        <div className="list food-list">
-          {MEALS.map((meal) => {
-            const list = entries.filter((e) => e.meal === meal)
-            const kcal = sumEntries(list).calories
-            return (
-              <div key={meal} className="meal-group">
-                <div className="list-row meal-row" style={{ '--c': MEAL_COLOR[meal] }}>
-                  <button
-                    className="meal-open"
-                    onClick={() => (list.length ? openSheet('meal', { date, meal, onEdit: setEditing }) : openAdd({ meal }))}
-                    aria-label={list.length ? `${MEAL_LABEL[meal]} nutrition: ${fmt(kcal)} kcal` : `Add to ${MEAL_LABEL[meal]}`}
-                  >
-                    <span className="dot" />
-                    <span className="label headline">{MEAL_LABEL[meal]}</span>
-                    {list.length > 0 && <Icon name="chart" size={16} className="meal-chart" />}
-                    <span className="value num">{kcal > 0 ? fmt(kcal) : ''}</span>
-                  </button>
-                  <button className="meal-add" onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
-                    <Icon name="plus" strokeWidth={2.8} />
-                  </button>
-                </div>
-                {list.map((e) => (
-                  <button key={e.id} className="list-row entry-row" onClick={() => setEditing(e)}>
-                    <span className="label">
-                      <span className="ellipsis" style={{ display: 'block' }}>{e.name}</span>
-                      <span className="sub ellipsis">
-                        {Number(e.servings) !== 1 && `${Number(e.servings)} × `}
-                        {e.serving || (e.source === 'quick' ? 'Quick add' : '1 serving')}
-                        {e.source === 'ai' && (
-                          <>
-                            {' '}
-                            <span className="badge ai">AI</span>
-                          </>
-                        )}
-                      </span>
-                    </span>
-                    <span className="entry-kcal">{fmt(entryTotals(e).calories)}</span>
-                  </button>
-                ))}
-              </div>
-            )
-          })}
-        </div>
+        <>
+          {entries.length > 0 && (
+            <div className="list food-list">
+              {MEALS.filter((meal) => !emptyMeals.includes(meal)).map((meal) => {
+                const list = entries.filter((e) => e.meal === meal)
+                const kcal = sumEntries(list).calories
+                return (
+                  <div key={meal} className="meal-group">
+                    <div className="list-row meal-row" style={{ '--c': MEAL_COLOR[meal] }}>
+                      <button
+                        className="meal-open"
+                        onClick={() => openSheet('meal', { date, meal, onEdit: setEditing })}
+                        aria-label={`${MEAL_LABEL[meal]} nutrition: ${fmt(kcal)} kcal`}
+                      >
+                        <span className="dot" />
+                        <span className="label headline">{MEAL_LABEL[meal]}</span>
+                        <Icon name="chart" size={16} className="meal-chart" />
+                        <span className="value num">{kcal > 0 ? fmt(kcal) : ''}</span>
+                      </button>
+                      <button className="meal-add" onClick={() => openAdd({ meal })} aria-label={`Add to ${MEAL_LABEL[meal]}`}>
+                        <Icon name="plus" strokeWidth={2.8} />
+                      </button>
+                    </div>
+                    {list.map((e) => (
+                      <button key={e.id} className="list-row entry-row" onClick={() => setEditing(e)}>
+                        <span className="entry-emoji" aria-hidden="true">{foodEmoji(e.name, e.meal)}</span>
+                        <span className="label">
+                          <span className="ellipsis" style={{ display: 'block' }}>{e.name}</span>
+                          <span className="sub ellipsis">
+                            {Number(e.servings) !== 1 && `${Number(e.servings)} × `}
+                            {e.serving || (e.source === 'quick' ? 'Quick add' : '1 serving')}
+                            {e.source === 'ai' && (
+                              <>
+                                {' '}
+                                <span className="badge ai">AI</span>
+                              </>
+                            )}
+                          </span>
+                        </span>
+                        <span className="entry-kcal">{fmt(entryTotals(e).calories)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {emptyMeals.length > 0 && (
+            <div className={`meal-chips${entries.length ? '' : ' alone'}`}>
+              <span className="meal-chips-label">{entries.length ? 'Add' : 'Nothing logged yet. Add'}</span>
+              {emptyMeals.map((meal) => (
+                <button key={meal} type="button" className="meal-chip" style={{ '--c': MEAL_COLOR[meal] }} onClick={() => openAdd({ meal })}>
+                  <Icon name="plus" size={14} strokeWidth={2.8} />
+                  {MEAL_LABEL[meal]}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {day?.checkinError && <p className="list-footer danger-text">{day.checkinError}</p>}
 
       {entries && entries.length === 0 && (
-        <p className="center" style={{ marginTop: 24 }}>
+        <p className="center" style={{ marginTop: 16 }}>
           <button className="btn sm gray" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
         </p>
       )}
@@ -193,6 +237,25 @@ export default function Today() {
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
     </div>
   )
+}
+
+/** Ring key: colour, name, amount / target, and a tick once it's closed. */
+function RingLegend({ color, label, value, of, done }) {
+  return (
+    <span className={`ring-legend${done ? ' done' : ''}`} style={{ '--c': color }}>
+      <i aria-hidden="true">{done && <Icon name="check" size={10} strokeWidth={3.4} />}</i>
+      <span className="rl-label">{label}</span>
+      <span className="rl-val num">
+        {value}
+        <span className="muted"> / {of}</span>
+      </span>
+    </span>
+  )
+}
+
+const formatLitres = (ml) => {
+  const l = (Number(ml) || 0) / 1000
+  return l >= 10 ? l.toFixed(0) : l.toFixed(1)
 }
 
 /** One macro as a slim bar with grams eaten and the target. */

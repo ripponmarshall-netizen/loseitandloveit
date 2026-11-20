@@ -101,7 +101,7 @@ const VIEWS = [
   ['awards', 'Awards'],
 ]
 // Which view holds each section a Dashboard card can jump to.
-const VIEW_OF = { weight: 'weight', macros: 'food', dose: 'health' }
+const VIEW_OF = { weight: 'weight', macros: 'food', dose: 'health', awards: 'awards' }
 const PERIOD = { day: 'last 30 days', week: 'last 12 weeks', month: 'last 12 months' }
 
 // A year of food in 2-month chunks: one big request would hit the API's row cap.
