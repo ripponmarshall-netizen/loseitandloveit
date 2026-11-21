@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { foodEmoji } from '../src/lib/foodEmoji.js'
 import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods, words } from '../src/lib/foodSearch.js'
 import { convertUnits, fromForm, snapPace, toForm, validateProfile } from '../src/lib/profileForm.js'
 import { BUILTIN_FOODS } from '../src/data/foods.js'
@@ -110,4 +111,19 @@ test('profile validation gives friendly messages', () => {
   assert.match(validateProfile({ ...ok, goal_weight_kg: 110 }, ['goal'], 2026), /at or below/)
   assert.match(validateProfile({ ...ok, start_weight_kg: 80 }, ['body'], 2026), /at or below/)
   assert.equal(validateProfile({ ...ok, goal_weight_kg: 100 }, ['goal'], 2026), null)
+})
+
+
+test('foodEmoji picks from the name, specific dishes first', () => {
+  assert.equal(foodEmoji('Ackee and saltfish'), '🐟')
+  assert.equal(foodEmoji('Beef patty'), '🥟')
+  assert.equal(foodEmoji('Jerk chicken'), '🍗')
+  assert.equal(foodEmoji('Curry goat'), '🍛')
+  assert.equal(foodEmoji('Chicken soup'), '🍲')
+  assert.equal(foodEmoji('Rice and peas'), '🍚')
+  assert.equal(foodEmoji('Fried plantain'), '🍌')
+  assert.equal(foodEmoji('2 glasses water'), '💧')
+  assert.equal(foodEmoji('Pineapple'), '🍍') // not 'apple'
+  assert.equal(foodEmoji('Mystery dish', 'snack'), '🍿')
+  assert.equal(foodEmoji('', 'lunch'), '🍽️')
 })

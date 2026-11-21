@@ -17,6 +17,12 @@ import {
   cmToFtIn,
   ftInToCm,
   kgToLb,
+  loggingStreak,
+  weekDots,
+  weekBalance,
+  ringsClosed,
+  weekRecap,
+  isLoggedDay,
 } from '../src/lib/calc.js'
 import { logicalToday, addDays, daysBetween, lastNDates, formatEta, formatTimeUntil } from '../src/lib/dates.js'
 
@@ -393,4 +399,119 @@ test('trendSeries: several weigh-ins on a day count once, as the first of the da
     { log_date: '2026-11-02', weight_kg: 98 },
   ])
   assert.equal(t[0].weight, 98)
+})
+
+// ---------- Motivation ----------
+
+const fullDay = { calories: 1800, protein: 150 }
+const dayMap = (dates, totals = fullDay) => Object.fromEntries(dates.map((d) => [d, totals]))
+
+test('isLoggedDay needs 500 kcal', () => {
+  assert.equal(isLoggedDay({ calories: 499 }), false)
+  assert.equal(isLoggedDay({ calories: 500 }), true)
+  assert.equal(isLoggedDay(undefined), false)
+})
+
+test('loggingStreak counts consecutive logged days, today pending', () => {
+  const daily = dayMap(['2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'])
+  const s = loggingStreak(daily, '2026-11-20')
+  assert.equal(s.days, 5)
+  assert.equal(s.todayLogged, false)
+  assert.equal(s.since, '2026-11-15')
+  daily['2026-11-20'] = fullDay
+  assert.equal(loggingStreak(daily, '2026-11-20').days, 6)
+  assert.equal(loggingStreak(daily, '2026-11-20').todayLogged, true)
+})
+
+test('loggingStreak forgives one missed day a week, not two close together', () => {
+  // 10..13 logged, 14 missed, 15..19 logged
+  const daily = dayMap(['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19'])
+  const s = loggingStreak(daily, '2026-11-19')
+  assert.equal(s.days, 9)
+  assert.deepEqual(s.restDays, ['2026-11-14'])
+  // A second miss 3 days earlier (11th) ends it at the 12th.
+  delete daily['2026-11-11']
+  const s2 = loggingStreak(daily, '2026-11-19')
+  assert.equal(s2.days, 7) // 12, 13, 15..19
+  assert.equal(s2.since, '2026-11-12')
+  // Two missed in a row is never forgiven.
+  const d3 = dayMap(['2026-11-10', '2026-11-11', '2026-11-14', '2026-11-15'])
+  assert.equal(loggingStreak(d3, '2026-11-15').days, 2)
+})
+
+test('loggingStreak: yesterday missed and today not logged yet keeps the streak alive', () => {
+  const daily = dayMap(['2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20'])
+  const s = loggingStreak(daily, '2026-11-22')
+  assert.equal(s.days, 4)
+  assert.deepEqual(s.restDays, ['2026-11-21'])
+  assert.equal(s.todayLogged, false)
+  // Two days missed before today: gone.
+  assert.equal(loggingStreak(daily, '2026-11-23').days, 0)
+})
+
+test('loggingStreak ignores light days and is 0 with nothing logged', () => {
+  assert.equal(loggingStreak({}, '2026-11-20').days, 0)
+  assert.equal(loggingStreak({ '2026-11-19': { calories: 200 } }, '2026-11-20').days, 0)
+  // A rest day with nothing logged before it doesn't count.
+  const s = loggingStreak(dayMap(['2026-11-19']), '2026-11-20')
+  assert.equal(s.days, 1)
+  assert.deepEqual(s.restDays, [])
+})
+
+test('weekDots gives the 7 days ending today', () => {
+  const dots = weekDots(dayMap(['2026-11-20', '2026-11-18']), '2026-11-20')
+  assert.equal(dots.length, 7)
+  assert.equal(dots[0].date, '2026-11-14')
+  assert.deepEqual(dots.map((d) => d.logged), [false, false, false, false, true, false, true])
+  assert.equal(dots[6].today, true)
+})
+
+test('weekBalance skips unlogged days and counts a started today', () => {
+  const days = [
+    { date: '2026-11-16', eaten: 1500, target: 2000 }, // +500
+    { date: '2026-11-17', eaten: 0, target: 2000 }, // not logged: skipped
+    { date: '2026-11-18', eaten: 2300, target: 2000 }, // −300
+    { date: '2026-11-19', eaten: 1600, target: 2200 }, // +600 (exercise day)
+    { date: '2026-11-20', eaten: 2400, target: 2000 }, // today −400
+  ]
+  const b = weekBalance(days, '2026-11-20')
+  assert.equal(b.balance, 400)
+  assert.equal(b.logged, 3)
+  assert.equal(b.todayBalance, -400)
+  // Nothing eaten today yet: today's full target isn't banked.
+  const b2 = weekBalance([...days.slice(0, 4), { date: '2026-11-20', eaten: 0, target: 2000 }], '2026-11-20')
+  assert.equal(b2.balance, 800)
+})
+
+test('ringsClosed', () => {
+  const base = { kcalTarget: 2000, proteinTarget: 150, waterTarget: 2500 }
+  assert.deepEqual(ringsClosed({ ...base, kcal: 1900, protein: 140, waterMl: 2500 }), { calories: true, protein: true, water: true })
+  assert.deepEqual(ringsClosed({ ...base, kcal: 1500, protein: 100, waterMl: 2000 }), { calories: false, protein: false, water: false })
+  assert.equal(ringsClosed({ ...base, kcal: 2100 }).calories, false) // over is not closed
+  assert.deepEqual(ringsClosed({ kcal: 100 }), { calories: false, protein: false, water: false })
+})
+
+test('weekRecap summarises Monday to Sunday', () => {
+  const daily = {
+    '2026-11-09': { calories: 1900, protein: 150 },
+    '2026-11-10': { calories: 2300, protein: 120 },
+    '2026-11-11': { calories: 300, protein: 20 }, // not a logged day
+    '2026-11-12': { calories: 1950, protein: 100 },
+  }
+  const series = [
+    { date: '2026-11-08', trend: 100 },
+    { date: '2026-11-12', trend: 99.4 },
+    { date: '2026-11-15', trend: 99.1 },
+  ]
+  const r = weekRecap({ start: '2026-11-09', daily, targets: { calories: 2000, protein: 150 }, series, workouts: [{ log_date: '2026-11-10' }, { log_date: '2026-11-20' }] })
+  assert.equal(r.end, '2026-11-15')
+  assert.equal(r.logged, 3)
+  assert.equal(r.avgKcal, 2050)
+  assert.equal(r.proteinDays, 1)
+  assert.equal(r.onTarget, 2)
+  assert.equal(r.bestDay, '2026-11-09')
+  assert.ok(Math.abs(r.trendChangeKg - -0.9) < 1e-9)
+  assert.equal(r.workouts, 1)
+  // Partial week (until Wednesday)
+  assert.equal(weekRecap({ start: '2026-11-09', daily, targets: { calories: 2000 }, until: '2026-11-11' }).days, 3)
 })

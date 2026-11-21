@@ -80,7 +80,12 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
                 ) : (
                   <>
                     Next milestone: <strong className="num">{milestoneLabel(next, units)}</strong>
-                    {next.kind !== 'goal' && <span className="muted num"> · {displayWeight(toNextKg, units)} away</span>}
+                    {next.kind !== 'goal' &&
+                      (toNextKg < 0.05 ? (
+                        <span className="muted"> · your weigh-ins are there; the trend is catching up</span>
+                      ) : (
+                        <span className="muted num"> · {displayWeight(toNextKg, units)} away</span>
+                      ))}
                   </>
                 )}
                 {last && <span className="muted"> · last: {milestoneLabel(last, units)} on {formatShortDate(last.reachedOn)}</span>}

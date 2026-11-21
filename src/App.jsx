@@ -18,7 +18,7 @@ import { WorkoutSheet, WorkoutsSheet } from './components/Workouts.jsx'
 import { AppleImportSheet } from './components/AppleImport.jsx'
 import { MoodSheet, WaterSheet, WeightSheet } from './components/Checkin.jsx'
 import { DoseSheet, MedicationSheet } from './components/Glp1.jsx'
-import { MimiBubble, MimiProvider } from './components/MimiCheckin.jsx'
+import { MimiPeek, MimiProvider } from './components/MimiCheckin.jsx'
 import { Icon, PenguinFace, PenguinLoader } from './components/ui.jsx'
 import TabBar from './components/TabBar.jsx'
 import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
@@ -406,7 +406,7 @@ export default function App() {
       <MimiProvider>
         <SyncPill sync={sync} />
         {['today', 'progress', 'coach', 'settings'].map(show)}
-        {(tab === 'today' || tab === 'progress') && <MimiBubble />}
+        {tab !== 'coach' && <MimiPeek />}
         <TabBar tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} shrink={tab !== 'coach'} />
         {sheet && SHEETS[sheet.type] && (() => {
           const S = SHEETS[sheet.type]

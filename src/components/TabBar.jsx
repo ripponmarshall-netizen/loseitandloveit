@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { SPRINGS, animateSpring } from '../lib/spring.js'
 import { Icon, PenguinFace } from './ui.jsx'
+import { useMimi } from './MimiCheckin.jsx'
 
 const TABS = [
   { id: 'today', icon: 'grid', label: 'Dashboard' },
@@ -20,6 +21,7 @@ const SCRUB_PX = 8 // a drag this far along the bar slides the lens instead of t
 export default function TabBar({ tab, setTab, onLog, shrink = true }) {
   const barRef = useRef()
   const compact = useCompactOnScroll(shrink, tab)
+  const mimi = useMimi()
   const lensRef = useRef()
   const items = useRef({})
   const anim = useRef(null)
@@ -149,11 +151,19 @@ export default function TabBar({ tab, setTab, onLog, shrink = true }) {
             type="button"
             className={`tab-item${t.action ? ' log' : ''}${on ? ' on' : ''}`}
             aria-current={on ? 'page' : undefined}
-            aria-label={t.action ? 'Log food, drink, water, exercise, mood or a dose' : t.label}
+            aria-label={
+              t.action
+                ? 'Log food, drink, water, exercise, mood or a dose'
+                : t.face && mimi.unseen
+                  ? `${t.label}: new check-in`
+                  : t.label
+            }
             onClick={() => press(t)}
           >
             <span className="tab-glyph" aria-hidden="true">
               {t.face ? <PenguinFace size={26} /> : <Icon name={t.icon} strokeWidth={t.action ? 2.8 : on ? 2.3 : 1.9} />}
+              {t.face && mimi.busy && <span className="tab-busy" />}
+              {t.face && mimi.unseen && !on && <span className="mimi-dot" />}
             </span>
             {!t.action && <span className="tab-label">{t.label}</span>}
           </button>
