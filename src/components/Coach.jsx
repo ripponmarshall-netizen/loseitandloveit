@@ -137,7 +137,7 @@ export default function Coach({ active = true }) {
       setMessages((m) => [...(m || []), saved])
       setStreaming('')
       const [context, mine] = await Promise.all([
-        buildCoachContext({ store, profile: app.profile, series: app.series, targets: app.targets, today: app.today }),
+        buildCoachContext({ store, profile: app.profile, series: app.series, weights: app.weights, targets: app.targets, today: app.today }),
         store.listFoods().catch(() => []),
       ])
       abortRef.current = new AbortController()

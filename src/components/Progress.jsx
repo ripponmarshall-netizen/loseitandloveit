@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
   adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, calendarWeeks, dailyTotals, displayWeight, exerciseAllowance, goalProgress,
-  hasCondition, kmhToMph, macroShareByWeek, mealSplit, projectGoalDate, weekdayAverages, weeklyRate, weeklyTrendChange, weightUnit,
+  hasCondition, latestWeighIn, kmhToMph, macroShareByWeek, mealSplit, projectGoalDate, weekdayAverages, weeklyRate, weeklyTrendChange, weightUnit,
   weightValue, wholePercents, workoutSummary,
 } from '../lib/calc.js'
 import { buildMilestones, computeBadges, milestoneProgress } from '../lib/milestones.js'
@@ -173,14 +173,16 @@ export default function Progress() {
   }, [progressFocus])
 
   const last = series[series.length - 1]
+  const newest = latestWeighIn(weights)
+  const nowKg = newest ? Number(newest.weight_kg) : undefined
   const startKg = Number(profile.start_weight_kg)
   const goalKg = Number(profile.goal_weight_kg)
 
   const ms = useMemo(() => buildMilestones({ startKg, goalKg, series, units }), [startKg, goalKg, series, units])
   // Distances are measured from the latest weigh-in (the "Current" figure) to
   // the goal weight in the profile; milestones are still reached by the trend.
-  const goal = goalProgress(startKg, goalKg, last?.weight)
-  const msProgress = milestoneProgress(ms, startKg, last?.weight)
+  const goal = goalProgress(startKg, goalKg, nowKg)
+  const msProgress = milestoneProgress(ms, startKg, nowKg)
   const badges = useMemo(
     () =>
       computeBadges({
@@ -235,12 +237,12 @@ export default function Progress() {
       {view === 'weight' && (
       <>
       <div className="stats">
-        <Stat label="Current" color="var(--weight)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
+        <Stat label="Current" color="var(--weight)" value={newest ? displayWeight(nowKg, units) : '—'} sub={newest ? (newest.log_date === today ? 'today' : formatShortDate(newest.log_date)) : undefined} />
         <Stat
           label="Goal"
           color="var(--teal)"
           value={goalKg ? displayWeight(goalKg, units) : '—'}
-          sub={!last || !goal ? undefined : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)} to go`}
+          sub={!newest || !goal ? undefined : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)} to go`}
         />
         <Stat
           label="Goal ETA"
@@ -257,7 +259,7 @@ export default function Progress() {
         onToggle={() => toggle('weight')}
         goalKg={goalKg}
         extra={[
-          ['Since start', last ? signed(last.weight - startKg) : '—'],
+          ['Since start', newest ? signed(nowKg - startKg) : '—'],
           ['Per week', rate == null ? '—' : signed(rate)],
           ['Started at', startKg ? displayWeight(startKg, units) : '—'],
           ['Goal', goalKg ? displayWeight(goalKg, units) : '—'],
@@ -366,7 +368,7 @@ function TrendCard({ id, open, onToggle, icon, color, title, value, sub, spark, 
 }
 
 function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
-  const { series, units, today } = useApp()
+  const { series, weights, units, today } = useApp()
   const [gran, setGran] = useState('day')
   const conv = (kg) => Math.round(weightValue(kg, units) * 10) / 10
   const unit = weightUnit(units)
@@ -374,7 +376,7 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
   const buckets = bucketAverages(trend, gran, today, COUNT[gran])
   const dots = gran === 'day' ? bucketAverages(series.map((p) => ({ date: p.date, value: conv(p.weight) })), 'day', today, COUNT.day).map((b) => b.value) : null
   const stats = bucketStats(buckets)
-  const last = series[series.length - 1]
+  const newest = latestWeighIn(weights)
   const change = stats && stats.count > 1 ? stats.change : null
   const signedV = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} ${unit}`
   return (
@@ -385,8 +387,8 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
       icon="scale"
       color="var(--weight)"
       title="Weight"
-      value={last ? displayWeight(last.weight, units) : 'No weigh-ins yet'}
-      sub={change != null ? `Trend ${signedV(change)} · ${PERIOD[gran]}` : last ? 'Latest weigh-in' : 'Log one to start'}
+      value={newest ? displayWeight(Number(newest.weight_kg), units) : 'No weigh-ins yet'}
+      sub={change != null ? `Trend ${signedV(change)} · ${PERIOD[gran]}` : newest ? 'Latest weigh-in' : 'Log one to start'}
       spark={<Sparkline values={series.slice(-30).map((p) => conv(p.trend))} color="var(--weight)" width={72} height={28} />}
     >
       <Segmented label="Weight chart period" value={gran} onChange={setGran} options={GRANULARITY} />

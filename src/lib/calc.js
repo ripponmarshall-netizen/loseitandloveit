@@ -340,6 +340,19 @@ export function latestWeight(series) {
   return series.length ? series[series.length - 1].weight : null
 }
 
+// The latest weigh-in itself (by day, then time; rows without a time count
+// as earliest), optionally on or before a date. Unlike the series this counts
+// every reading, so a second weigh-in today shows as soon as it's saved.
+export function latestWeighIn(weights, onOrBefore = null) {
+  let best = null
+  for (const w of weights || []) {
+    if (!w || !w.log_date || !(Number(w.weight_kg) > 0)) continue
+    if (onOrBefore && w.log_date > onOrBefore) continue
+    if (!best || w.log_date > best.log_date || (w.log_date === best.log_date && weighMs(w) >= weighMs(best))) best = w
+  }
+  return best
+}
+
 // Trend value on a given date: the last point on or before it.
 export function trendOn(series, iso) {
   let v = null

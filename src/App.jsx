@@ -3,7 +3,7 @@ import { exactProfile } from './lib/profileForm.js'
 import { AppCtx } from './appContext.js'
 import { supabase } from './lib/supabase.js'
 import { createCloudStore, createLocalStore } from './lib/db.js'
-import { computeTargets, trendSeries, latestWeight } from './lib/calc.js'
+import { computeTargets, trendSeries, latestWeighIn } from './lib/calc.js'
 import { logicalToday } from './lib/dates.js'
 import Auth from './components/Auth.jsx'
 import Onboarding from './components/Onboarding.jsx'
@@ -272,7 +272,9 @@ export default function App() {
   )
 
   const series = useMemo(() => trendSeries(weights), [weights])
-  const currentWeight = latestWeight(series) ?? (Number(profile?.start_weight_kg) || null)
+  // The newest reading, so a second weigh-in today shows straight away (the
+  // trend still uses each day's first).
+  const currentWeight = Number(latestWeighIn(weights)?.weight_kg) || Number(profile?.start_weight_kg) || null
   const targets = useMemo(
     () => (profile ? computeTargets(profile, currentWeight) : null),
     [profile, currentWeight],
