@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
   adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, calendarWeeks, dailyTotals, displayWeight, exerciseAllowance, goalProgress,
-  hasCondition, latestWeighIn, kmhToMph, macroShareByWeek, mealSplit, projectGoalDate, weekdayAverages, weeklyRate, weeklyTrendChange, weightUnit,
+  hasCondition, latestWeighIn, readingStats, weightStatus, kmhToMph, macroShareByWeek, mealSplit, projectGoalDate, weekdayAverages, weeklyRate, weeklyTrendChange, weightUnit,
   weightValue, wholePercents, workoutSummary,
 } from '../lib/calc.js'
 import { buildMilestones, computeBadges, milestoneProgress } from '../lib/milestones.js'
@@ -194,6 +194,7 @@ export default function Progress() {
   const recentWorkouts = useMemo(() => workouts.filter((w) => w.log_date >= addDays(today, -27)), [workouts, today])
   const celebration = useNewBadges(badges, loaded.food && loaded.workouts, session?.user?.id)
   const rate = weeklyRate(series)
+  const status = useMemo(() => weightStatus({ weights, series, startKg, goalKg, today }), [weights, series, startKg, goalKg, today])
   const eta = projectGoalDate(series, goalKg, today, rate)
   const ai = useGoalEstimate({
     enabled: mode === 'cloud', who: session?.user?.id, profile, series, targets, today,
@@ -236,21 +237,13 @@ export default function Progress() {
       <div key={view} className="view-swap" data-dir={viewDir || undefined}>
       {view === 'weight' && (
       <>
-      <div className="stats">
-        <Stat label="Current" color="var(--weight)" value={newest ? displayWeight(nowKg, units) : '—'} sub={newest ? (newest.log_date === today ? 'today' : formatShortDate(newest.log_date)) : undefined} />
-        <Stat
-          label="Goal"
-          color="var(--teal)"
-          value={goalKg ? displayWeight(goalKg, units) : '—'}
-          sub={!newest || !goal ? undefined : goal.reached ? 'Reached' : `${weightValue(goal.toGoalKg, units).toFixed(1)} ${weightUnit(units)} to go`}
-        />
-        <Stat
-          label="Goal ETA"
-          color="var(--pink)"
-          value={etaDate ? formatEta(etaDate, today) : ai.loading ? '…' : '—'}
-          sub={etaDate ? `${formatTimeUntil(etaDate, today)}${ai.result ? ' · Mimi' : ''}` : ai.loading ? 'Mimi is checking' : undefined}
-        />
-      </div>
+      <WhereYouAre
+        status={status}
+        startKg={startKg}
+        goalKg={goalKg}
+        rate={rate}
+        eta={etaDate ? `${formatEta(etaDate, today)} (${formatTimeUntil(etaDate, today)})${ai.result ? ' · Mimi' : ''}` : ai.loading ? 'Mimi is checking…' : null}
+      />
 
       {ai.result && <GoalEstimateCard est={ai.result} today={today} units={units} />}
 
@@ -258,12 +251,6 @@ export default function Progress() {
         open={open.weight}
         onToggle={() => toggle('weight')}
         goalKg={goalKg}
-        extra={[
-          ['Since start', newest ? signed(nowKg - startKg) : '—'],
-          ['Per week', rate == null ? '—' : signed(rate)],
-          ['Started at', startKg ? displayWeight(startKg, units) : '—'],
-          ['Goal', goalKg ? displayWeight(goalKg, units) : '—'],
-        ]}
       />
       <WeeklyChange />
       <WeighIns weights={weights} />
@@ -367,7 +354,7 @@ function TrendCard({ id, open, onToggle, icon, color, title, value, sub, spark, 
   )
 }
 
-function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
+function WeightTrend({ open, onToggle, goalKg }) {
   const { series, weights, units, today } = useApp()
   const [gran, setGran] = useState('day')
   const conv = (kg) => Math.round(weightValue(kg, units) * 10) / 10
@@ -376,6 +363,9 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
   const buckets = bucketAverages(trend, gran, today, COUNT[gran])
   const dots = gran === 'day' ? bucketAverages(series.map((p) => ({ date: p.date, value: conv(p.weight) })), 'day', today, COUNT.day).map((b) => b.value) : null
   const stats = bucketStats(buckets)
+  // Average and lowest of what you actually weighed in this period (the trend
+  // line sits above your lightest readings, so its "lowest" looked wrong).
+  const readings = readingStats(weights, buckets[0]?.start || today, today)
   const newest = latestWeighIn(weights)
   const change = stats && stats.count > 1 ? stats.change : null
   const signedV = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)} ${unit}`
@@ -411,16 +401,9 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
           />
           {stats && (
             <div className="trend-stats">
-              <MiniStat label="Average" value={stats.avg.toFixed(1)} unit={unit} />
-              <MiniStat label="Lowest" value={stats.min.toFixed(1)} unit={unit} />
-              <MiniStat label="Change" value={change != null ? signedV(change) : '—'} tone={change != null ? (change < 0 ? 'good' : change > 0 ? 'bad' : '') : ''} />
-            </div>
-          )}
-          {extra.length > 0 && (
-            <div className="trend-stats">
-              {extra.map(([l, v]) => (
-                <MiniStat key={l} label={l} value={v} />
-              ))}
+              <MiniStat label="Average" value={readings ? conv(readings.avg).toFixed(1) : '—'} unit={readings ? unit : ''} />
+              <MiniStat label="Lowest" value={readings ? conv(readings.min).toFixed(1) : '—'} unit={readings ? unit : ''} />
+              <MiniStat label="Trend change" value={change != null ? signedV(change) : '—'} tone={change != null ? (change < 0 ? 'good' : change > 0 ? 'bad' : '') : ''} />
             </div>
           )}
           <p className="tiny muted trend-note">
@@ -584,6 +567,71 @@ function DoseTrend({ open, onToggle }) {
         </>
       )}
     </TrendCard>
+  )
+}
+
+/** The top of the Weight tab: your weight now, how far you've come, and how fast. */
+function WhereYouAre({ status, startKg, goalKg, rate, eta }) {
+  const { units, today, openSheet } = useApp()
+  const unit = weightUnit(units)
+  const v1 = (kg) => weightValue(kg, units).toFixed(1)
+  const signedV = (kg) => {
+    const v = Math.round(weightValue(kg, units) * 10) / 10
+    return `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`
+  }
+  const tone = (kg) => (kg == null || Math.abs(kg) < 0.05 ? '' : kg < 0 ? 'good' : 'bad')
+
+  if (!status) {
+    return (
+      <section className="card where-card">
+        <CardHeader title="Where you are" />
+        <p className="small muted">Log your first weigh-in to see where you are and how fast you’re moving.</p>
+        <button className="btn block mt-3" onClick={() => openSheet('weight')}>Log a weigh-in</button>
+      </section>
+    )
+  }
+
+  const { newest, currentKg, prev, sinceLastKg, sinceStartKg, goal, weekKg } = status
+  const when = newest.log_date === today ? `Today${newest.weighed_at ? `, ${formatTime(newest.weighed_at)}` : ''}` : formatShortDate(newest.log_date)
+  const pct = goal ? Math.round(goal.fraction * 100) : null
+  return (
+    <section className="card where-card" aria-label={`Current weight ${displayWeight(currentKg, units)}, weighed ${when}`}>
+      <CardHeader title="Where you are" note={when} />
+      <div className="where-now">
+        <span className="where-big num">
+          {v1(currentKg)}
+          <small> {unit}</small>
+        </span>
+        {prev && sinceLastKg != null && (
+          <span className={`where-delta num ${tone(sinceLastKg)}`}>
+            {signedV(sinceLastKg)} {unit} since {prev.log_date === newest.log_date ? formatTime(prev.weighed_at) || 'earlier' : formatShortDate(prev.log_date)}
+          </span>
+        )}
+      </div>
+
+      {goal && (
+        <div className="where-goal">
+          <div className="bar where-bar" style={{ '--c': 'var(--weight)' }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Progress to goal">
+            <i style={{ width: `${pct}%` }} />
+          </div>
+          <div className="where-ends">
+            <span>Start {v1(startKg)}</span>
+            <strong className="num">{goal.reached ? 'Goal reached 🎉' : `${pct}% there`}</strong>
+            <span>Goal {v1(goalKg)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="trend-stats">
+        <MiniStat label={sinceStartKg != null && sinceStartKg > 0 ? 'Gained' : 'Lost so far'} value={sinceStartKg != null ? Math.abs(Math.round(weightValue(sinceStartKg, units) * 10) / 10).toFixed(1) : '—'} unit={sinceStartKg != null ? unit : ''} tone={tone(sinceStartKg)} />
+        <MiniStat label="This week" value={weekKg != null ? signedV(weekKg) : '—'} unit={weekKg != null ? unit : ''} tone={tone(weekKg)} />
+        <MiniStat label="To go" value={goal ? (goal.reached ? '0.0' : v1(goal.toGoalKg)) : '—'} unit={goal ? unit : ''} />
+      </div>
+      <p className="tiny muted trend-note">
+        {rate != null ? `Trend pace ${signedV(rate)} ${unit} a week. ` : 'Weigh in across a week or two to see your pace. '}
+        {eta ? `On pace for your goal ${eta}.` : ''}
+      </p>
+    </section>
   )
 }
 

@@ -369,6 +369,43 @@ export function latestWeighIn(weights, onOrBefore = null) {
   return best
 }
 
+/**
+ * Where you are now, from your actual readings (the trend is only used for
+ * "this week", where a smoothed change is fairer than two noisy readings).
+ * Returns null with no weigh-ins.
+ *   currentKg / newest   the newest reading
+ *   prev, sinceLastKg    the reading before it and the change since
+ *   sinceStartKg         change since the profile's start weight (negative = lost)
+ *   goal                 goalProgress() for the newest reading
+ *   weekKg               trend change over the last 7 days (null without a reading 7+ days back)
+ */
+export function weightStatus({ weights, series, startKg, goalKg, today }) {
+  const rows = (weights || []).filter((w) => w && w.log_date && Number(w.weight_kg) > 0)
+  const newest = latestWeighIn(rows)
+  if (!newest) return null
+  const currentKg = Number(newest.weight_kg)
+  const prev = latestWeighIn(rows.filter((w) => w !== newest && (w.log_date < newest.log_date || (w.log_date === newest.log_date && weighMs(w) <= weighMs(newest)))))
+  const start = Number(startKg) || null
+  const last = series?.length ? series[series.length - 1] : null
+  const ref = last && today ? trendOn(series, addDays(today, -7)) : null
+  return {
+    newest,
+    currentKg,
+    prev,
+    sinceLastKg: prev ? Math.round((currentKg - Number(prev.weight_kg)) * 100) / 100 : null,
+    sinceStartKg: start ? Math.round((currentKg - start) * 100) / 100 : null,
+    goal: goalProgress(start, goalKg, currentKg),
+    weekKg: last && ref && ref !== last ? Math.round((last.trend - ref.trend) * 100) / 100 : null,
+  }
+}
+
+/** Average, lowest and highest of the actual readings from `from` to `to` (inclusive). */
+export function readingStats(weights, from, to) {
+  const vals = (weights || []).filter((w) => w && w.log_date >= from && w.log_date <= to && Number(w.weight_kg) > 0).map((w) => Number(w.weight_kg))
+  if (!vals.length) return null
+  return { avg: vals.reduce((s, v) => s + v, 0) / vals.length, min: Math.min(...vals), max: Math.max(...vals), count: vals.length }
+}
+
 // Trend value on a given date: the last point on or before it.
 export function trendOn(series, iso) {
   let v = null
