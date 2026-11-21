@@ -581,3 +581,28 @@ test('dayLevel and calendarWeeks', () => {
   assert.equal(cols[1][4].level, 'on')
   assert.equal(cols[1][5].future, true)
 })
+
+// ---------------------------------------------------------------- form values mid-edit
+import { validServings, kcalLooksWrong, KCAL_CHECK } from '../src/lib/calc.js'
+
+test('entryTotals treats unusable field values as 0, never NaN', () => {
+  for (const bad of ['', 'abc', '-', undefined, null]) {
+    const t = entryTotals({ servings: bad === undefined ? undefined : 1, calories: bad, protein_g: bad, carbs_g: 10, fat_g: 2 })
+    assert.ok(Object.values(t).every(Number.isFinite), `NaN for ${bad}`)
+  }
+  assert.deepEqual(entryTotals({ servings: 'abc', calories: 300, protein_g: 10, carbs_g: 10, fat_g: 10 }), { calories: 0, protein: 0, carbs: 0, fat: 0 })
+  assert.equal(entryTotals({ calories: 200 }).calories, 200) // servings default 1
+})
+
+test('validServings accepts positive numbers only', () => {
+  assert.equal(validServings('1.5'), 1.5)
+  assert.equal(validServings(2), 2)
+  for (const bad of ['', '0', 0, '-1', 'abc', null, undefined, NaN, Infinity]) assert.equal(validServings(bad), null, String(bad))
+})
+
+test('kcalLooksWrong flags one item over the check, counting servings', () => {
+  assert.equal(kcalLooksWrong({ calories: KCAL_CHECK, servings: 1 }), false)
+  assert.equal(kcalLooksWrong({ calories: 45000, servings: 1 }), true) // an extra zero
+  assert.equal(kcalLooksWrong({ calories: 1800, servings: 3 }), true)
+  assert.equal(kcalLooksWrong({ calories: 'abc', servings: 1 }), false)
+})

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
-import { entryTotals, exerciseAllowance, ringsClosed, sumEntries } from '../lib/calc.js'
+import { entryTotals, exerciseAllowance, kcalLooksWrong, ringsClosed, sumEntries, validServings } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
 import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
@@ -298,7 +298,12 @@ function EditEntry({ entry, onClose }) {
   })
   const [busy, setBusy] = useState(false)
   const set = (k) => (ev) => setE((s) => ({ ...s, [k]: ev.target.value }))
-  const totals = entryTotals(e)
+  // While the servings field is empty or 0 the total reads 0, but the breakdown
+  // stays put: if it vanished, tapping Save (which tidies the field on blur)
+  // would bring it back and push the button out from under the finger.
+  const servings = validServings(e.servings)
+  const totals = entryTotals({ ...e, servings: servings ?? 0 })
+  const perServing = entryTotals({ ...e, servings: 1 })
 
   async function run(fn, msg, action) {
     setBusy(true)
@@ -329,7 +334,7 @@ function EditEntry({ entry, onClose }) {
   const patch = () => ({
     name: e.name.trim() || entry.name,
     meal: e.meal,
-    servings: Number(e.servings) || 1,
+    servings: servings ?? 1,
     calories: Number(e.calories) || 0,
     protein_g: Number(e.protein_g) || 0,
     carbs_g: Number(e.carbs_g) || 0,
@@ -353,9 +358,9 @@ function EditEntry({ entry, onClose }) {
           <span className="figure-unit"> kcal</span>
         </div>
       </div>
-      {totals.calories > 0 && (
+      {perServing.calories > 0 && (
         <div className="card">
-          <MacroSplit entries={[{ ...e, id: entry.id }]} size={124} />
+          <MacroSplit entries={[{ ...e, servings: servings ?? 1, id: entry.id }]} size={124} />
         </div>
       )}
       <span className="field-label">Per serving</span>
@@ -374,7 +379,17 @@ function EditEntry({ entry, onClose }) {
         </select>
       </label>
       <div className="btn-col">
-        <button className="btn block" disabled={busy} onClick={() => run(() => store.updateEntry(entry.id, patch()), 'Updated')}>Save</button>
+        <button
+          className="btn block"
+          disabled={busy}
+          onClick={() => {
+            const p = patch()
+            if (kcalLooksWrong(p) && !window.confirm(`${fmt(entryTotals(p).calories)} kcal for this entry. Is that right?`)) return
+            run(() => store.updateEntry(entry.id, p), 'Updated')
+          }}
+        >
+          Save
+        </button>
         <button className="btn secondary block" disabled={busy} onClick={() => run(() => store.saveFood({ ...patch(), serving: entry.serving }), 'Saved to My foods')}>
           Save to My foods
         </button>

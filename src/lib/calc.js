@@ -217,15 +217,31 @@ export const isValidWeightKg = (kg) => Number.isFinite(kg) && kg >= 30 && kg <= 
 
 const r1 = (n) => Math.round(n * 10) / 10
 
+// A form field mid-edit can hold "", "abc" or "-": count it as 0, never NaN.
+const finite = (v) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
 export function entryTotals(e) {
-  const s = Number(e.servings ?? 1)
+  const s = finite(e.servings ?? 1)
   return {
-    calories: Math.round(Number(e.calories || 0) * s),
-    protein: r1(Number(e.protein_g || 0) * s),
-    carbs: r1(Number(e.carbs_g || 0) * s),
-    fat: r1(Number(e.fat_g || 0) * s),
+    calories: Math.round(finite(e.calories) * s),
+    protein: r1(finite(e.protein_g) * s),
+    carbs: r1(finite(e.carbs_g) * s),
+    fat: r1(finite(e.fat_g) * s),
   }
 }
+
+/** Servings as typed, or null while the field holds nothing usable (empty, 0, text, negative). */
+export function validServings(v) {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/** More than this in one item is almost always a typo (an extra zero), so the app asks first. */
+export const KCAL_CHECK = 5000
+export const kcalLooksWrong = (e) => entryTotals(e).calories > KCAL_CHECK
 
 export function sumEntries(entries) {
   const t = { calories: 0, protein: 0, carbs: 0, fat: 0 }

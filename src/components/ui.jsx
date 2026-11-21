@@ -359,7 +359,7 @@ export function Segmented({ value, options, onChange, label }) {
   const found = options.findIndex(([v]) => v === value)
   const i = Math.max(0, found)
   return (
-    <div className={`segmented${found < 0 ? ' empty' : ''}`} role="radiogroup" aria-label={label} style={{ '--n': options.length, '--i': i }}>
+    <div className={`segmented${found < 0 ? ' empty' : ''}${options.length >= 5 ? ' many' : ''}`} role="radiogroup" aria-label={label} style={{ '--n': options.length, '--i': i }}>
       <span className="thumb" aria-hidden="true" />
       {options.map(([v, text]) => (
         <button key={v} type="button" role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
@@ -389,7 +389,8 @@ export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 50 }) {
         inputMode="decimal"
         aria-label="Servings"
         value={value}
-        onChange={(e) => onChange(e.target.value.replace(',', '.'))}
+        // Digits and one decimal point only (a comma counts as the point)
+        onChange={(e) => onChange(e.target.value.replace(',', '.').replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))}
         onBlur={(e) => set(Number(e.target.value) || 1)}
       />
       <button type="button" aria-label="More" onClick={() => set(Number(value) + step)}>+</button>

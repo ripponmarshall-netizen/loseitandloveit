@@ -30,8 +30,14 @@
   --sep: rgb(60 60 67 / 0.14);
   /* Text */
   --text: #000000;
-  --text-2: rgb(60 60 67 / 0.74);
+  --text-2: rgb(60 60 67 / 0.78);
   --text-3: rgb(60 60 67 / 0.46);
+  /* Readable colour: coloured text keeps its hue, its lightness is clamped to
+     this range (OKLCH L) so it meets WCAG AA 4.5:1; --fill-l caps fills that
+     carry white text. See the @supports block near the end. */
+  --ink-lo: 0;
+  --ink-hi: 0.5;
+  --fill-l: 0.55;
   /* Selected segment, and how strongly tinted backgrounds show */
   --seg-thumb: #ffffff;
   --mix: 15%;
@@ -142,6 +148,8 @@
     --text: #ffffff;
     --text-2: rgb(235 235 245 / 0.74);
     --text-3: rgb(235 235 245 / 0.44);
+    --ink-lo: 0.74;
+    --ink-hi: 1;
     --seg-thumb: #636366;
     --mix: 26%;
     --blue: #0a84ff;
@@ -193,6 +201,8 @@
   --text: #ffffff;
   --text-2: rgb(235 235 245 / 0.74);
   --text-3: rgb(235 235 245 / 0.44);
+  --ink-lo: 0.74;
+  --ink-hi: 1;
   --seg-thumb: #636366;
   --mix: 26%;
   --blue: #0a84ff;
@@ -296,8 +306,8 @@ p { margin: 0 0 var(--sp-3); }
 .row.end { align-items: flex-end; }
 .grow { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: var(--sp-3); }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-2); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
 .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-2); }
 
 .app {
@@ -466,13 +476,14 @@ button.list-row:active, label.list-row:active, a.list-row:active, .list-row.tap:
 .stat.compact { padding: 10px var(--sp-2); text-align: center; }
 .stat.compact .v { font-size: 18px; }
 .stat .l { font-size: 13px; color: var(--c, var(--text-2)); font-weight: 600; }
-.stat .v { font-family: var(--font-round); font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .v { font-family: var(--font-round); font-size: 20px; line-height: 25px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
 .stat .s { font-size: 13px; color: var(--text-2); }
 .card .stats:last-child { margin-bottom: 0; }
 .mini-stat { background: var(--fill-2); border-radius: var(--r-md); padding: 10px 12px; min-width: 0; }
 .mini-stat .l { display: block; font-size: 13px; font-weight: 600; color: var(--text-2); }
-.mini-stat .v { display: block; font-size: 16px; font-weight: 700; letter-spacing: -0.01em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-stat .v small { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.mini-stat .v { display: block; font-size: 16px; line-height: 21px; font-weight: 700; letter-spacing: -0.01em; margin-top: 2px; }
+/* When a number and its unit don't fit, the unit drops to the next line instead of the number being cut */
+.mini-stat .v small, .stat .v small { font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
 .mini-stat.good .v { color: var(--good); }
 .mini-stat.bad .v { color: var(--over); }
 
@@ -599,11 +610,13 @@ input[type='date'].input::-webkit-date-and-time-value, input[type='time'].input:
 .segmented button {
   flex: 1; min-width: 0; border: 0; background: transparent; cursor: pointer;
   min-height: 32px; padding: 6px var(--sp-1); border-radius: var(--r-full);
-  font-size: 15px; font-weight: 500; color: var(--text-2);
+  font-size: 15px; font-weight: 500; color: var(--text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: opacity var(--dur-fast) var(--ease);
 }
-.segmented button.on { font-weight: 600; color: var(--text); }
+.segmented button.on { font-weight: 600; }
+/* Five or more choices: a size down so words like "Starving" fit on small phones */
+.segmented.many button { font-size: 14px; padding-left: 2px; padding-right: 2px; }
 .segmented button:active:not(.on) { opacity: 0.55; }
 .segmented + .segmented, .segmented + .mode-tabs { margin-top: var(--sp-3); }
 
@@ -1633,6 +1646,12 @@ button.mimi-tip { cursor: pointer; }
 /* ============================================================ small phones */
 
 @media (max-width: 380px) {
+  .stats, .trend-stats { gap: var(--sp-2); }
+  .stat { padding: var(--sp-3); }
+  .stat .v { font-size: 18px; line-height: 23px; }
+  .mini-stat { padding: 9px 10px; }
+  .mini-stat .v { font-size: 15px; }
+  .mini-stat .v small, .stat .v small { font-size: 12px; }
   .hero { gap: 14px; }
   .hero .ring-stack { width: 112px; height: 112px; }
   .hero-big { font-size: 34px; }
@@ -1647,9 +1666,50 @@ button.mimi-tip { cursor: pointer; }
 }
 @media (max-width: 340px) {
   h1 { font-size: 30px; line-height: 36px; }
+  .segmented button { font-size: 13px; padding-left: 2px; padding-right: 2px; }
+  /* The week's dots get their own line so the streak title has room */
+  .wins-top { flex-wrap: wrap; }
+  .wins-dots { order: 3; width: 100%; justify-content: space-between; padding: 0 var(--sp-1); }
   .hero .ring-stack { width: 100px; height: 100px; }
   .rl-val .muted { display: none; } /* the ring shows how far there is to go */
   .head-avatar { display: none; } /* Settings is on the tab bar; the date needs the room */
+}
+
+/* ============================================================ readable colour
+   iOS system colours are bright: as small text they fall below 4.5:1 (orange
+   on white is 2.2:1). Keep each colour's hue and chroma and clamp only its
+   lightness (light mode: darker; dark mode: lighter). Fills behind white text
+   are capped so the text stays readable. Older browsers keep the plain colours. */
+
+@supports (color: oklch(from red l c h)) {
+  .stat .l, .eyebrow { color: oklch(from var(--c, var(--text-2)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .macro-mini-label, .meal-chip, .dock-item.alert .dock-value, .repeat-card .eyebrow, .celebrate-card .eyebrow {
+    color: oklch(from var(--c) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
+  }
+  .chip.tinted, .badge, .list-row.add-row { color: oklch(from var(--c, var(--tint)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .btn.secondary, .btn.plain, .link, .list-row.action, .list-row .value.action, .mode-tabs button.on, .tab-item.on,
+  .quick-hint, .eyebrow-link, .toast-action {
+    color: oklch(from var(--tint) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
+  }
+  .wins-chip, .week-balance.under strong, .week-balance.under svg, .recap-v.good, .mini-stat.good .v {
+    color: oklch(from var(--brand) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
+  }
+  .hero-unit.over, .hero-burn, .week-balance.over strong, .week-balance.over svg, .mini-stat.bad .v, .warn-text, .sync-pill.offline {
+    color: oklch(from var(--orange) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
+  }
+  .danger-text, .list-row.destructive, .btn.destructive { color: oklch(from var(--danger) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .profile-card-target { color: oklch(from var(--kcal) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .ok-text { color: oklch(from var(--green) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .fitness-link { color: oklch(from var(--pink) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .ms-node.next .ms-label, .mimi-head .eyebrow { color: oklch(from var(--indigo) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .macro-line .p { color: oklch(from var(--protein) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .macro-line .c { color: oklch(from var(--carbs) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .macro-line .f { color: oklch(from var(--fat) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .bm-legend b { color: oklch(from var(--purple) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  /* Fills that carry white text */
+  .btn:not(.secondary, .gray, .plain, .destructive), .bubble.user { background: oklch(from var(--tint) min(l, var(--fill-l)) c h); }
+  .repeat-go { background: oklch(from var(--c) min(l, var(--fill-l)) c h); }
+  .award.fresh::before { background: oklch(from var(--red) min(l, var(--fill-l)) c h); }
 }
 
 /* ============================================================ Reduce Motion */
