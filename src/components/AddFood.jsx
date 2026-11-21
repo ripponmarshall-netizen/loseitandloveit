@@ -4,6 +4,7 @@ import { BUILTIN_FOODS } from '../data/foods.js'
 import { estimateMeal, photoToBase64, searchFoodDatabases } from '../lib/ai.js'
 import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods } from '../lib/foodSearch.js'
 import { formatDayLabel } from '../lib/dates.js'
+import { kcalLooksWrong, validServings } from '../lib/calc.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
 import { CountUp, Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking } from './ui.jsx'
 
@@ -292,7 +293,7 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
   const [grams, setGrams] = useState(food.serving_g ? String(food.serving_g) : '')
   const [saveToMine, setSaveToMine] = useState(false)
   const { add, busy } = useAdd(onDone)
-  const n = Number(servings) || 0
+  const n = validServings(servings) ?? 0
   const src = sourceOf(food)
   const isMine = src === 'mine'
 
@@ -607,6 +608,7 @@ function QuickTab({ date, meal, onDone }) {
       fat_g: Number(f.fat_g) || 0,
       source: 'quick',
     }
+    if (kcalLooksWrong(entry) && !window.confirm(`${Math.round(entry.calories).toLocaleString('en-GB')} kcal in one item. Is that right?`)) return
     add([entry], { saveFoods: saveToMine && f.name.trim() ? [entry] : [] })
   }
 
