@@ -7,7 +7,7 @@ import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
 import { LogDock } from './QuickLog.jsx'
-import { Avatar, CountUp, Icon, PenguinFace, Sheet, Stepper } from './ui.jsx'
+import { Avatar, CountUp, Icon, PageHeader, PenguinFace, SectionTitle, Sheet, Stepper } from './ui.jsx'
 import { foodEmoji } from '../lib/foodEmoji.js'
 import { RingStack, WeekBalance, WeekRecapCard, WinsCard, useRecentLog, useRingCheer } from './Motivation.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
@@ -97,15 +97,10 @@ export default function Today() {
 
   return (
     <div className="dashboard">
-      <header className="page-head">
-        <div className="grow">
-          {isToday ? (
-            <div className="eyebrow">{formatLongDate(date)}</div>
-          ) : (
-            <button className="eyebrow eyebrow-link" onClick={() => setDate(today)}>Back to today</button>
-          )}
-          <h1>{formatDayLabel(date, today)}</h1>
-        </div>
+      <PageHeader
+        title={formatDayLabel(date, today)}
+        eyebrow={isToday ? formatLongDate(date) : <button className="eyebrow eyebrow-link" onClick={() => setDate(today)}>Back to today</button>}
+      >
         <div className="day-nav">
           <button className="icon-btn" aria-label="Previous day" onClick={() => setDate(addDays(date, -1))}>
             <Icon name="left" />
@@ -117,7 +112,7 @@ export default function Today() {
         <button className="head-avatar" aria-label="Your profile and settings" onClick={() => setTab('settings')}>
           <Avatar profile={profile} size={38} />
         </button>
-      </header>
+      </PageHeader>
 
       <div key={date} className="day-swap" data-dir={dayDir.current || undefined}>
       {isToday && <WinsCard recent={recent} />}
@@ -165,9 +160,7 @@ export default function Today() {
 
       {isToday && <WeekRecapCard recent={recent} />}
 
-      <div className="list-header big">
-        Food<span className="list-header-note">{totals.calories > 0 ? `${fmt(totals.calories)} kcal` : ''}</span>
-      </div>
+      <SectionTitle title="Food" note={totals.calories > 0 ? `${fmt(totals.calories)} kcal` : null} />
       {entries === null ? (
         <div className="list food-list skeleton-list" aria-label="Loading food">
           {[0, 1, 2].map((i) => (
@@ -208,7 +201,7 @@ export default function Today() {
                       <button key={e.id} className="list-row entry-row" onClick={() => setEditing(e)}>
                         <span className="entry-emoji" aria-hidden="true">{foodEmoji(e.name, e.meal)}</span>
                         <span className="label">
-                          <span className="ellipsis" style={{ display: 'block' }}>{e.name}</span>
+                          <span className="ellipsis d-block">{e.name}</span>
                           <span className="sub ellipsis">
                             {Number(e.servings) !== 1 && `${Number(e.servings)} × `}
                             {e.serving || (e.source === 'quick' ? 'Quick add' : '1 serving')}
@@ -245,9 +238,9 @@ export default function Today() {
       {day?.checkinError && <p className="list-footer danger-text">{day.checkinError}</p>}
 
       {entries && entries.length === 0 && (
-        <p className="center" style={{ marginTop: 16 }}>
+        <div className="copy-day">
           <button className="btn sm gray" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
-        </p>
+        </div>
       )}
       </div>
 
@@ -349,23 +342,23 @@ function EditEntry({ entry, onClose }) {
         <span>Name</span>
         <input className="input" value={e.name} onChange={set('name')} />
       </label>
-      <div className="row between" style={{ marginBottom: 16 }}>
+      <div className="amount-row mt-0">
         <div>
-          <div className="tiny muted" style={{ marginBottom: 6 }}>Servings{entry.serving ? ` · ${entry.serving}` : ''}</div>
+          <span className="field-label">Servings{entry.serving ? ` · ${entry.serving}` : ''}</span>
           <Stepper value={e.servings} onChange={(v) => setE((s) => ({ ...s, servings: v }))} />
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div className="tiny muted">Total</div>
-          <strong className="num" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>{fmt(totals.calories)}</strong>
-          <span className="muted"> kcal</span>
+        <div className="amount-total">
+          <span className="field-label">Total</span>
+          <span className="figure"><CountUp value={totals.calories} from={totals.calories} /></span>
+          <span className="figure-unit"> kcal</span>
         </div>
       </div>
       {totals.calories > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card">
           <MacroSplit entries={[{ ...e, id: entry.id }]} size={124} />
         </div>
       )}
-      <div className="tiny muted" style={{ margin: '0 4px 6px' }}>Per serving</div>
+      <span className="field-label">Per serving</span>
       <div className="grid4">
         <label className="field"><span>kcal</span><input className="input" inputMode="decimal" value={e.calories} onChange={set('calories')} /></label>
         <label className="field"><span>Protein</span><input className="input" inputMode="decimal" value={e.protein_g} onChange={set('protein_g')} /></label>
@@ -380,7 +373,7 @@ function EditEntry({ entry, onClose }) {
           ))}
         </select>
       </label>
-      <div className="stack">
+      <div className="btn-col">
         <button className="btn block" disabled={busy} onClick={() => run(() => store.updateEntry(entry.id, patch()), 'Updated')}>Save</button>
         <button className="btn secondary block" disabled={busy} onClick={() => run(() => store.saveFood({ ...patch(), serving: entry.serving }), 'Saved to My foods')}>
           Save to My foods

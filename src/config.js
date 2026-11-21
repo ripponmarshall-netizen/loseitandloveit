@@ -9,4 +9,4 @@ export const SUPABASE_PUBLISHABLE_KEY =
 
 export const AI_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/ai`
 
-export const APP_VERSION = '0.7.1'
+export const APP_VERSION = '0.8.0'

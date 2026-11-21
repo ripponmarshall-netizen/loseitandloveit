@@ -5,7 +5,7 @@ import { estimateMeal, photoToBase64, searchFoodDatabases } from '../lib/ai.js'
 import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods } from '../lib/foodSearch.js'
 import { formatDayLabel } from '../lib/dates.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
-import { Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking } from './ui.jsx'
+import { CountUp, Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking } from './ui.jsx'
 
 const MEAL_OPTS = MEALS.map((m) => [m, MEAL_LABEL[m]])
 const SOURCE_BADGE = {
@@ -34,7 +34,7 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, quer
 
   return (
     <Sheet tall title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
-      <div className="stack" style={{ marginBottom: 14 }}>
+      <div className="stack mb-4">
         <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
         <div className="mode-tabs" role="tablist" aria-label="How to add">
           {[
@@ -93,7 +93,7 @@ function FoodRow({ food, onPick, i = 0 }) {
   return (
     <button className="list-row rise" style={{ '--i': Math.min(i, 10) }} onClick={() => onPick(food)}>
       <span className="label">
-        <span className="ellipsis" style={{ display: 'block' }}>{food.name}</span>
+        <span className="ellipsis d-block">{food.name}</span>
         <span className="sub ellipsis">
           <Badge food={food} /> {food.serving || '1 serving'}
         </span>
@@ -228,7 +228,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
 
       {onlineOn && (online.loading || online.results.length > 0 || Object.keys(online.errors).length > 0) && (
         <section>
-          <div className="list-header row" style={{ gap: 6 }}>
+          <div className="list-header row">
             Online databases {online.loading && <Spinner />}
           </div>
           {online.results.length > 0 && (
@@ -248,7 +248,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
       )}
 
       {noResults && (
-        <div className="card center" style={{ marginTop: 16 }}>
+        <div className="card empty-state mt-4">
           <p className="muted small">No match for “{q.trim()}”.</p>
           <button className="btn secondary sm" onClick={() => onAskAi(q.trim())}>
             <Icon name="sparkles" size={16} /> Estimate it with AI
@@ -256,7 +256,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
         </div>
       )}
 
-      <p className="list-footer" style={{ marginTop: 14 }}>
+      <p className="list-footer mt-4">
         {mode !== 'cloud'
           ? 'Sign in to also search USDA FoodData Central and Open Food Facts.'
           : onlineOn
@@ -277,9 +277,9 @@ function MacroTiles({ food, n = 1 }) {
   return (
     <div className="grid4">
       {tiles.map(([l, v, c]) => (
-        <div key={l} className="stat" style={{ '--c': c, padding: '10px 8px', textAlign: 'center' }}>
+        <div key={l} className="stat compact" style={{ '--c': c }}>
           <div className="l">{l}</div>
-          <div className="v num" style={{ fontSize: 18 }}>{v}</div>
+          <div className="v num">{v}</div>
         </div>
       ))}
     </div>
@@ -335,41 +335,41 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
 
   return (
     <div className="page">
-      <button className="link small row" style={{ gap: 2 }} onClick={onBack}>
+      <button className="link small with-icon" onClick={onBack}>
         <Icon name="left" size={18} /> Back
       </button>
-      <h2 style={{ margin: '12px 0 4px' }}>{food.name}</h2>
+      <h2 className="title3 mt-3 mb-1">{food.name}</h2>
       <p className="small muted">
         <Badge food={food} /> Per {food.serving || 'serving'}
       </p>
       <MacroTiles food={food} />
       {food.per100 && (
-        <p className="tiny muted" style={{ margin: '8px 4px 0' }}>
+        <p className="tiny muted mt-2">
           Per 100 g: {food.per100.calories} kcal · P {food.per100.protein_g} · C {food.per100.carbs_g} · F {food.per100.fat_g}
         </p>
       )}
 
-      <div className="row between" style={{ margin: '20px 0' }}>
+      <div className="amount-row">
         <div>
-          <div className="tiny muted" style={{ marginBottom: 6 }}>Servings</div>
+          <span className="field-label">Servings</span>
           <Stepper value={servings} onChange={onServings} />
         </div>
         {food.serving_g ? (
-          <label style={{ width: 110 }}>
-            <div className="tiny muted" style={{ marginBottom: 6 }}>or grams</div>
+          <label className="grams-field">
+            <span className="field-label">or grams</span>
             <input className="input num" inputMode="decimal" value={grams} onChange={(e) => onGrams(e.target.value)} aria-label="Grams" />
           </label>
         ) : (
-          <div style={{ textAlign: 'right' }}>
-            <div className="tiny muted">Total</div>
-            <strong className="num" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>{Math.round(food.calories * n)}</strong>
-            <span className="muted"> kcal</span>
+          <div className="amount-total">
+            <span className="field-label">Total</span>
+            <span className="figure"><CountUp value={Math.round(food.calories * n)} from={Math.round(food.calories * n)} /></span>
+            <span className="figure-unit"> kcal</span>
           </div>
         )}
       </div>
 
       {(src === 'usda' || src === 'off') && (
-        <label className="list" style={{ marginBottom: 14, display: 'block' }}>
+        <label className="list mb-4">
           <span className="list-row">
             <span className="label">Save to My foods</span>
             <Switch checked={saveToMine} onChange={setSaveToMine} label="Save to My foods" />
@@ -381,7 +381,7 @@ function ServingPicker({ food, date, meal, onBack, onDone, onDeleted }) {
         Add {Math.round(food.calories * n)} kcal to {MEAL_LABEL[meal]}
       </button>
       {isMine && (
-        <button className="btn destructive block" style={{ marginTop: 10 }} onClick={remove}>
+        <button className="btn destructive block mt-3" onClick={remove}>
           Remove from My foods
         </button>
       )}
@@ -512,9 +512,9 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
         />
       </label>
       {photo && (
-        <div style={{ position: 'relative', marginBottom: 10 }}>
+        <div className="photo-wrap">
           <img className="photo-preview" src={photo.preview} alt="Meal" />
-          <button className="icon-btn filled" style={{ position: 'absolute', top: 8, right: 8, background: 'rgb(0 0 0 / 0.5)', color: '#fff' }} aria-label="Remove photo" onClick={() => setPhoto(null)}>
+          <button className="icon-btn filled on-photo" aria-label="Remove photo" onClick={() => setPhoto(null)}>
             <Icon name="close" strokeWidth={2.6} />
           </button>
         </div>
@@ -530,29 +530,29 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
       </div>
 
       {loading && (
-        <div className="card" style={{ marginTop: 14 }}>
+        <div className="card mt-4">
           <Thinking status={prefs.aiChecks ? AI_STEPS[step] : 'Mimi is thinking…'} />
         </div>
       )}
 
       {!loading && !result && (
-        <p className="list-footer" style={{ marginTop: 10 }}>
+        <p className="list-footer mt-3">
           Mention portions and cooking (fried, boiled, with coconut milk). A photo plus a short description works best.
           {prefs.aiChecks && ' The AI checks your saved foods, the Jamaican list, USDA and Open Food Facts before it estimates.'}
         </p>
       )}
 
       {result && (
-        <div style={{ marginTop: 14 }}>
-          {result.notes && <p className="small muted" style={{ margin: '0 4px 10px' }}>{result.notes}</p>}
+        <div className="mt-4">
+          {result.notes && <p className="small muted">{result.notes}</p>}
           {result.items.length === 0 && <p className="small">No food items found.</p>}
           {result.items.map((it, i) => (
-            <div key={it.key} className="card rise" style={{ '--i': i, padding: 12, opacity: it.on ? 1 : 0.45, transition: 'opacity 0.2s' }}>
-              <div className="row" style={{ marginBottom: 8 }}>
+            <div key={it.key} className={`card compact rise ai-item${it.on ? '' : ' off'}`} style={{ '--i': i }}>
+              <div className="row mb-2">
                 <input className="check" type="checkbox" checked={it.on} onChange={(e) => update(it.key, 'on', e.target.checked)} aria-label="Include" />
                 <input className="input grow" value={it.name} onChange={(e) => update(it.key, 'name', e.target.value)} aria-label="Name" />
               </div>
-              <div className="row wrap tiny muted" style={{ marginBottom: 8, gap: 6 }}>
+              <div className="row wrap tiny muted mb-2">
                 <span>{it.serving}</span>
                 {it.reference && <span className={`badge ${refBadge(it.reference)}`}>{it.reference}</span>}
                 <span className={`badge ${it.confidence === 'high' ? 'jam' : it.confidence === 'low' ? 'off' : 'recent'}`}>{it.confidence} confidence</span>
@@ -565,10 +565,10 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
               </div>
             </div>
           ))}
-          {result.lookedUp.length > 0 && <p className="list-footer" style={{ marginBottom: 10 }}>Looked up: {result.lookedUp.join(', ')}</p>}
+          {result.lookedUp.length > 0 && <p className="list-footer mb-3">Looked up: {result.lookedUp.join(', ')}</p>}
           {result.items.length > 0 && (
             <>
-              <div className="list" style={{ marginBottom: 12 }}>
+              <div className="list mb-3">
                 <label className="list-row">
                   <span className="label">Also save to My foods</span>
                   <Switch checked={saveToMine} onChange={setSaveToMine} label="Also save to My foods" />
@@ -631,7 +631,7 @@ function QuickTab({ date, meal, onDone }) {
         <label className="field"><span>Carbs g</span><input className="input" inputMode="decimal" value={f.carbs_g} onChange={set('carbs_g')} /></label>
         <label className="field"><span>Fat g</span><input className="input" inputMode="decimal" value={f.fat_g} onChange={set('fat_g')} /></label>
       </div>
-      <div className="list" style={{ marginBottom: 14 }}>
+      <div className="list mb-4">
         <label className="list-row">
           <span className="label">Save to My foods for next time</span>
           <Switch checked={saveToMine} onChange={setSaveToMine} label="Save to My foods" />

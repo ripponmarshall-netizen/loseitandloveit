@@ -47,8 +47,8 @@ export default function Auth({ onUseLocal }) {
   return (
     <div className="auth">
       <Penguin kind="workout" />
-      <h1 className="center" style={{ marginBottom: 6 }}>Lose It &amp; Love It</h1>
-      <p className="center muted" style={{ marginBottom: 22 }}>
+      <h1 className="center auth-title">Lose It &amp; Love It</h1>
+      <p className="center muted auth-sub">
         Track what you eat, watch the trend, get coached.
       </p>
       <form className="card" onSubmit={submit}>
@@ -71,14 +71,14 @@ export default function Auth({ onUseLocal }) {
           </label>
         )}
         {msg && (
-          <p className="small" style={{ color: msg.ok ? 'var(--green)' : 'var(--danger)' }} role="alert">
+          <p className={`small ${msg.ok ? 'ok-text' : 'danger-text'}`} role="alert">
             {msg.text}
           </p>
         )}
         <button className="btn block" disabled={busy}>
           {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset link'}
         </button>
-        <div className="row between small" style={{ marginTop: 14 }}>
+        <div className="row between small mt-4">
           {mode === 'signin' ? (
             <>
               <button type="button" className="link" onClick={() => setMode('signup')}>Create an account</button>
@@ -90,7 +90,7 @@ export default function Auth({ onUseLocal }) {
         </div>
       </form>
       <button className="btn gray block" onClick={onUseLocal}>Try it without an account</button>
-      <p className="tiny muted center" style={{ marginTop: 8 }}>
+      <p className="tiny muted center mt-2">
         Without an account, data stays on this device only and the AI coach is off.
       </p>
     </div>

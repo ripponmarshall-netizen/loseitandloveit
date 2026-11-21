@@ -81,7 +81,7 @@ function DoseChips({ med, value, onChange, unit }) {
   return (
     <>
       {doses.length > 0 && (
-        <div className="chip-wrap" style={{ marginBottom: 10 }}>
+        <div className="chip-wrap mb-3">
           {doses.map((d) => (
             <button
               key={d}
@@ -240,7 +240,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
       )}
       <DoseChips med={med} value={amount} onChange={setAmount} unit={unit} />
       {step && (
-        <p className="list-footer" style={{ margin: '-6px 4px 14px' }}>
+        <p className="list-footer field-note">
           Step {step.step} of {step.of} on the usual {info.label} ladder{step.isTop ? ' (top dose)' : ''}. Only change dose as your prescriber says.
         </p>
       )}
@@ -263,11 +263,11 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
         </div>
       ) : (
         <>
-          <div className="list-header" style={{ marginTop: 6 }}>
+          <div className="list-header mt-2">
             Injection site{chosenSite ? `: ${SITE_BY_ID[chosenSite]?.label}` : ''}
           </div>
           <BodyMap value={chosenSite} onChange={pickSite} suggested={suggested} recent={(recent || []).map((r) => r.site).filter(Boolean)} />
-          <p className="list-footer" style={{ margin: '6px 4px 14px' }}>
+          <p className="list-footer mt-2 mb-4">
             Rotate sites each time. On the belly, stay 5 cm (2 in) from the navel. Avoid skin that’s bruised, scarred or sore.
           </p>
         </>
@@ -279,7 +279,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
       </label>
 
       {planChanges && (
-        <label className="list" style={{ display: 'block', marginBottom: 14 }}>
+        <label className="list mb-4">
           <span className="list-row">
             <span className="label">
               {plan ? 'Update my plan' : 'Set as my plan'}
@@ -290,7 +290,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
         </label>
       )}
 
-      <div className="stack">
+      <div className="btn-col">
         <button className="btn block" disabled={busy || !(doseNum > 0)} onClick={save}>
           {existing ? 'Save' : `Log dose${dayLabel === 'Today' ? '' : ` · ${dayLabel}`}`}
         </button>
@@ -389,7 +389,7 @@ export function MedicationSheet({ onClose }) {
         </label>
       </div>
       {noDoses && (
-        <label className="list" style={{ display: 'block', marginBottom: 14 }}>
+        <label className="list mb-4">
           <span className="list-row">
             <span className="label">
               Log my first dose on {started ? formatDayLabel(started, today) : 'the start date'}
@@ -399,10 +399,10 @@ export function MedicationSheet({ onClose }) {
           </span>
         </label>
       )}
-      <p className="list-footer" style={{ margin: '-4px 4px 14px' }}>
+      <p className="list-footer field-note">
         {info.note} The coach uses this to tailor food, water and exercise advice. It never changes your dose: that’s for your prescriber.
       </p>
-      <div className="stack">
+      <div className="btn-col">
         <button
           className="btn block"
           disabled={busy || !(Number(amount) > 0)}

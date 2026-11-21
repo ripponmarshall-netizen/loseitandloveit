@@ -13,7 +13,7 @@ import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget, weightDelta } from './Checkin.jsx'
 import { addDays, formatEta, formatShortDate, formatTime, formatTimeUntil, lastNDates } from '../lib/dates.js'
 import { CalendarHeat, Sparkline, StackedBars, TrendChart } from './Charts.jsx'
-import { CountUp, Icon, PenguinFace, Segmented } from './ui.jsx'
+import { CardHeader, Chevron, CountUp, Icon, PageHeader, PenguinFace, Segmented } from './ui.jsx'
 import { MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { requestGoalEstimate } from '../lib/ai.js'
 import { buildGoalContext, cleanGoalEstimate, goalEstimateDue, goalFingerprint } from '../lib/goalEstimate.js'
@@ -225,12 +225,7 @@ export default function Progress() {
 
   return (
     <div>
-      <header className="page-head">
-        <div className="grow">
-          <div className="eyebrow">Trends and stats</div>
-          <h1>Progress</h1>
-        </div>
-      </header>
+      <PageHeader eyebrow="Trends and stats" title="Progress" />
 
       <div className="progress-tabs">
         <Segmented label="Progress section" value={view} onChange={setView} options={VIEWS} />
@@ -239,7 +234,7 @@ export default function Progress() {
       <div key={view} className="view-swap" data-dir={viewDir || undefined}>
       {view === 'weight' && (
       <>
-      <div className="stats" style={{ marginBottom: 18 }}>
+      <div className="stats">
         <Stat label="Current" color="var(--weight)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
         <Stat
           label="Goal"
@@ -275,7 +270,7 @@ export default function Progress() {
 
       {view === 'food' && (
       <>
-      <div className="stats" style={{ marginBottom: 18 }}>
+      <div className="stats">
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? <CountUp value={avgWeek} /> : loaded.food ? '—' : '…'} sub={avgWeek ? 'kcal a day' : loaded.food ? 'no full days' : 'loading'} />
         <Stat label="Target" color="var(--kcal)" value={targets ? <CountUp value={targets.calories} /> : '—'} sub="kcal a day" />
         <Stat label="Maintenance" color="var(--blue)" value={adaptive ? <CountUp value={adaptive.tdee} /> : targets?.tdee ? <CountUp value={targets.tdee} /> : '—'} sub={adaptive ? 'measured' : 'formula'} />
@@ -286,7 +281,7 @@ export default function Progress() {
       {loaded.food && <MealSplitCard entries={recentEntries} />}
 
       <section className="card">
-        <h2>Your real maintenance</h2>
+        <CardHeader title="Your real maintenance" />
         {adaptive ? (
           <>
             <p>
@@ -302,7 +297,7 @@ export default function Progress() {
                 Base my target on this ({fmtN(suggestedTarget)} kcal)
               </button>
             )}
-            <p className="tiny muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            <p className="tiny muted mt-3">
               Only as accurate as your logging. Days with under 500 kcal logged are ignored as incomplete.
             </p>
           </>
@@ -581,7 +576,7 @@ function DoseTrend({ open, onToggle }) {
             {gran === 'day' ? 'Each dose holds until the next; dots are the days you logged one.' : `The dose you were on at the end of each ${gran}.`}{' '}
             {!logged && plan ? 'Drawn from your plan until you log a dose. ' : ''}Dose changes are your prescriber’s call.
           </p>
-          <button className="btn sm secondary" style={{ marginTop: 12 }} onClick={() => openSheet('dose', { date: today })}>
+          <button className="btn sm secondary mt-3" onClick={() => openSheet('dose', { date: today })}>
             Log a dose
           </button>
         </>
@@ -631,10 +626,9 @@ function Wellbeing({ today }) {
   for (const m of moods) checkins[m.log_date] = (checkins[m.log_date] || 0) + 1
   return (
     <section className="card">
-      <div className="row between" style={{ marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Wellbeing, 14 days</h2>
+      <CardHeader title="Wellbeing, 14 days">
         <button className="btn sm secondary" onClick={() => openSheet('mood', { date: today, daily: byDate[today] })}>Check in</button>
-      </div>
+      </CardHeader>
       <div className="mood-strip" aria-label="Mood for each of the last 14 days">
         {dates.map((d) => {
           const m = MOOD_BY_V[byDate[d]?.mood]
@@ -645,13 +639,13 @@ function Wellbeing({ today }) {
           )
         })}
       </div>
-      <div className="stats" style={{ marginTop: 12 }}>
+      <div className="stats">
         <Stat label="Mood" color="var(--yellow)" value={sum.mood ? MOOD_BY_V[Math.round(sum.mood)]?.label : '—'} sub={sum.mood ? `${sum.mood} / 5 avg` : 'none yet'} />
         <Stat label="Water" color="var(--cyan)" value={sum.waterMl ? formatWater(sum.waterMl) : '—'} sub={`goal ${formatWater(waterTarget)}`} />
         <Stat label="Energy" color="var(--green)" value={sum.energy ? `${sum.energy}/5` : '—'} sub="average" />
       </div>
       {sum.symptoms.length > 0 && (
-        <p className="small muted" style={{ margin: '10px 0 0' }}>
+        <p className="small muted">
           Most common: {sum.symptoms.slice(0, 3).map(([id, n]) => `${SYMPTOM_BY_ID[id]?.label || id} (${n} day${n > 1 ? 's' : ''})`).join(', ')}.
         </p>
       )}
@@ -665,8 +659,8 @@ function ExerciseSummary({ workouts, today, units }) {
   const km = (v) => (units === 'imperial' ? `${(Math.round(kmhToMph(v) * 10) / 10).toFixed(1)} mi` : `${v.toFixed(1)} km`)
   return (
     <section className="card">
-      <h2>Exercise, last 7 days</h2>
-      <div className="stats" style={{ marginBottom: 8 }}>
+      <CardHeader title="Exercise, last 7 days" />
+      <div className="stats mb-3">
         <Stat inner label="Sessions" color="var(--red)" value={week.sessions} />
         <Stat inner label="Minutes" color="var(--orange)" value={week.minutes} />
         <Stat inner label="Burned" color="var(--pink)" value={fmtN(week.kcal)} sub="net kcal" />
@@ -674,7 +668,7 @@ function ExerciseSummary({ workouts, today, units }) {
         <Stat inner label="Treadmill" color="var(--blue)" value={week.treadmill} sub={week.treadmillKm ? km(week.treadmillKm) : 'sessions'} />
         <Stat inner label="28 days" color="var(--teal)" value={month.sessions} sub={`${month.minutes} min`} />
       </div>
-      <p className="tiny muted" style={{ margin: 0 }}>
+      <p className="tiny muted">
         Aim for 2–3 strength sessions a week to keep muscle while you lose fat, plus walking or treadmill for steps.
       </p>
     </section>
@@ -698,39 +692,41 @@ function WeighIns({ weights }) {
   const shown = showAll ? list : list.slice(0, 5)
   return (
     <section className="card" id="weigh-ins">
-      <div className="row between" style={{ marginBottom: 6 }}>
-        <h2 style={{ margin: 0 }}>Weigh-ins</h2>
-        <button className="btn secondary sm" onClick={() => openSheet('weight')}>+ Log</button>
-      </div>
-      {!list.length && <p className="small muted" style={{ margin: 0 }}>No weigh-ins yet. You can log one for any day, including past days.</p>}
-      {shown.map((w, i) => {
-        const prev = list[i + 1]
-        return (
-          <button
-            key={w.id}
-            className="list-row weigh-row tap"
-            style={{ padding: '10px 2px', width: '100%', background: 'none', border: 0, textAlign: 'left', color: 'var(--text)' }}
-            onClick={() => openSheet('weight', { weight: w })}
-            aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}${w.weighed_at ? ` at ${formatTime(w.weighed_at)}` : ''}`}
-          >
-            <span className="label">
-              {w.log_date === today ? 'Today' : formatShortDate(w.log_date)}
-              {(w.weighed_at || w.note) && <span className="sub ellipsis">{[formatTime(w.weighed_at), w.note].filter(Boolean).join(' · ')}</span>}
-            </span>
-            {prev && <span className="delta num">{weightDelta(w.weight_kg, prev.weight_kg, units)}</span>}
-            <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-            <svg className="chev" viewBox="0 0 8 14" aria-hidden="true" style={{ width: 8, height: 14, marginLeft: 8, color: 'var(--text-3, var(--text-2))' }}>
-              <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )
-      })}
+      <CardHeader title="Weigh-ins">
+        <button className="btn secondary sm" onClick={() => openSheet('weight')}>
+          <Icon name="plus" size={16} strokeWidth={2.6} /> Log
+        </button>
+      </CardHeader>
+      {!list.length && <p className="small muted">No weigh-ins yet. You can log one for any day, including past days.</p>}
+      {list.length > 0 && (
+        <div className="inset-list">
+          {shown.map((w, i) => {
+            const prev = list[i + 1]
+            return (
+              <button
+                key={w.id}
+                className="list-row"
+                onClick={() => openSheet('weight', { weight: w })}
+                aria-label={`Edit weigh-in for ${formatShortDate(w.log_date)}${w.weighed_at ? ` at ${formatTime(w.weighed_at)}` : ''}`}
+              >
+                <span className="label">
+                  {w.log_date === today ? 'Today' : formatShortDate(w.log_date)}
+                  {(w.weighed_at || w.note) && <span className="sub ellipsis">{[formatTime(w.weighed_at), w.note].filter(Boolean).join(' · ')}</span>}
+                </span>
+                {prev && <span className="delta num">{weightDelta(w.weight_kg, prev.weight_kg, units)}</span>}
+                <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
+                <Chevron />
+              </button>
+            )
+          })}
+        </div>
+      )}
       {list.length > 5 && (
-        <button className="link small" style={{ marginTop: 6 }} onClick={() => setShowAll((s) => !s)}>
+        <button className="link small mt-2" onClick={() => setShowAll((s) => !s)}>
           {showAll ? 'Show less' : `Show all ${list.length}`}
         </button>
       )}
-      {list.length > 0 && <p className="tiny muted" style={{ margin: '8px 0 0' }}>Tap a weigh-in to change its weight, date, time or note, or delete it. The trend uses each day’s first weigh-in.</p>}
+      {list.length > 0 && <p className="tiny muted mt-2">Tap a weigh-in to change its weight, date, time or note, or delete it. The trend uses each day’s first weigh-in.</p>}
     </section>
   )
 }
@@ -741,18 +737,11 @@ function GoalEstimateCard({ est, today, units }) {
   const range = est.earliest !== est.latest ? `${formatEta(est.earliest, today)} – ${formatEta(est.latest, today)}` : null
   return (
     <section className="card goal-est rise" aria-label="Mimi’s goal estimate">
-      <div className="row" style={{ gap: 10, marginBottom: 8 }}>
-        <PenguinFace size={30} />
-        <div className="grow">
-          <div className="eyebrow">Mimi’s estimate</div>
-          <div className="headline">
-            Goal around {formatShortDate(est.eta)} {est.eta.slice(0, 4)}
-          </div>
-        </div>
+      <CardHeader lead={<PenguinFace size={34} />} eyebrow="Mimi’s estimate" title={`Goal around ${formatShortDate(est.eta)} ${est.eta.slice(0, 4)}`}>
         <span className={`badge ${est.confidence === 'high' ? 'jam' : est.confidence === 'low' ? 'off' : 'usda'}`}>{est.confidence} confidence</span>
-      </div>
-      {est.summary && <p className="small" style={{ margin: '0 0 6px' }}>{est.summary}</p>}
-      <p className="tiny muted" style={{ margin: 0 }}>
+      </CardHeader>
+      {est.summary && <p className="small mb-2">{est.summary}</p>}
+      <p className="tiny muted">
         {[range && `Likely ${range}`, est.ratePerWeek && `about ${est.ratePerWeek} ${weightUnit(units)} a week`].filter(Boolean).join(' · ')}
         {range || est.ratePerWeek ? '. ' : ''}Updates after each weigh-in.
       </p>
@@ -776,16 +765,6 @@ function ChartStyle({ value, onChange }) {
   )
 }
 
-function CardHead({ title, note, children }) {
-  return (
-    <div className="card-head">
-      <h2>{title}</h2>
-      {note != null && <span className="card-note num">{note}</span>}
-      {children}
-    </div>
-  )
-}
-
 /** Weight: how far the trend moved each week, down in teal, up in orange. */
 function WeeklyChange() {
   const { series, today, units } = useApp()
@@ -801,8 +780,9 @@ function WeeklyChange() {
   const best = have.reduce((m, b) => (b.value < m.value ? b : m), have[0])
   return (
     <section className="card">
-      <CardHead title="Week by week" note={`${down} of ${have.length} down`} />
-      <p className="small muted card-sub">How far your trend moved each week, Monday to Sunday.</p>
+      <CardHeader title="Week by week" note={`${down} of ${have.length} down`}
+        sub={<>How far your trend moved each week, Monday to Sunday.</>}
+      />
       <TrendChart
         bars
         buckets={buckets}
@@ -842,8 +822,9 @@ function MacroMix({ daily }) {
   const aim = targets?.protein ? wholePercents([targets.protein * 4, targets.carbs * 4, targets.fat * 9]) : null
   return (
     <section className="card">
-      <CardHead title="Macro mix" note="8 weeks" />
-      <p className="small muted card-sub">Where each week’s calories came from. Tap a week to read it.</p>
+      <CardHeader title="Macro mix" note="8 weeks"
+        sub={<>Where each week’s calories came from. Tap a week to read it.</>}
+      />
       <StackedBars columns={columns} series={MACRO_SERIES} ariaLabel={`Macro split by week. Latest: protein ${latest.protein}%, carbs ${latest.carbs}%, fat ${latest.fat}%`} />
       {aim && (
         <p className="tiny muted trend-note">
@@ -862,10 +843,9 @@ function MealSplitCard({ entries }) {
   const top = split.reduce((m, x) => (x.kcal > m.kcal ? x : m), split[0])
   return (
     <section className="card">
-      <CardHead title="Meals" note="30 days" />
-      <p className="small muted card-sub">
-        {MEAL_LABEL[top.meal]} is your biggest meal, {top.share}% of what you eat.
-      </p>
+      <CardHeader title="Meals" note="30 days"
+        sub={<>{MEAL_LABEL[top.meal]} is your biggest meal, {top.share}% of what you eat.</>}
+      />
       <div className="split-bar" aria-hidden="true">
         {split.map((m, i) => m.share > 0 && <i key={m.meal} style={{ flexGrow: m.share, '--c': MEAL_COLOR[m.meal], '--i': i }} />)}
       </div>
@@ -910,10 +890,9 @@ function LoggingCalendar({ daily, workouts, loaded }) {
       : `${c.kcal.toLocaleString('en-GB')} kcal of ${fmtN(targetFor(c.date))} · ${CAL_LEVELS[c.level].label.toLowerCase()}`
   return (
     <section className="card">
-      <CardHead title="Logging calendar" note={loaded ? `${logged} of ${past.length} days` : '…'} />
-      <p className="small muted card-sub">
-        {loaded ? `${on} day${on === 1 ? '' : 's'} on target (90–100% of it) in the last ${CAL_WEEKS} weeks. Tap a day to read it.` : 'Loading…'}
-      </p>
+      <CardHeader title="Logging calendar" note={loaded ? `${logged} of ${past.length} days` : '…'}
+        sub={<>{loaded ? `${on} day${on === 1 ? '' : 's'} on target (90–100% of it) in the last ${CAL_WEEKS} weeks. Tap a day to read it.` : 'Loading…'}</>}
+      />
       {loaded ? <CalendarHeat weeks={weeks} levels={CAL_LEVELS} today={today} describe={describe} /> : <div className="skeleton cal-skel" />}
     </section>
   )
@@ -932,8 +911,8 @@ function WeekdayRhythm({ daily, loaded }) {
   if (have.length < 3) {
     return (
       <section className="card">
-        <CardHead title="Your week’s rhythm" />
-        <p className="small muted" style={{ margin: 0 }}>Log full days across a couple of weeks to see which days you eat most.</p>
+        <CardHeader title="Your week’s rhythm" />
+        <p className="small muted">Log full days across a couple of weeks to see which days you eat most.</p>
       </section>
     )
   }
@@ -948,12 +927,11 @@ function WeekdayRhythm({ daily, loaded }) {
   const buckets = days.map((d) => ({ key: String(d.dow), value: d.avg, n: d.n }))
   return (
     <section className="card">
-      <CardHead title="Your week’s rhythm" note="12 weeks" />
-      <p className="small muted card-sub">
-        {hi.dow !== lo.dow
+      <CardHeader title="Your week’s rhythm" note="12 weeks"
+        sub={<>{hi.dow !== lo.dow
           ? `${DAY_NAMES[hi.dow]}s are your biggest day, about ${fmtN(hi.avg - lo.avg)} kcal more than ${DAY_NAMES[lo.dow]}s.`
-          : 'Average calories for each day of the week.'}
-      </p>
+          : 'Average calories for each day of the week.'}</>}
+      />
       <TrendChart
         bars
         buckets={buckets}
@@ -996,8 +974,9 @@ function WaterBars() {
   const goal = Math.round(waterTarget / 100) / 10
   return (
     <section className="card">
-      <CardHead title="Water" note={`${hit} of 14 days`} />
-      <p className="small muted card-sub">Days you reached {goal.toFixed(1)} L are full blue.</p>
+      <CardHeader title="Water" note={`${hit} of 14 days`}
+        sub={<>Days you reached {goal.toFixed(1)} L are full blue.</>}
+      />
       <TrendChart
         bars
         buckets={buckets}

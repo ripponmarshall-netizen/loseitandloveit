@@ -17,7 +17,7 @@ import {
   TargetPreview,
   useProfileForm,
 } from './ProfileForm.jsx'
-import { Avatar, Icon, ListRow, ListSection, MenuRow, Segmented, Sheet, ToggleRow } from './ui.jsx'
+import { Avatar, Icon, ListRow, ListSection, MenuRow, PageHeader, Segmented, Sheet, ToggleRow } from './ui.jsx'
 import { photoToAvatar } from '../lib/image.js'
 import { FREQUENCY_LABEL } from '../data/glp1.js'
 import { formatDose, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
@@ -159,28 +159,23 @@ export default function Settings() {
 
   return (
     <div>
-      <header className="page-head">
-        <div className="grow">
-          <div className="eyebrow">Plan, data and account</div>
-          <h1>Settings</h1>
-        </div>
-      </header>
+      <PageHeader eyebrow="Plan, data and account" title="Settings" />
 
       {/* Profile header */}
-      <div className="list row" style={{ width: '100%', padding: 14, gap: 14 }}>
+      <div className="list profile-card">
         <button className="avatar-btn" onClick={() => setSheet('photo')} aria-label={profile.avatar ? 'Change profile photo' : 'Add a profile photo'}>
           <Avatar profile={profile} name={name} size={60} />
           <span className="avatar-badge" aria-hidden="true">
             <Icon name="camera" strokeWidth={2.4} />
           </span>
         </button>
-        <button className="grow tap" style={{ border: 0, background: 'none', padding: 0, textAlign: 'left', color: 'inherit', cursor: 'pointer', font: 'inherit' }} onClick={() => setSheet('body')}>
-          <span className="title3 ellipsis" style={{ display: 'block' }}>{name}</span>
-          <span className="tiny muted ellipsis" style={{ display: 'block' }}>
+        <button className="profile-card-btn" onClick={() => setSheet('body')}>
+          <span className="title3 ellipsis d-block">{name}</span>
+          <span className="tiny muted ellipsis d-block">
             {mode === 'cloud' ? session?.user?.email : 'Local mode: data stays on this device'}
           </span>
           {targets && (
-            <span className="tiny" style={{ color: 'var(--kcal)', fontWeight: 600 }}>
+            <span className="profile-card-target">
               {targets.calories.toLocaleString('en-GB')} kcal a day{targets.overridden ? ' (manual)' : ''}
             </span>
           )}
@@ -217,7 +212,7 @@ export default function Settings() {
           onClick={() => openSheet('weight')}
         />
         <ListRow icon="ruler" color="var(--purple)" label="Units">
-          <div style={{ width: 140 }}>
+          <div className="row-control">
             <Segmented label="Units" value={units} onChange={(u) => saveField({ units: u }, 'Units updated')} options={[['imperial', 'lb · ft'], ['metric', 'kg · cm']]} />
           </div>
         </ListRow>
@@ -327,7 +322,7 @@ export default function Settings() {
 
       <ListSection header="Appearance">
         <div className="list-row">
-          <div style={{ width: '100%' }}>
+          <div className="row-full">
             <Segmented label="Appearance" value={prefs.theme} onChange={(t) => setPrefs({ theme: t })} options={[['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']]} />
           </div>
         </div>
@@ -400,7 +395,7 @@ export default function Settings() {
           {(form) => (
             <>
               <CoachNotesField form={form} />
-              <p className="list-footer" style={{ marginTop: -6, marginBottom: 14 }}>Mimi reads these with every message.</p>
+              <p className="list-footer mt-0 mb-4">Mimi reads these with every message.</p>
             </>
           )}
         </ProfileSheet>
@@ -527,7 +522,7 @@ function PhotoSheet({ name, onClose }) {
         <Avatar profile={{ ...profile, avatar: preview }} name={name} size={144} />
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} />
-      <div className="stack">
+      <div className="btn-col">
         <button className="btn secondary block" type="button" disabled={busy} onClick={() => fileRef.current.click()}>
           <Icon name="camera" size={18} /> {preview ? 'Choose another photo' : 'Choose a photo'}
         </button>
@@ -542,7 +537,7 @@ function PhotoSheet({ name, onClose }) {
           </button>
         )}
       </div>
-      <p className="list-footer" style={{ marginTop: 12 }}>
+      <p className="list-footer mt-3">
         Cropped to a square and shrunk to a small image. It’s stored with your profile{' '}
         {profile.id === 'local' ? 'on this device' : 'in your account'} and only you can see it.
       </p>

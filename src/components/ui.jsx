@@ -88,11 +88,68 @@ export function Icon({ name, size, className, style, strokeWidth = 2 }) {
   )
 }
 
-const Chevron = () => (
+/** The grey › at the end of a row that opens something. */
+export const Chevron = () => (
   <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
     <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
+
+// ---------------------------------------------------------------- layout
+
+/**
+ * The header every tab opens with: a small eyebrow line, the title, and
+ * optional actions on the right. `lead` sits before the text (Mimi's face).
+ * `eyebrow` can be an element (e.g. a "Back to today" link).
+ */
+export function PageHeader({ eyebrow, title, lead, children }) {
+  return (
+    <header className="page-head">
+      {lead && <div className="page-head-lead">{lead}</div>}
+      <div className="page-head-text">
+        {typeof eyebrow === 'string' ? <span className="eyebrow">{eyebrow}</span> : eyebrow}
+        <h1>{title}</h1>
+      </div>
+      {children && <div className="page-head-actions">{children}</div>}
+    </header>
+  )
+}
+
+/** A title between cards ("Food"), with an optional quiet figure on the right. */
+export function SectionTitle({ title, note }) {
+  return (
+    <div className="section-title">
+      <h2>{title}</h2>
+      {note ? <span className="section-note">{note}</span> : null}
+    </div>
+  )
+}
+
+/**
+ * A card's header: optional icon or face, an eyebrow, the title, then a quiet
+ * figure (`note`) or an action (`children`) on the right. `sub` is a line of
+ * muted text under the title row.
+ */
+export function CardHeader({ title, eyebrow, lead, note, sub, id, children }) {
+  return (
+    <>
+      <div className={`card-head${sub ? ' has-sub' : ''}`}>
+        {lead}
+        {eyebrow ? (
+          <div className="grow">
+            <span className="eyebrow">{eyebrow}</span>
+            <h2 id={id}>{title}</h2>
+          </div>
+        ) : (
+          <h2 id={id}>{title}</h2>
+        )}
+        {note != null && <span className="card-note num">{note}</span>}
+        {children}
+      </div>
+      {sub && <p className="small muted card-sub">{sub}</p>}
+    </>
+  )
+}
 
 // ---------------------------------------------------------------- penguins
 
@@ -124,7 +181,7 @@ export function PenguinLoader({ label = 'Warming up…' }) {
   return (
     <div className="loader" role="status" aria-live="polite">
       <Penguin kind="workout" />
-      <p className="splash-sub" style={{ marginTop: 10 }}>{label}</p>
+      <p className="splash-sub">{label}</p>
     </div>
   )
 }
@@ -342,10 +399,10 @@ export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 50 }) {
 
 // ---------------------------------------------------------------- grouped lists (iOS Settings style)
 
-export function ListSection({ header, footer, children, big }) {
+export function ListSection({ header, footer, children }) {
   return (
     <section className="list-section">
-      {header && <div className={`list-header${big ? ' big' : ''}`}>{header}</div>}
+      {header && <div className="list-header">{header}</div>}
       <div className="list">{children}</div>
       {footer && <div className="list-footer">{footer}</div>}
     </section>
@@ -421,11 +478,11 @@ export function MacroBar({ label, value, target, color }) {
   const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0
   return (
     <div className="macro" style={{ '--c': color }}>
-      <div className="tiny" style={{ color, fontWeight: 600 }}>{label}</div>
+      <div className="macro-mini-label">{label}</div>
       <div className="bar">
         <i style={{ width: `${pct}%` }} />
       </div>
-      <div className="caption muted num" style={{ marginTop: 3 }}>
+      <div className="caption muted num mt-1">
         {Math.round(value)} / {target} g
       </div>
     </div>
