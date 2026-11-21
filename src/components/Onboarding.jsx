@@ -56,7 +56,7 @@ export default function Onboarding() {
   }
 
   return (
-    <form onSubmit={next} className="page" key={step} style={{ paddingTop: 8 }}>
+    <form onSubmit={next} className="page onboarding" key={step}>
       {step === 0 && (
         <div className="center">
           <Penguin kind="workout" size={120} />
@@ -67,8 +67,8 @@ export default function Onboarding() {
           <i key={x.id} className={i <= step ? 'done' : ''} />
         ))}
       </div>
-      <h1 style={{ marginBottom: 4 }}>{s.title}</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>{s.sub}</p>
+      <h1>{s.title}</h1>
+      <p className="muted onboarding-sub">{s.sub}</p>
 
       {s.id === 'about' && (
         <>
@@ -128,10 +128,10 @@ export default function Onboarding() {
           {err}
         </p>
       )}
-      <button className="btn block" disabled={busy} style={{ marginTop: 6 }}>
+      <button className="btn block mt-2" disabled={busy}>
         {busy ? 'Saving…' : step < STEPS.length - 1 ? 'Continue' : 'Start tracking'}
       </button>
-      <p className="center" style={{ marginTop: 14 }}>
+      <p className="center mt-4">
         {step > 0 ? (
           <button type="button" className="link small" onClick={() => setStep(step - 1)}>Back</button>
         ) : (

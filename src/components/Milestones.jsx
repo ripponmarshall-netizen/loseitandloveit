@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { displayWeight, weightUnit, weightValue } from '../lib/calc.js'
 import { daysBetween, formatShortDate } from '../lib/dates.js'
 import { newBadges } from '../lib/milestones.js'
+import { CardHeader } from './ui.jsx'
 
 // ---------------------------------------------------------------- labels
 
@@ -44,12 +45,7 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
 
   return (
     <section className="card milestones" aria-labelledby="ms-title">
-      <div className="row between" style={{ marginBottom: 12 }}>
-        <h2 id="ms-title" style={{ margin: 0 }}>Milestones</h2>
-        <span className="card-note num">
-          {reachedCount} of {total}
-        </span>
-      </div>
+      <CardHeader id="ms-title" title="Milestones" note={`${reachedCount} of ${total}`} />
 
       <div className="ms-hero">
         <svg className="ms-ring" viewBox="0 0 84 84" aria-hidden="true">
@@ -127,7 +123,7 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
 
       <MilestoneChart series={series} milestones={milestones} next={next} units={units} />
 
-      <p className="tiny muted" style={{ margin: '10px 0 0' }}>
+      <p className="tiny muted mt-3">
         Milestones count when your <strong>trend</strong> gets there, so one heavy morning can't take one away.{' '}
         {pcos
           ? 'With PCOS, the 5% and 10% marks (♥) can bring back regular cycles and help fertility, even while the goal is far off.'
@@ -168,7 +164,7 @@ export function MilestoneChart({ series, milestones, next, units }) {
     return { x, y, line, lines, reached, conv, crowded, first, last: pts[pts.length - 1] }
   }, [series, milestones, next, units])
 
-  if (!geo) return <p className="small muted" style={{ marginTop: 12 }}>Log a few more weigh-ins to see your milestone chart.</p>
+  if (!geo) return <p className="small muted mt-3">Log a few more weigh-ins to see your milestone chart.</p>
   const { x, y, line, lines, reached, conv, crowded, first, last } = geo
 
   return (
@@ -209,12 +205,7 @@ export function BadgeGrid({ badges, fresh = [], units, onOpen }) {
   const earned = badges.filter((b) => b.earned).length
   return (
     <section className="card" aria-labelledby="badges-title">
-      <div className="row between" style={{ marginBottom: 12 }}>
-        <h2 id="badges-title" style={{ margin: 0 }}>Badges</h2>
-        <span className="card-note num">
-          {earned} of {badges.length}
-        </span>
-      </div>
+      <CardHeader id="badges-title" title="Badges" note={`${earned} of ${badges.length}`} />
       <div className="award-grid">
         {badges.map((b, i) => (
           <button
@@ -278,7 +269,7 @@ export function BadgeCelebration({ badges, units, onDone }) {
         <div className="celebrate-medal" aria-hidden="true">
           <span>{b.emoji}</span>
         </div>
-        <div className="eyebrow" style={{ color: 'var(--c)' }}>New badge</div>
+        <div className="eyebrow">New badge</div>
         <h2 className="celebrate-title">{b.title}</h2>
         <p className="muted">{b.desc}{b.weightBased ? ` (${displayWeight(b.goal, units)})` : ''}</p>
         <button className="btn block" autoFocus onClick={next}>

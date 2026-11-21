@@ -5,7 +5,7 @@ import { buildCoachContext } from '../lib/coachContext.js'
 import { buildRefs } from '../lib/foodSearch.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { glp1Plan } from '../lib/glp1.js'
-import { Avatar, Icon, MiniMarkdown, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
+import { Avatar, Icon, MiniMarkdown, PageHeader, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
 import MimiCheckin, { useMimi } from './MimiCheckin.jsx'
 
 const GLP1_PROMPTS = [
@@ -100,19 +100,18 @@ export default function Coach({ active = true }) {
   if (mode !== 'cloud') {
     return (
       <div>
-        <header className="page-head">
-          <div className="grow">
-            <div className="eyebrow">Your coach · Mimi the Penguin</div>
-            <h1>Mimi</h1>
+        <PageHeader lead={<PenguinFace size={44} />} eyebrow="Your coach · Mimi the Penguin" title="Mimi" />
+        <section className="card empty-state">
+          <div className="pg-wrap">
+            <Penguin kind="thinking" size={130} />
           </div>
-        </header>
-        <div className="center" style={{ marginBottom: 8 }}>
-          <Penguin kind="thinking" size={130} />
-        </div>
-        <div className="card warn small">
-          Mimi the Penguin, your AI coach, needs an account, because the AI runs on the server where the Claude API key is kept secret. Sign out from Settings
-          and create an account to use it. Your local data can be exported first and imported after.
-        </div>
+          <p className="headline">Mimi needs an account</p>
+          <p className="small muted">
+            Mimi the Penguin, your AI coach, runs on the server where the Claude API key is kept secret. Sign out from Settings and create an account to
+            use it. Your local data can be exported first and imported after.
+          </p>
+          <button type="button" className="btn secondary sm" onClick={() => app.setTab('settings')}>Open Settings</button>
+        </section>
       </div>
     )
   }
@@ -180,34 +179,29 @@ export default function Coach({ active = true }) {
 
   return (
     <div>
-      <header className="page-head">
-        <div className="row" style={{ gap: 12, alignItems: 'flex-end' }}>
-          <PenguinFace size={44} />
-          <div>
-            <div className="eyebrow">Your coach · Mimi the Penguin</div>
-            <h1>Mimi</h1>
-          </div>
-        </div>
+      <PageHeader lead={<PenguinFace size={44} />} eyebrow="Your coach · Mimi the Penguin" title="Mimi">
         {messages?.length > 0 && !busy && (
           <button className="btn sm gray" onClick={clear}>Clear</button>
         )}
-      </header>
+      </PageHeader>
 
       {messages === null ? (
-        <div className="center" style={{ padding: 32, color: 'var(--text-3)' }}>
+        <div className="loading-block">
           <Spinner />
         </div>
       ) : (
         <div className="chat">
           {messages.length === 0 && (
-            <div className="card center" style={{ paddingTop: 8 }}>
-              <Penguin kind="thinking" size={130} />
-              <p className="headline" style={{ marginTop: 4 }}>Hi, I’m Mimi the Penguin</p>
+            <div className="card empty-state">
+              <div className="pg-wrap">
+                <Penguin kind="thinking" size={130} />
+              </div>
+              <p className="headline">Hi, I’m Mimi the Penguin</p>
               <p className="small muted">
                 Your coach. Ask me about food, exercise, your numbers{onGlp1 ? ', your GLP-1 medicine' : ''} or how you’re feeling. I can see your targets, the last two weeks of
                 logs, check-ins and weight trend, and I check foods against USDA and Open Food Facts.
               </p>
-              <p className="tiny muted" style={{ margin: 0 }}>
+              <p className="tiny muted">
                 General guidance, not medical advice. Check with your doctor if you have a medical condition or take medication.
               </p>
             </div>
@@ -250,7 +244,7 @@ export default function Coach({ active = true }) {
       {messages !== null && !busy && <MimiCheckin />}
 
       {!busy && (
-        <div className="chips" style={{ marginTop: 14 }}>
+        <div className="chips prompt-chips">
           {(onGlp1 ? GLP1_PROMPTS : PROMPTS).map(([p, c]) => (
             <button key={p} className="chip tinted" style={{ '--c': c }} onClick={() => send(p)}>
               {p}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ACTIVITY, CONDITIONS, computeTargets } from '../lib/calc.js'
 import { PACES, convertUnits, fromForm, toForm } from '../lib/profileForm.js'
-import { Segmented } from './ui.jsx'
+import { CountUp, Segmented } from './ui.jsx'
 
 // Field groups shared by onboarding (one step each) and the Settings sheets.
 
@@ -138,9 +138,9 @@ export function GoalFields({ form, advanced = false }) {
         <small className="tiny muted">{ACTIVITY[f.activity_level]?.desc}</small>
       </label>
       {advanced && (
-        <details className="card" style={{ padding: '12px 14px' }}>
-          <summary className="small" style={{ cursor: 'pointer', fontWeight: 600 }}>Manual targets</summary>
-          <div className="grid2" style={{ marginTop: 12 }}>
+        <details className="card compact">
+          <summary className="small">Manual targets</summary>
+          <div className="grid2">
             <label className="field">
               <span>Calories</span>
               <input className="input" inputMode="numeric" placeholder="auto" value={f.calorie_target_override} onChange={set('calorie_target_override')} />
@@ -150,7 +150,7 @@ export function GoalFields({ form, advanced = false }) {
               <input className="input" inputMode="numeric" placeholder="auto" value={f.protein_target_override} onChange={set('protein_target_override')} />
             </label>
           </div>
-          <p className="tiny muted" style={{ margin: 0 }}>Leave blank to use the formula. Progress can also set this from your real maintenance.</p>
+          <p className="tiny muted">Leave blank to use the formula. Progress can also set this from your real maintenance.</p>
         </details>
       )}
     </>
@@ -207,30 +207,30 @@ export function TargetPreview({ values, currentWeightKg }) {
   )
   if (!preview) return null
   return (
-    <div className="card tinted" style={{ '--c': 'var(--kcal)' }}>
+    <div className="card tinted target-preview" style={{ '--c': 'var(--kcal)' }}>
       <div className="row between">
         <span className="headline">Daily target</span>
-        <span className="num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--kcal)' }}>
-          {preview.calories.toLocaleString('en-GB')}
-          <span className="small muted" style={{ fontWeight: 500 }}> kcal</span>
+        <span>
+          <span className="figure"><CountUp value={preview.calories} from={preview.calories} /></span>
+          <span className="figure-unit"> kcal</span>
         </span>
       </div>
-      <div className="row wrap small" style={{ gap: 12, margin: '6px 0' }}>
-        <span style={{ color: 'var(--protein)', fontWeight: 600 }}>P {preview.protein} g</span>
-        <span style={{ color: 'var(--carbs)', fontWeight: 600 }}>C {preview.carbs} g</span>
-        <span style={{ color: 'var(--fat)', fontWeight: 600 }}>F {preview.fat} g</span>
+      <div className="macro-line">
+        <span className="p">P {preview.protein} g</span>
+        <span className="c">C {preview.carbs} g</span>
+        <span className="f">F {preview.fat} g</span>
         <span className="muted">Maintenance ≈ {preview.tdee.toLocaleString('en-GB')} kcal</span>
       </div>
       {preview.split === 'carb-conscious' && (
-        <p className="small muted" style={{ margin: '4px 0' }}>Carb-conscious split: carbs at most 40% of calories.</p>
+        <p className="small muted">Carb-conscious split: carbs at most 40% of calories.</p>
       )}
       {preview.warnings.map((w) => (
-        <p key={w} className="small" style={{ color: 'var(--orange)', margin: '4px 0' }}>{w}</p>
+        <p key={w} className="small warn-text">{w}</p>
       ))}
       {preview.notes.map((n) => (
-        <p key={n} className="small muted" style={{ margin: '4px 0' }}>{n}</p>
+        <p key={n} className="small muted">{n}</p>
       ))}
-      <p className="tiny muted" style={{ margin: 0 }}>
+      <p className="tiny muted">
         Formula-based starting point (Mifflin-St Jeor). After 2–3 weeks of logging, Progress shows your real maintenance.
       </p>
     </div>

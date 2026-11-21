@@ -139,7 +139,7 @@ export function AppleImportSheet({ onClose }) {
           <Icon name={g.icon} strokeWidth={2.2} />
         </span>
         <span className="label">
-          <span className="ellipsis" style={{ display: 'block' }}>{w.name}</span>
+          <span className="ellipsis d-block">{w.name}</span>
           <span className="sub ellipsis">
             {DAY.format(parse(w.log_date))} · {w.started_at.slice(11, 16)} · {workoutDetail(w, units)}
           </span>
@@ -161,7 +161,7 @@ export function AppleImportSheet({ onClose }) {
             <span className="fit-hero-icon" aria-hidden="true"><Icon name="heart" size={28} strokeWidth={2.4} /></span>
             <div>
               <div className="headline">Bring in your workouts</div>
-              <p className="small muted" style={{ margin: '2px 0 0' }}>Walks, runs, strength, classes: with Apple’s own calories.</p>
+              <p className="small muted mt-1 mb-0">Walks, runs, strength, classes: with Apple’s own calories.</p>
             </div>
           </div>
           <ol className="fit-steps">
@@ -173,7 +173,7 @@ export function AppleImportSheet({ onClose }) {
           <button className="btn block" onClick={() => fileRef.current?.click()}>
             Choose export.zip
           </button>
-          <p className="list-footer" style={{ marginTop: 10 }}>
+          <p className="list-footer mt-3">
             Read on this phone and never uploaded. Only the workouts you pick are saved.
             {prefs.appleImportAt ? ` Last import ${new Date(prefs.appleImportAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}; newer workouts will be ticked for you.` : ''}
           </p>
@@ -193,15 +193,15 @@ export function AppleImportSheet({ onClose }) {
 
       {phase === 'results' && (
         <>
-          <div className="search-field" style={{ marginBottom: 10 }}>
+          <div className="search-field mb-3">
             <Icon name="search" />
             <input className="input" type="search" placeholder="Search: run, cycle, March, Saturday…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search workouts" />
           </div>
-          <div style={{ marginBottom: 10 }}>
+          <div className="mb-3">
             <Segmented value={range} onChange={setRange} options={RANGES} label="Period" />
           </div>
           {groups.length > 1 && (
-            <div className="chips" style={{ marginBottom: 6 }}>
+            <div className="chips mb-1">
               <button type="button" className={`chip${group === 'all' ? ' tinted' : ''}`} onClick={() => setGroup('all')}>All</button>
               {groups.map((g) => (
                 <button key={g} type="button" className={`chip${group === g ? ' tinted' : ''}`} style={{ '--c': GROUPS[g]?.color }} onClick={() => setGroup(group === g ? 'all' : g)}>
@@ -211,7 +211,7 @@ export function AppleImportSheet({ onClose }) {
             </div>
           )}
 
-          <div className="list-header row between" style={{ marginRight: 4 }}>
+          <div className="list-header row between">
             <span>{shown.length.toLocaleString('en-GB')} workout{shown.length === 1 ? '' : 's'}</span>
             {selectable.length > 0 && (
               <button type="button" className="link small no-caps" onClick={toggleAll}>{allPicked ? 'Clear' : `Select ${selectable.length > SHOW_MAX ? 'all' : selectable.length}`}</button>
@@ -223,7 +223,7 @@ export function AppleImportSheet({ onClose }) {
             <p className="list-footer">{error || 'Nothing matches. Try another word or a longer period.'}</p>
           )}
           {shown.length > SHOW_MAX && <p className="list-footer">Showing the newest {SHOW_MAX}. Search or narrow the period to see others.</p>}
-          <button type="button" className="link small" style={{ margin: '14px 4px 0' }} onClick={() => fileRef.current?.click()}>Choose a different file</button>
+          <button type="button" className="link small mt-4" onClick={() => fileRef.current?.click()}>Choose a different file</button>
 
           <div className="fit-footer">
             <button className="btn block" disabled={busy || !chosen.length} onClick={add}>

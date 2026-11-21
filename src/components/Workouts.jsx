@@ -40,7 +40,7 @@ function WorkoutRow({ w, units, onEdit, showDate }) {
         <Icon name={look.icon} />
       </span>
       <span className="label">
-        <span className="ellipsis" style={{ display: 'block' }}>
+        <span className="ellipsis d-block">
           {w.name}
           {w.source === 'apple' && <> <span className="badge fitness">Fitness</span></>}
         </span>
@@ -63,12 +63,11 @@ function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
         {workouts.map((w) => (
           <WorkoutRow key={w.id} w={w} units={units} onEdit={onEdit} />
         ))}
-        <button className="list-row meal-row add-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
-          <span className="dot" />
-          <span className="label">{workouts.length ? 'Add another workout' : 'Log a workout'}</span>
-          <span className="meal-add" aria-hidden="true">
+        <button className="list-row has-icon add-row" style={{ '--c': 'var(--red)' }} onClick={onAdd} aria-label="Add workout">
+          <span className="row-icon" aria-hidden="true">
             <Icon name="plus" strokeWidth={2.8} />
           </span>
+          <span className="label">{workouts.length ? 'Add another workout' : 'Log a workout'}</span>
         </button>
       </div>
       {burned > 0 && (
@@ -147,7 +146,7 @@ export function WorkoutsSheet({ date, onClose }) {
         <button type="button" className="repeat-card" disabled={repeating} onClick={repeat} style={{ '--c': workoutLook(last).color }}>
           <span className="repeat-icon" aria-hidden="true"><Icon name="refresh" strokeWidth={2.4} /></span>
           <span className="grow">
-            <span className="repeat-eyebrow">Repeat last</span>
+            <span className="eyebrow">Repeat last</span>
             <span className="repeat-title ellipsis">{last.name}</span>
             <span className="repeat-sub ellipsis">
               {Math.round(last.duration_min)} min · {last.calories_burned} kcal · {last.log_date === date ? 'earlier today' : formatShortDate(last.log_date)}
@@ -157,7 +156,7 @@ export function WorkoutsSheet({ date, onClose }) {
         </button>
       )}
 
-      <div className="list" style={{ marginTop: 14 }}>
+      <div className="list mt-4">
         <button className="list-row has-icon" onClick={() => openSheet('workout', { date, preset: { kind: 'other' } })}>
           <span className="row-icon" style={{ '--c': 'var(--indigo)' }} aria-hidden="true">
             <Icon name="grid" strokeWidth={2.2} />
@@ -188,7 +187,7 @@ export function WorkoutsSheet({ date, onClose }) {
         Last 30 days{month.sessions ? <span className="no-caps"> · {month.sessions} sessions · {month.minutes} min · {month.kcal.toLocaleString('en-GB')} kcal</span> : ''}
       </div>
       {recent === null ? (
-        <div className="center" style={{ padding: 20, color: 'var(--text-3)' }}><Spinner /></div>
+        <div className="loading-block"><Spinner /></div>
       ) : others.length ? (
         <div className="list">
           {others.slice(0, 40).map((w) => (
@@ -214,11 +213,11 @@ function WorkoutPicker({ onPick, weightKg }) {
   const groups = Object.keys(WORKOUT_GROUPS).filter((g) => shown.some((c) => c.type.group === g))
   return (
     <div className="workout-picker">
-      <div className="search-field" style={{ marginBottom: 10 }}>
+      <div className="search-field mb-3">
         <Icon name="search" />
         <input className="input" type="search" placeholder={`Search ${WORKOUT_CHOICES.length} workouts`} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search workout types" />
       </div>
-      <div className="chips" style={{ marginBottom: 4 }}>
+      <div className="chips mb-1">
         <button type="button" className={`chip${group === 'all' ? ' tinted' : ''}`} onClick={() => setGroup('all')}>All</button>
         {Object.entries(WORKOUT_GROUPS).map(([g, info]) => (
           <button key={g} type="button" className={`chip${group === g ? ' tinted' : ''}`} style={{ '--c': info.color }} onClick={() => setGroup(group === g ? 'all' : g)}>
@@ -430,7 +429,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
   return (
     <Sheet title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
       {!workout && (
-        <div style={{ marginBottom: 12 }}>
+        <div className="mb-3">
           <Segmented
             value={f.kind}
             onChange={(k) => setF((s) => ({ ...emptyForm(k), notes: s.notes }))}
@@ -456,7 +455,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
         />
       ) : (
         <>
-      {f.kind !== 'other' && <div className="chips" style={{ marginBottom: 12 }}>
+      {f.kind !== 'other' && <div className="chips mb-3">
         {(f.kind === 'treadmill' ? TREADMILL_PRESETS : HOME_PRESETS).map((p) => (
           <button key={p.name} type="button" className="chip tinted" style={{ '--c': f.kind === 'treadmill' ? 'var(--red)' : 'var(--orange)' }} onClick={() => (f.kind === 'treadmill' ? applyTreadmillPreset(p) : applyHomePreset(p))}>
             {p.name}
@@ -465,7 +464,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
       </div>}
 
       {f.kind === 'other' && !workout && f.type && (
-        <div className="list" style={{ marginBottom: 14 }}>
+        <div className="list mb-4">
           <button type="button" className="list-row has-icon" onClick={() => setF((st) => ({ ...st, type: null, choice: null }))}>
             <span className="row-icon" style={{ '--c': WORKOUT_GROUPS[f.type.group].color }}>
               <Icon name={WORKOUT_GROUPS[f.type.group].icon} strokeWidth={2.2} />
@@ -474,7 +473,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
               {f.choice || f.type.label}
               <span className="sub">{WORKOUT_GROUPS[f.type.group].label}</span>
             </span>
-            <span className="value" style={{ color: 'var(--tint)' }}>Change</span>
+            <span className="value action">Change</span>
           </button>
         </div>
       )}
@@ -567,37 +566,37 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
               </select>
             </label>
           </div>
-          <div className="tiny muted" style={{ margin: '4px 4px 8px', fontWeight: 500 }}>Exercises (optional)</div>
+          <span className="field-label">Exercises (optional)</span>
           {f.exercises.map((x, i) => (
-            <div key={i} className="row" style={{ marginBottom: 6 }}>
+            <div key={i} className="row exercise-row">
               <input className="input grow" placeholder="Exercise" value={x.name} onChange={(e) => setExercise(i, 'name', e.target.value)} aria-label="Exercise name" />
-              <input className="input" style={{ width: 56 }} inputMode="numeric" placeholder="sets" value={x.sets} onChange={(e) => setExercise(i, 'sets', e.target.value)} aria-label="Sets" />
-              <input className="input" style={{ width: 84 }} placeholder="reps" value={x.reps} onChange={(e) => setExercise(i, 'reps', e.target.value)} aria-label="Reps" />
+              <input className="input narrow" inputMode="numeric" placeholder="sets" value={x.sets} onChange={(e) => setExercise(i, 'sets', e.target.value)} aria-label="Sets" />
+              <input className="input medium" placeholder="reps" value={x.reps} onChange={(e) => setExercise(i, 'reps', e.target.value)} aria-label="Reps" />
               <button type="button" className="icon-btn" aria-label="Remove exercise" onClick={() => setF((s) => ({ ...s, exercises: s.exercises.filter((_, j) => j !== i) }))}>
                 <Icon name="close" size={18} />
               </button>
             </div>
           ))}
-          <button type="button" className="link small" style={{ margin: '4px 4px 16px' }} onClick={() => setF((s) => ({ ...s, exercises: [...s.exercises, { name: '', sets: '', reps: '' }] }))}>
+          <button type="button" className="link small mt-1 mb-4" onClick={() => setF((s) => ({ ...s, exercises: [...s.exercises, { name: '', sets: '', reps: '' }] }))}>
             + Add exercise
           </button>
         </>
       )}
 
-      <div className="card tinted" style={{ '--c': 'var(--red)', padding: 14 }}>
+      <div className="card tinted workout-estimate" style={{ '--c': 'var(--red)' }}>
         <div className="row between">
           <span className="small">Estimated burn</span>
           {needsSpeed ? (
             <span className="small muted">Enter a speed</span>
           ) : (
-            <strong className="num" style={{ color: 'var(--red)' }}>{estimate} kcal</strong>
+            <strong className="figure-sm num">{estimate} kcal</strong>
           )}
         </div>
-        <label className="field" style={{ margin: '8px 0 0' }}>
+        <label className="field">
           <span>Use your own number instead (optional)</span>
           <input className="input" inputMode="numeric" placeholder={f.kind === 'treadmill' ? 'e.g. from the treadmill screen' : 'e.g. from your watch'} value={f.manualKcal} onChange={set('manualKcal')} />
         </label>
-        <p className="tiny muted" style={{ margin: '6px 0 0' }}>
+        <p className="tiny muted mt-2">
           {record.calories_source === 'device'
             ? 'Using Apple’s active energy for this workout: calories above resting, as the app counts them.'
             : f.kind === 'treadmill'
@@ -612,9 +611,9 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
       </label>
 
       {problem && (
-        <p className="small" style={{ color: 'var(--danger)' }} role="alert">{problem}</p>
+        <p className="small danger-text" role="alert">{problem}</p>
       )}
-      <div className="stack">
+      <div className="btn-col">
         <button
           className="btn block"
           disabled={busy || !valid}

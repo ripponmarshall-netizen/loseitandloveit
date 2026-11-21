@@ -10,7 +10,7 @@ import {
 import { addDays, formatShortDate, parseISODate } from '../lib/dates.js'
 import { buildMilestones, milestoneProgress } from '../lib/milestones.js'
 import { milestoneText } from './Milestones.jsx'
-import { Icon, PenguinFace } from './ui.jsx'
+import { CardHeader, Icon, PenguinFace } from './ui.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
 const NARROW_DAY = new Intl.DateTimeFormat('en-GB', { weekday: 'narrow' })
@@ -295,16 +295,11 @@ export function WeekRecapCard({ recent }) {
 
   return (
     <section className="card recap rise" style={{ '--i': 2 }} aria-labelledby="recap-title">
-      <div className="recap-head">
-        <PenguinFace size={34} />
-        <div className="grow">
-          <h2 id="recap-title">{isSunday ? 'Your week so far' : 'Last week'}</h2>
-          <div className="tiny muted">{range}</div>
-        </div>
-        <button type="button" className="icon-btn" aria-label="Hide this week’s recap" onClick={dismiss}>
-          <Icon name="close" size={18} />
+      <CardHeader id="recap-title" lead={<PenguinFace size={34} />} eyebrow={range} title={isSunday ? 'Your week so far' : 'Last week'}>
+        <button type="button" className="icon-btn quiet" aria-label="Hide this week’s recap" onClick={dismiss}>
+          <Icon name="close" />
         </button>
-      </div>
+      </CardHeader>
       <div className="recap-grid">
         <RecapStat label="Days logged" value={`${r.logged}/${r.days}`} />
         <RecapStat label="Avg kcal" value={r.avgKcal ? fmt(r.avgKcal) : '—'} sub={targets?.calories ? `target ${fmt(targets.calories)}` : null} />
@@ -313,13 +308,13 @@ export function WeekRecapCard({ recent }) {
         <RecapStat label="Workouts" value={r.workouts} />
         <RecapStat label="On target" value={`${r.onTarget} day${r.onTarget === 1 ? '' : 's'}`} />
       </div>
-      {r.bestDay && <p className="small" style={{ margin: '12px 2px 0' }}>⭐ Best day: <strong>{LONG_DAY.format(parseISODate(r.bestDay))}</strong></p>}
+      {r.bestDay && <p className="small recap-best">⭐ Best day: <strong>{LONG_DAY.format(parseISODate(r.bestDay))}</strong></p>}
       {mode === 'cloud' && (
-        <button type="button" className="btn secondary sm block" style={{ marginTop: 14 }} onClick={ask}>
+        <button type="button" className="btn secondary sm block mt-4" onClick={ask}>
           Ask Mimi for next week’s focus
         </button>
       )}
-      {mode !== 'cloud' && profile && <p className="tiny muted" style={{ margin: '10px 2px 0' }}>Sign in to ask Mimi what to focus on next week.</p>}
+      {mode !== 'cloud' && profile && <p className="tiny muted mt-3">Sign in to ask Mimi what to focus on next week.</p>}
     </section>
   )
 }

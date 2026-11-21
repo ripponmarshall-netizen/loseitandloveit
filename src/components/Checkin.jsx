@@ -4,7 +4,7 @@ import { APPETITE, ENERGY, MOOD_BY_V, MOODS, SYMPTOMS } from '../data/glp1.js'
 import { BOTTLE_ML, GLASS_ML, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
 import { displayWeight, inputToKg, isValidWeightKg, weightUnit, weightValue } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatTime, logTimeToIso, timeInputValue, timeMs } from '../lib/dates.js'
-import { Icon, Segmented, Sheet } from './ui.jsx'
+import { Chevron, Icon, Segmented, Sheet } from './ui.jsx'
 
 /** The day's water goal from the profile and current weight. */
 export function useWaterTarget() {
@@ -83,12 +83,12 @@ export function WaterSheet({ date, daily, onClose }) {
           </div>
         </div>
       </div>
-      <div className="grid3" style={{ marginBottom: 12 }}>
-        <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => add(GLASS_ML)}>+ Glass</button>
-        <button className="btn secondary" style={{ '--tint': 'var(--cyan)' }} onClick={() => add(BOTTLE_ML)}>+ Bottle</button>
+      <div className="grid3 water-btns">
+        <button className="btn secondary" onClick={() => add(GLASS_ML)}>+ Glass</button>
+        <button className="btn secondary" onClick={() => add(BOTTLE_ML)}>+ Bottle</button>
         <button className="btn gray" disabled={ml <= 0} onClick={() => add(-GLASS_ML)}>− Glass</button>
       </div>
-      <p className="list-footer" style={{ margin: '0 4px 14px' }}>
+      <p className="list-footer mt-0 mb-4">
         A glass is 250 ml, a bottle 500 ml. Goal ≈ 30 ml per kg of body weight; drink more in the heat, on shift, or if you’re being sick. Change it in
         Settings → Tracking.
       </p>
@@ -198,7 +198,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
       <div className="list-header">Energy</div>
       <Segmented label="Energy" value={energy} onChange={(v) => setEnergy(v === energy ? null : v)} options={ENERGY} />
 
-      <label className="field" style={{ marginTop: 12 }}>
+      <label className="field mt-3">
         <span>Time{isToday ? ' (leave blank for now)' : !time ? ' (12:00 pm if left blank)' : ''}</span>
         <input className="input" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
       </label>
@@ -206,19 +206,19 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
       {list.length > 0 && (
         <>
           <div className="list-header">{isToday ? 'Earlier today' : 'Check-ins that day'}</div>
-          <div className="checkin-list">
+          <div className="list">
             {[...list].reverse().map((m) => {
               const mv = MOOD_BY_V[m.mood]
               const en = ENERGY.find(([v]) => v === m.energy)?.[1]
               return (
-                <div key={m.id} className="list-row" style={{ padding: '8px 2px' }}>
-                  <span aria-hidden="true" style={{ fontSize: 22, marginRight: 10 }}>{mv?.emoji}</span>
+                <div key={m.id} className="list-row has-icon">
+                  <span className="row-emoji" aria-hidden="true">{mv?.emoji}</span>
                   <span className="label">
                     {mv?.label}
                     <span className="sub">{[m.logged_at ? formatTime(m.logged_at) : m.legacy ? 'Earlier' : '', en && `Energy: ${en.toLowerCase()}`].filter(Boolean).join(' · ')}</span>
                   </span>
-                  <button type="button" className="btn sm gray" onClick={() => remove(m)} aria-label={`Delete ${mv?.label} check-in`}>
-                    <Icon name="trash" size={16} />
+                  <button type="button" className="icon-btn filled" onClick={() => remove(m)} aria-label={`Delete ${mv?.label} check-in`}>
+                    <Icon name="trash" />
                   </button>
                 </div>
               )
@@ -247,20 +247,20 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
         ))}
       </div>
       {urgent && (
-        <div className="card tinted small" style={{ '--c': 'var(--red)', marginTop: 12 }} role="alert">
+        <div className="card tinted small mt-3" style={{ '--c': 'var(--red)' }} role="alert">
           <strong>Get medical help today.</strong> Severe stomach pain that won’t settle (sometimes spreading to the back), or not being able to keep
           fluids down, can be serious on a GLP-1 medicine. In an emergency call 110.
         </div>
       )}
 
-      <label className="field" style={{ marginTop: 16 }}>
+      <label className="field mt-4">
         <span>Note for the day (optional)</span>
         <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Slept badly after night shift…" maxLength={1000} />
       </label>
       <button className="btn block" disabled={busy} onClick={save}>
         {mood != null ? 'Save check-in' : dayChanged ? 'Save' : 'Done'}
       </button>
-      <p className="list-footer" style={{ margin: '12px 4px 0' }}>Check in as often as you like. Your latest mood is the one shown for the day.</p>
+      <p className="list-footer mt-3">Check in as often as you like. Your latest mood is the one shown for the day.</p>
     </Sheet>
   )
 }
@@ -370,7 +370,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
           <span>Date</span>
           <input className="input date-input" type="date" max={today} value={date} onChange={(e) => setDate(e.target.value)} required />
         </label>
-        <div className="chip-wrap" style={{ margin: '-6px 0 14px' }}>
+        <div className="chip-wrap date-chips">
           {quick.map(([d, label]) => (
             <button key={d} type="button" className={`chip${date === d ? ' tinted' : ''}`} aria-pressed={date === d} onClick={() => setDate(d)}>
               {label}
@@ -391,33 +391,35 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
         </label>
 
         {sameDay.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div className="list-header" style={{ marginTop: 0 }}>Also logged {relDay(date, today)}</div>
-            {sameDay.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                className="list-row tap"
-                style={{ padding: '8px 2px', width: '100%', background: 'none', border: 0, textAlign: 'left', color: 'var(--text)' }}
-                onClick={() => openSheet('weight', { weight: w })}
-                aria-label={`Edit the ${formatTime(w.weighed_at) || 'earlier'} weigh-in`}
-              >
-                <span className="label">{formatTime(w.weighed_at) || 'Earlier'}</span>
-                <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
-              </button>
-            ))}
-          </div>
+          <section className="mb-4">
+            <div className="list-header mt-1">Also logged {relDay(date, today)}</div>
+            <div className="list">
+              {sameDay.map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  className="list-row"
+                  onClick={() => openSheet('weight', { weight: w })}
+                  aria-label={`Edit the ${formatTime(w.weighed_at) || 'earlier'} weigh-in`}
+                >
+                  <span className="label">{formatTime(w.weighed_at) || 'Earlier'}</span>
+                  <strong className="num">{displayWeight(Number(w.weight_kg), units)}</strong>
+                  <Chevron />
+                </button>
+              ))}
+            </div>
+          </section>
         )}
 
         <button className="btn block" disabled={busy || !valid}>
           {editing ? 'Save changes' : 'Save'}
         </button>
         {editing && (
-          <button type="button" className="btn destructive block" style={{ marginTop: 10 }} disabled={busy} onClick={remove}>
+          <button type="button" className="btn destructive block mt-3" disabled={busy} onClick={remove}>
             Delete weigh-in
           </button>
         )}
-        <p className="list-footer" style={{ margin: '12px 4px 0' }}>
+        <p className="list-footer mt-3">
           Log as many as you like. Your trend uses each day’s first weigh-in, so for the fairest comparison weigh in the morning, after the toilet, before food.
         </p>
       </form>

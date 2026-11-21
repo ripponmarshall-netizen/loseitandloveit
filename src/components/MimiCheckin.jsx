@@ -280,7 +280,7 @@ export default function MimiCheckin() {
           )
         })}
       </div>
-      <button className="btn sm secondary" style={{ marginTop: 12 }} onClick={() => askCoach(`About your check-in (“${insight.headline}”): what should I do next?`)}>
+      <button className="btn sm secondary mt-3" onClick={() => askCoach(`About your check-in (“${insight.headline}”): what should I do next?`)}>
         Ask Mimi more
       </button>
     </section>

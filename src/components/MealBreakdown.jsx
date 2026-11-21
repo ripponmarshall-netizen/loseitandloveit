@@ -136,7 +136,7 @@ export function MealBreakdownSheet({ date, meal = 'all', onClose, onEdit }) {
   return (
     <Sheet title={title} onClose={onClose}>
       {mealsWithFood.length > 0 && (
-        <div className="chips" style={{ marginBottom: 14 }}>
+        <div className="chips mb-4">
           {[['all', 'Whole day'], ...mealsWithFood.map((m) => [m, MEAL_LABEL[m]])].map(([id, label]) => (
             <button
               key={id}
@@ -153,11 +153,11 @@ export function MealBreakdownSheet({ date, meal = 'all', onClose, onEdit }) {
       )}
 
       {!b ? (
-        <div className="center" style={{ padding: 32 }}>
+        <div className="loading-block">
           <Spinner />
         </div>
       ) : entries.length === 0 ? (
-        <div className="card center">
+        <div className="card empty-state">
           <p className="muted small">Nothing logged for {which === 'all' ? 'this day' : MEAL_LABEL[which].toLowerCase()} yet.</p>
           <button
             className="btn secondary sm"
@@ -173,7 +173,7 @@ export function MealBreakdownSheet({ date, meal = 'all', onClose, onEdit }) {
         <>
           <section className="card">
             <MacroSplit entries={entries} />
-            <p className="caption muted" style={{ margin: '10px 0 0' }}>
+            <p className="caption muted mt-3">
               Where the calories come from: protein and carbs 4 kcal per gram, fat 9. Tap a colour for details.
             </p>
           </section>
@@ -200,7 +200,7 @@ export function MealBreakdownSheet({ date, meal = 'all', onClose, onEdit }) {
               return (
                 <button key={it.id} className="list-row food-bar-row" onClick={() => e && onEdit?.(e)}>
                   <span className="label">
-                    <span className="row between" style={{ gap: 8 }}>
+                    <span className="row between">
                       <span className="ellipsis">{it.name}</span>
                       <span className="entry-kcal">{fmt(it.calories)}</span>
                     </span>
