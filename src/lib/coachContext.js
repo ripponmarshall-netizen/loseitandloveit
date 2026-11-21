@@ -1,5 +1,5 @@
 import { addDays, daysBetween, lastNDates } from './dates.js'
-import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, goalProgress, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
+import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, goalProgress, latestWeighIn, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
 import { FREQUENCY_LABEL, MOOD_BY_V, SYMPTOM_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
 
@@ -10,7 +10,7 @@ const moodsOn = (moods, date) => {
   return list.length > 1 ? list.map((m) => MOOD_BY_V[m.mood]?.label).join(' → ') : undefined
 }
 
-export async function buildCoachContext({ store, profile, series, targets, today }) {
+export async function buildCoachContext({ store, profile, series, weights, targets, today }) {
   const entries = await store.listEntries(addDays(today, -27), today)
   const daily = dailyTotals(entries)
   // Workouts are optional: if the table isn't there yet, coach without them.
@@ -22,10 +22,13 @@ export async function buildCoachContext({ store, profile, series, targets, today
     store.listMoods ? store.listMoods(addDays(today, -13), today).catch(() => []) : [],
   ])
   const last = series[series.length - 1]
+  // What the user sees as their weight: the newest reading, not the day's first.
+  const newest = latestWeighIn(weights)
+  const currentKg = newest ? Number(newest.weight_kg) : last?.weight
   const rate = weeklyRate(series)
   const now = new Date()
   const plan = glp1Plan(profile)
-  const waterTarget = waterTargetMl(last?.weight ?? Number(profile.start_weight_kg), profile.water_target_ml)
+  const waterTarget = waterTargetMl(currentKg ?? Number(profile.start_weight_kg), profile.water_target_ml)
 
   return {
     note: 'All weights in kg. Talk to the user in their preferred units.',
@@ -55,13 +58,13 @@ export async function buildCoachContext({ store, profile, series, targets, today
       warnings: targets.warnings.length ? targets.warnings : undefined,
     },
     weight: last && {
-      current_kg: last.weight,
+      current_kg: currentKg,
       note: 'current_kg (the latest weigh-in) is what the user sees as their weight: quote that. trend_kg is the smoothed trend, for direction and rate only.',
-      latest_weigh_in: { date: last.date, kg: last.weight },
+      latest_weigh_in: newest ? { date: newest.log_date, kg: currentKg } : { date: last.date, kg: last.weight },
       trend_kg: last.trend,
       start_kg: Number(profile.start_weight_kg),
       goal_kg: Number(profile.goal_weight_kg) || null,
-      ...goalFields(profile, last.weight),
+      ...goalFields(profile, currentKg),
       weekly_change_kg: rate == null ? null : Math.round(rate * 100) / 100,
       projected_goal_date: projectGoalDate(series, Number(profile.goal_weight_kg), today, rate),
       weigh_ins_last_28_days: series.filter((p) => p.date >= addDays(today, -27)).length,

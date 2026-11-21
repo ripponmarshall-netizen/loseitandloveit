@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { MOOD_BY_V } from '../data/glp1.js'
 import { doseStatusLabel, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
 import { guessMeal, parseQuickLog } from '../lib/quicklog.js'
-import { displayWeight, lbToKg, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
+import { displayWeight, latestWeighIn, lbToKg, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
 import { MEAL_LABEL } from '../lib/meals.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
@@ -134,7 +134,9 @@ function useDockItems(date, q) {
   const dose = plan && day ? planDoseStatus(plan, day.doses, date) : null
   const weighIn = weights.some((w) => w.log_date === date)
   const upTo = series.filter((p) => p.date <= date)
-  const lastTrend = upTo[upTo.length - 1]
+  // The newest reading up to this day, so a re-weigh shows straight away.
+  const newest = latestWeighIn(weights, date)
+  const shownKg = newest ? Number(newest.weight_kg) : null
   const rate = weeklyRate(upTo)
   const signedRate = rate == null ? null : `${rate > 0 ? '+' : rate < 0 ? '−' : ''}${Math.abs(weightValue(rate, units)).toFixed(1)} ${weightUnit(units)}/wk`
   const nextMeal = date === today ? guessMeal() : 'dinner'
@@ -155,9 +157,9 @@ function useDockItems(date, q) {
       done: !!mood, onClick: () => openSheet('mood', { date, daily }), aria: `Mood: ${mood ? mood.label : 'not checked in'}`,
     },
     {
-      id: 'weight', icon: 'scale', color: 'var(--indigo)', label: 'Weight', value: lastTrend ? weightValue(lastTrend.weight, units).toFixed(1) : '—', unit: lastTrend ? weightUnit(units) : '',
+      id: 'weight', icon: 'scale', color: 'var(--indigo)', label: 'Weight', value: shownKg ? weightValue(shownKg, units).toFixed(1) : '—', unit: shownKg ? weightUnit(units) : '',
       done: weighIn, onClick: () => openSheet('weight', { date }),
-      aria: lastTrend ? `Weight ${displayWeight(lastTrend.weight, units)}${signedRate ? `, trend ${signedRate}` : ''}` : 'Log a weigh-in',
+      aria: shownKg ? `Weight ${displayWeight(shownKg, units)}${signedRate ? `, trend ${signedRate}` : ''}` : 'Log a weigh-in',
     },
     plan && {
       id: 'dose', icon: plan.route === 'oral' ? 'pill' : 'syringe', color: 'var(--purple)', label: 'GLP-1', value: dose ? shortDose(dose) : '…',

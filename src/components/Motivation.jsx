@@ -4,7 +4,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
-  dailyTotals, exerciseAllowance, goalProgress, loggingStreak, weekBalance, weekDots, weekRecap,
+  dailyTotals, exerciseAllowance, goalProgress, latestWeighIn, loggingStreak, weekBalance, weekDots, weekRecap,
   weekStart, weightUnit, weightValue,
 } from '../lib/calc.js'
 import { addDays, formatShortDate, parseISODate } from '../lib/dates.js'
@@ -61,10 +61,11 @@ function targetFor(date, workouts, targets, eatbackPct) {
 // ---------------------------------------------------------------- wins strip
 
 export function WinsCard({ recent }) {
-  const { today, series, profile, units, openProgress } = useApp()
+  const { today, series, weights, profile, units, openProgress } = useApp()
   const startKg = Number(profile.start_weight_kg)
   const goalKg = Number(profile.goal_weight_kg)
-  const last = series[series.length - 1]
+  const newest = latestWeighIn(weights)
+  const nowKg = newest ? Number(newest.weight_kg) : undefined
   const ms = useMemo(() => buildMilestones({ startKg, goalKg, series, units }), [startKg, goalKg, series, units])
 
   if (!recent) return <section className="card wins wins-loading" aria-hidden="true" />
@@ -72,9 +73,9 @@ export function WinsCard({ recent }) {
   const streak = loggingStreak(recent.daily, today)
   const rest = new Set(streak.restDays)
   const dots = weekDots(recent.daily, today)
-  const goal = goalProgress(startKg, goalKg, last?.weight)
-  const next = milestoneProgress(ms, startKg, last?.weight)?.next
-  const lostKg = last ? startKg - last.weight : null
+  const goal = goalProgress(startKg, goalKg, nowKg)
+  const next = milestoneProgress(ms, startKg, nowKg)?.next
+  const lostKg = nowKg != null ? startKg - nowKg : null
   const loggedThisWeek = dots.filter((d) => d.logged).length
 
   const n = streak.days
@@ -96,7 +97,7 @@ export function WinsCard({ recent }) {
   if (goal && !goal.reached) chips.push(`${Math.round(goal.fraction * 100)}% to goal`)
   if (goal?.reached) chips.push('Goal reached 🏆')
   if (next && next.kind !== 'goal') chips.push(`Next: ${milestoneText(next, units)}`)
-  if (!last) chips.push('Weigh in to track your progress')
+  if (!newest) chips.push('Weigh in to track your progress')
 
   return (
     <button

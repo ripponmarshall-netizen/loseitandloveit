@@ -12,6 +12,7 @@ import {
   adaptiveTdee,
   inputToKg,
   latestWeight,
+  latestWeighIn,
   projectGoalDate,
   goalProgress,
   cmToFtIn,
@@ -372,6 +373,24 @@ test('latestWeight is the most recent weigh-in, not the smoothed trend', () => {
   ])
   assert.equal(latestWeight(s), 98)
   assert.notEqual(s[s.length - 1].trend, 98)
+})
+
+test('latestWeighIn counts a second reading the same day (the trend does not)', () => {
+  assert.equal(latestWeighIn([]), null)
+  assert.equal(latestWeighIn(null), null)
+  const w = [
+    { id: 'a', log_date: '2026-01-01', weight_kg: 100, weighed_at: '2026-01-01T12:00:00Z' },
+    { id: 'b', log_date: '2026-01-02', weight_kg: 99, weighed_at: '2026-01-02T12:00:00Z' },
+    { id: 'c', log_date: '2026-01-02', weight_kg: 98.4, weighed_at: '2026-01-02T22:00:00+00:00' },
+    { id: 'd', log_date: '2026-01-02', weight_kg: 97, weighed_at: null }, // old row with no time: earliest
+  ]
+  assert.equal(latestWeighIn(w).id, 'c')
+  // In any order, and up to a given day.
+  assert.equal(latestWeighIn([...w].reverse()).id, 'c')
+  assert.equal(latestWeighIn(w, '2026-01-01').id, 'a')
+  assert.equal(latestWeighIn(w, '2025-12-31'), null)
+  // The trend still uses the day's first reading.
+  assert.equal(trendSeries(w).at(-1).weight, 97)
 })
 
 test('other activities use their MET, scaled for effort, net of resting', () => {

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { requestCheckin } from '../lib/ai.js'
-import { dailyTotals, weeklyRate } from '../lib/calc.js'
+import { dailyTotals, latestWeighIn, weeklyRate } from '../lib/calc.js'
 import { buildCheckinContext, checkinDue, checkinFingerprint, MAX_PER_DAY } from '../lib/checkins.js'
 import { addDays } from '../lib/dates.js'
 import { planDoseStatus, doseStatusLabel, glp1Plan } from '../lib/glp1.js'
@@ -145,7 +145,7 @@ export function MimiProvider({ children }) {
           workouts: day.workouts,
           weighedToday: weighed,
           recentDaily: dailyTotals(prior),
-          currentKg: last?.weight ?? null,
+          currentKg: Number(latestWeighIn(weights)?.weight_kg) || null,
           trendKg: last?.trend ?? null,
           weeklyChangeKg: rate == null ? null : Math.round(rate * 100) / 100,
           glp1: plan ? { medicine: plan.name, next_dose: doseStatusLabel(dose) } : null,
