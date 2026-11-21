@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
-  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, dailyTotals, displayWeight, goalProgress, hasCondition, kmhToMph,
-  projectGoalDate, weeklyRate, weightUnit, weightValue, workoutSummary,
+  adaptiveTarget, adaptiveTdee, bucketAverages, bucketStats, calendarWeeks, dailyTotals, displayWeight, exerciseAllowance, goalProgress,
+  hasCondition, kmhToMph, macroShareByWeek, mealSplit, projectGoalDate, weekdayAverages, weeklyRate, weeklyTrendChange, weightUnit,
+  weightValue, wholePercents, workoutSummary,
 } from '../lib/calc.js'
 import { buildMilestones, computeBadges, milestoneProgress } from '../lib/milestones.js'
 import { BadgeCelebration, BadgeDetail, BadgeGrid, MilestonesCard, keepEarned, useNewBadges } from './Milestones.jsx'
@@ -11,8 +12,9 @@ import { doseLevels, formatDose, formatWater, glp1Plan, summariseDailyLogs } fro
 import { Glp1Progress } from './Glp1.jsx'
 import { useWaterTarget, weightDelta } from './Checkin.jsx'
 import { addDays, formatEta, formatShortDate, formatTime, formatTimeUntil, lastNDates } from '../lib/dates.js'
-import { Sparkline, TrendChart } from './Charts.jsx'
-import { Icon, PenguinFace, Segmented } from './ui.jsx'
+import { CalendarHeat, Sparkline, StackedBars, TrendChart } from './Charts.jsx'
+import { CountUp, Icon, PenguinFace, Segmented } from './ui.jsx'
+import { MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { requestGoalEstimate } from '../lib/ai.js'
 import { buildGoalContext, cleanGoalEstimate, goalEstimateDue, goalFingerprint } from '../lib/goalEstimate.js'
 
@@ -97,14 +99,17 @@ const COUNT = { day: 30, week: 12, month: 12 }
 const VIEWS = [
   ['weight', 'Weight'],
   ['food', 'Food'],
+  ['habits', 'Habits'],
   ['health', 'Health'],
   ['awards', 'Awards'],
 ]
+const VIEW_IDS = VIEWS.map(([v]) => v)
 // Which view holds each section a Dashboard card can jump to.
 const VIEW_OF = { weight: 'weight', macros: 'food', dose: 'health', awards: 'awards' }
 const PERIOD = { day: 'last 30 days', week: 'last 12 weeks', month: 'last 12 months' }
 
 // A year of food in 2-month chunks: one big request would hit the API's row cap.
+// Returns the daily totals and the last 30 days' entries (for the meal split).
 async function loadYear(store, today) {
   const from = addDays(today, -372)
   const ranges = []
@@ -113,24 +118,37 @@ async function loadYear(store, today) {
     ranges.push([s, e < today ? e : today])
   }
   const parts = await Promise.all(ranges.map(([a, b]) => store.listEntries(a, b)))
-  return dailyTotals(parts.flat())
+  const all = parts.flat()
+  const from30 = addDays(today, -29)
+  return { daily: dailyTotals(all), recent: all.filter((e) => e.log_date >= from30) }
 }
 
 export default function Progress() {
   const { store, mode, series, weights, profile, targets, today, units, toast, dataVersion, saveProfile, openSheet, progressFocus, session } = useApp()
   const [daily, setDaily] = useState({})
+  const [recentEntries, setRecentEntries] = useState([])
   const [workouts, setWorkouts] = useState([]) // a year, for badges; the exercise card uses the last 28 days
   const [loaded, setLoaded] = useState({ food: false, workouts: false })
   const [open, setOpen] = useState({ weight: true, macros: true, dose: true })
-  const [view, setView] = useState('weight')
+  const [view, setViewRaw] = useState('weight')
+  // Which way the section switch went, so the new one slides in from that side.
+  const [viewDir, setViewDir] = useState(null)
+  const viewRef = useRef('weight')
+  const setView = (v) => {
+    if (v === viewRef.current) return
+    setViewDir(VIEW_IDS.indexOf(v) > VIEW_IDS.indexOf(viewRef.current) ? 'fwd' : 'back')
+    viewRef.current = v
+    setViewRaw(v)
+  }
   const [badgeOpen, setBadgeOpen] = useState(null)
 
   useEffect(() => {
     let cancelled = false
     loadYear(store, today)
-      .then((d) => {
+      .then(({ daily: d, recent }) => {
         if (cancelled) return
         setDaily(d)
+        setRecentEntries(recent)
         setLoaded((l) => ({ ...l, food: true }))
       })
       .catch((e) => !cancelled && toast(e.message, 'error'))
@@ -218,6 +236,7 @@ export default function Progress() {
         <Segmented label="Progress section" value={view} onChange={setView} options={VIEWS} />
       </div>
 
+      <div key={view} className="view-swap" data-dir={viewDir || undefined}>
       {view === 'weight' && (
       <>
       <div className="stats" style={{ marginBottom: 18 }}>
@@ -249,6 +268,7 @@ export default function Progress() {
           ['Goal', goalKg ? displayWeight(goalKg, units) : '—'],
         ]}
       />
+      <WeeklyChange />
       <WeighIns weights={weights} />
       </>
       )}
@@ -256,12 +276,14 @@ export default function Progress() {
       {view === 'food' && (
       <>
       <div className="stats" style={{ marginBottom: 18 }}>
-        <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? avgWeek.toLocaleString('en-GB') : '—'} sub={avgWeek ? 'kcal a day' : 'no full days'} />
-        <Stat label="Target" color="var(--green)" value={targets ? fmtN(targets.calories) : '—'} sub="kcal a day" />
-        <Stat label="Maintenance" color="var(--blue)" value={adaptive ? fmtN(adaptive.tdee) : targets?.tdee ? fmtN(targets.tdee) : '—'} sub={adaptive ? 'measured' : 'formula'} />
+        <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? <CountUp value={avgWeek} /> : loaded.food ? '—' : '…'} sub={avgWeek ? 'kcal a day' : loaded.food ? 'no full days' : 'loading'} />
+        <Stat label="Target" color="var(--green)" value={targets ? <CountUp value={targets.calories} /> : '—'} sub="kcal a day" />
+        <Stat label="Maintenance" color="var(--blue)" value={adaptive ? <CountUp value={adaptive.tdee} /> : targets?.tdee ? <CountUp value={targets.tdee} /> : '—'} sub={adaptive ? 'measured' : 'formula'} />
       </div>
 
-      <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} />
+      <MacroTrend open={open.macros} onToggle={() => toggle('macros')} daily={daily} loaded={loaded.food} />
+      {loaded.food && <MacroMix daily={daily} />}
+      {loaded.food && <MealSplitCard entries={recentEntries} />}
 
       <section className="card">
         <h2>Your real maintenance</h2>
@@ -294,6 +316,14 @@ export default function Progress() {
       </>
       )}
 
+      {view === 'habits' && (
+      <>
+      <LoggingCalendar daily={daily} workouts={workouts} loaded={loaded.food} />
+      <WeekdayRhythm daily={daily} loaded={loaded.food} />
+      <WaterBars />
+      </>
+      )}
+
       {view === 'health' && (
       <>
       <ExerciseSummary workouts={recentWorkouts} today={today} units={units} />
@@ -309,6 +339,7 @@ export default function Progress() {
       <BadgeGrid badges={keepEarned(badges, celebration.kept)} fresh={celebration.fresh} units={units} onOpen={setBadgeOpen} />
       </>
       )}
+      </div>
 
       {celebration.queue.length > 0 && <BadgeCelebration badges={celebration.queue} units={units} onDone={celebration.dismiss} />}
       {badgeOpen && <BadgeDetail badge={badgeOpen} units={units} onClose={() => setBadgeOpen(null)} />}
@@ -411,10 +442,11 @@ const MACROS = [
   ['fat', 'Fat', 'var(--fat)', null, 'g'],
 ]
 
-function MacroTrend({ open, onToggle, daily }) {
+function MacroTrend({ open, onToggle, daily, loaded }) {
   const { targets, today } = useApp()
   const [gran, setGran] = useState('day')
   const [metric, setMetric] = useState('calories')
+  const [style, setStyle] = useState('bars')
   const [, label, color, color2, unit] = MACROS.find((m) => m[0] === metric)
   // Daily view shows every logged day; weekly and monthly average only full days.
   const days = Object.entries(daily).filter(([, d]) => (gran === 'day' ? d.count > 0 : d.calories >= 500))
@@ -433,11 +465,14 @@ function MacroTrend({ open, onToggle, daily }) {
       icon="chart"
       color="var(--green)"
       title="Calories & macros"
-      value={stats ? `${fmtN(stats.avg)} ${unit === 'g' ? 'g' : 'kcal'}` : 'Nothing logged yet'}
-      sub={stats ? `${label === 'kcal' ? 'Calories' : label}, daily avg · ${PERIOD[gran]}` : 'Log food to see trends'}
+      value={stats ? `${fmtN(stats.avg)} ${unit === 'g' ? 'g' : 'kcal'}` : loaded ? 'Nothing logged yet' : 'Loading…'}
+      sub={stats ? `${label === 'kcal' ? 'Calories' : label}, daily avg · ${PERIOD[gran]}` : loaded ? 'Log food to see trends' : '\u00a0'}
       spark={<Sparkline values={week.map((b) => b.value)} color="var(--green)" width={72} height={28} />}
     >
-      <Segmented label="Macro chart period" value={gran} onChange={setGran} options={GRANULARITY} />
+      <div className="chart-controls">
+        <Segmented label="Macro chart period" value={gran} onChange={setGran} options={GRANULARITY} />
+        <ChartStyle value={style} onChange={setStyle} />
+      </div>
       <div className="metric-chips" role="radiogroup" aria-label="Nutrient">
         {MACROS.map(([id, l, c]) => (
           <button key={id} type="button" role="radio" aria-checked={metric === id} className={`chip${metric === id ? ' tinted' : ''}`} style={{ '--c': c }} onClick={() => setMetric(id)}>
@@ -445,16 +480,23 @@ function MacroTrend({ open, onToggle, daily }) {
           </button>
         ))}
       </div>
-      <TrendChart
-        buckets={buckets}
-        granularity={gran}
-        color={color}
-        color2={color2}
-        target={target}
-        format={fmtN}
-        unit={unit}
-        ariaLabel={`${label} trend, ${PERIOD[gran]}`}
-      />
+      {!loaded ? (
+        <div className="skeleton chart-skel" aria-label="Loading chart" />
+      ) : (
+        <TrendChart
+          buckets={buckets}
+          granularity={gran}
+          color={color}
+          color2={color2}
+          target={target}
+          format={fmtN}
+          unit={unit}
+          bars={style === 'bars'}
+          // Calories over target show in orange; for protein, more is fine.
+          barColor={metric === 'protein' ? undefined : (v) => (target && v > target ? 'var(--over)' : color)}
+          ariaLabel={`${label} trend, ${PERIOD[gran]}`}
+        />
+      )}
       {stats && (
         <div className="trend-stats">
           <MiniStat label="Average" value={fmtN(stats.avg)} unit={unit} />
@@ -463,7 +505,7 @@ function MacroTrend({ open, onToggle, daily }) {
         </div>
       )}
       <p className="tiny muted trend-note">
-        {gran === 'day' ? 'Every day with food logged.' : `Average per day across each ${gran}, counting only days with 500+ kcal logged.`} The dashed line is your target.
+        {gran === 'day' ? 'Every day with food logged.' : `Average per day across each ${gran}, counting only days with 500+ kcal logged.`} The dashed line is your target{style === 'bars' && metric !== 'protein' ? '; orange bars went over it' : ''}.
       </p>
     </TrendCard>
   )
@@ -714,6 +756,259 @@ function GoalEstimateCard({ est, today, units }) {
         {[range && `Likely ${range}`, est.ratePerWeek && `about ${est.ratePerWeek} ${weightUnit(units)} a week`].filter(Boolean).join(' · ')}
         {range || est.ratePerWeek ? '. ' : ''}Updates after each weigh-in.
       </p>
+    </section>
+  )
+}
+
+/** Bars or a line: two small icon buttons next to a chart's options. */
+function ChartStyle({ value, onChange }) {
+  return (
+    <span className="chart-style" role="radiogroup" aria-label="Chart style">
+      {[
+        ['bars', 'chart', 'Bars'],
+        ['line', 'trend', 'Line'],
+      ].map(([v, icon, l]) => (
+        <button key={v} type="button" role="radio" aria-checked={value === v} aria-label={l} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
+          <Icon name={icon} size={17} strokeWidth={2.2} />
+        </button>
+      ))}
+    </span>
+  )
+}
+
+function CardHead({ title, note, children }) {
+  return (
+    <div className="card-head">
+      <h2>{title}</h2>
+      {note != null && <span className="card-note num">{note}</span>}
+      {children}
+    </div>
+  )
+}
+
+/** Weight: how far the trend moved each week, down in green, up in orange. */
+function WeeklyChange() {
+  const { series, today, units } = useApp()
+  const unit = weightUnit(units)
+  const weeks = useMemo(() => weeklyTrendChange(series, today, 12), [series, today])
+  if (series.length < 2) return null
+  const conv = (kg) => Math.round(weightValue(kg, units) * 10) / 10
+  const buckets = weeks.map((w) => ({ key: w.start, start: w.start, end: w.end, value: w.changeKg == null ? null : conv(w.changeKg) }))
+  const have = buckets.filter((b) => b.value != null)
+  if (!have.length) return null
+  const down = have.filter((b) => b.value < 0).length
+  const signedV = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1)}`
+  const best = have.reduce((m, b) => (b.value < m.value ? b : m), have[0])
+  return (
+    <section className="card">
+      <CardHead title="Week by week" note={`${down} of ${have.length} down`} />
+      <p className="small muted card-sub">How far your trend moved each week, Monday to Sunday.</p>
+      <TrendChart
+        bars
+        buckets={buckets}
+        granularity="week"
+        barColor={(v) => (v < 0 ? 'var(--green)' : 'var(--over)')}
+        format={signedV}
+        unit={unit}
+        ariaLabel="Weekly change in your weight trend, last 12 weeks"
+      />
+      {best.value < 0 && (
+        <p className="tiny muted trend-note">
+          Best week: {signedV(best.value)} {unit}, week of {formatShortDate(best.start)}. Weeks without a weigh-in are left blank.
+        </p>
+      )}
+    </section>
+  )
+}
+
+const MACRO_SERIES = [
+  { label: 'Protein', color: 'var(--protein)' },
+  { label: 'Carbs', color: 'var(--carbs)' },
+  { label: 'Fat', color: 'var(--fat)' },
+]
+
+/** Food: each week's calories split by macro, as 100% bars. */
+function MacroMix({ daily }) {
+  const { today, targets } = useApp()
+  const weeks = useMemo(() => macroShareByWeek(daily, today, 8), [daily, today])
+  if (!weeks.some((w) => w.days)) return null
+  const columns = weeks.map((w) => ({
+    key: w.start,
+    label: formatShortDate(w.start),
+    long: `Week of ${formatShortDate(w.start)} · ${w.days} day${w.days === 1 ? '' : 's'}`,
+    parts: w.days ? [w.protein, w.carbs, w.fat] : null,
+  }))
+  const latest = [...weeks].reverse().find((w) => w.days)
+  const aim = targets?.protein ? wholePercents([targets.protein * 4, targets.carbs * 4, targets.fat * 9]) : null
+  return (
+    <section className="card">
+      <CardHead title="Macro mix" note="8 weeks" />
+      <p className="small muted card-sub">Where each week’s calories came from. Tap a week to read it.</p>
+      <StackedBars columns={columns} series={MACRO_SERIES} ariaLabel={`Macro split by week. Latest: protein ${latest.protein}%, carbs ${latest.carbs}%, fat ${latest.fat}%`} />
+      {aim && (
+        <p className="tiny muted trend-note">
+          Your targets work out at protein {aim[0]}% · carbs {aim[1]}% · fat {aim[2]}%. Latest week: {latest.protein}% · {latest.carbs}% · {latest.fat}%.
+        </p>
+      )}
+    </section>
+  )
+}
+
+/** Food: calories by meal over the last 30 days. */
+function MealSplitCard({ entries }) {
+  const split = useMemo(() => mealSplit(entries), [entries])
+  const days = useMemo(() => new Set(entries.map((e) => e.log_date)).size, [entries])
+  if (!days || !split.some((m) => m.kcal)) return null
+  const top = split.reduce((m, x) => (x.kcal > m.kcal ? x : m), split[0])
+  return (
+    <section className="card">
+      <CardHead title="Meals" note="30 days" />
+      <p className="small muted card-sub">
+        {MEAL_LABEL[top.meal]} is your biggest meal, {top.share}% of what you eat.
+      </p>
+      <div className="split-bar" aria-hidden="true">
+        {split.map((m, i) => m.share > 0 && <i key={m.meal} style={{ flexGrow: m.share, '--c': MEAL_COLOR[m.meal], '--i': i }} />)}
+      </div>
+      <div className="split-rows">
+        {split.map((m) => (
+          <div key={m.meal} className="split-row" style={{ '--c': MEAL_COLOR[m.meal] }}>
+            <i aria-hidden="true" />
+            <span className="grow">{MEAL_LABEL[m.meal]}</span>
+            <span className="muted num">{fmtN(m.kcal / days)} kcal/day</span>
+            <b className="num">{m.share}%</b>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+const CAL_LEVELS = {
+  on: { label: 'On target', color: 'var(--brand)' },
+  under: { label: 'Under', color: 'color-mix(in srgb, var(--brand) 42%, var(--card))' },
+  over: { label: 'Over', color: 'var(--over)' },
+  partial: { label: 'Partial', color: 'color-mix(in srgb, var(--text-3) 55%, var(--card))' },
+}
+const CAL_WEEKS = 15
+
+/** Habits: every day of the last 15 weeks, coloured by how it went. */
+function LoggingCalendar({ daily, workouts, loaded }) {
+  const { today, targets, profile } = useApp()
+  const burned = useMemo(() => {
+    const m = {}
+    for (const w of workouts) m[w.log_date] = (m[w.log_date] || 0) + (Number(w.calories_burned) || 0)
+    return m
+  }, [workouts])
+  const targetFor = (d) => (targets?.calories || 0) + exerciseAllowance(burned[d] || 0, profile.exercise_eatback_pct)
+  const weeks = calendarWeeks(daily, today, CAL_WEEKS, targetFor)
+  const past = weeks.flat().filter((c) => !c.future)
+  const logged = past.filter((c) => c.level === 'on' || c.level === 'under' || c.level === 'over').length
+  const on = past.filter((c) => c.level === 'on').length
+  const describe = (c) =>
+    c.level === 'none'
+      ? 'nothing logged'
+      : `${c.kcal.toLocaleString('en-GB')} kcal of ${fmtN(targetFor(c.date))} · ${CAL_LEVELS[c.level].label.toLowerCase()}`
+  return (
+    <section className="card">
+      <CardHead title="Logging calendar" note={loaded ? `${logged} of ${past.length} days` : '…'} />
+      <p className="small muted card-sub">
+        {loaded ? `${on} day${on === 1 ? '' : 's'} on target (90–100% of it) in the last ${CAL_WEEKS} weeks. Tap a day to read it.` : 'Loading…'}
+      </p>
+      {loaded ? <CalendarHeat weeks={weeks} levels={CAL_LEVELS} today={today} describe={describe} /> : <div className="skeleton cal-skel" />}
+    </section>
+  )
+}
+
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Habits: average calories for each day of the week. */
+function WeekdayRhythm({ daily, loaded }) {
+  const { today, targets } = useApp()
+  const from = addDays(today, -84)
+  const to = addDays(today, -1) // today is still going
+  const days = useMemo(() => weekdayAverages(daily, from, to), [daily, from, to])
+  if (!loaded) return null
+  const have = days.filter((d) => d.avg != null)
+  if (have.length < 3) {
+    return (
+      <section className="card">
+        <CardHead title="Your week’s rhythm" />
+        <p className="small muted" style={{ margin: 0 }}>Log full days across a couple of weeks to see which days you eat most.</p>
+      </section>
+    )
+  }
+  const target = targets?.calories || null
+  const hi = have.reduce((m, d) => (d.avg > m.avg ? d : m), have[0])
+  const lo = have.reduce((m, d) => (d.avg < m.avg ? d : m), have[0])
+  const avgOf = (list) => (list.length ? list.reduce((s, d) => s + d.avg * d.n, 0) / list.reduce((s, d) => s + d.n, 0) : null)
+  const weekend = avgOf(have.filter((d) => d.dow >= 5))
+  const weekday = avgOf(have.filter((d) => d.dow < 5))
+  const gap = weekend != null && weekday != null ? Math.round(weekend - weekday) : null
+  const bigWeekend = have.filter((d) => d.dow >= 5).reduce((m, d) => (!m || d.avg > m.avg ? d : m), null)
+  const buckets = days.map((d) => ({ key: String(d.dow), value: d.avg, n: d.n }))
+  return (
+    <section className="card">
+      <CardHead title="Your week’s rhythm" note="12 weeks" />
+      <p className="small muted card-sub">
+        {hi.dow !== lo.dow
+          ? `${DAY_NAMES[hi.dow]}s are your biggest day, about ${fmtN(hi.avg - lo.avg)} kcal more than ${DAY_NAMES[lo.dow]}s.`
+          : 'Average calories for each day of the week.'}
+      </p>
+      <TrendChart
+        bars
+        buckets={buckets}
+        labelOf={(b, long) => (long ? `${DAY_NAMES[b.key]}s · ${b.n} day${b.n === 1 ? '' : 's'}` : DAY_NAMES[b.key][0])}
+        barColor={(v) => (target && v > target ? 'var(--over)' : 'var(--green)')}
+        target={target}
+        format={fmtN}
+        unit="kcal"
+        ariaLabel="Average calories by day of the week"
+      />
+      {gap != null && Math.abs(gap) >= 150 && (
+        <p className="tiny muted trend-note">
+          Weekends run {fmtN(Math.abs(gap))} kcal a day {gap > 0 ? 'higher' : 'lower'} than weekdays.
+          {gap > 0 && target ? ` Planning ${DAY_NAMES[bigWeekend.dow]}’s meals ahead is usually the easiest win.` : ''}
+        </p>
+      )}
+    </section>
+  )
+}
+
+/** Habits: water for each of the last 14 days against the goal. */
+function WaterBars() {
+  const { store, today, dataVersion } = useApp()
+  const waterTarget = useWaterTarget()
+  const [logs, setLogs] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listDailyLogs(addDays(today, -13), today)
+      .then((rows) => !cancelled && setLogs(rows))
+      .catch(() => !cancelled && setLogs([]))
+    return () => {
+      cancelled = true
+    }
+  }, [store, today, dataVersion])
+  if (!logs) return null
+  const byDate = Object.fromEntries(logs.map((l) => [l.log_date, Number(l.water_ml) || 0]))
+  const buckets = lastNDates(today, 14).map((d) => ({ key: d, start: d, end: d, value: byDate[d] ? Math.round(byDate[d] / 100) / 10 : null }))
+  const hit = buckets.filter((b) => b.value != null && b.value * 1000 >= waterTarget).length
+  const goal = Math.round(waterTarget / 100) / 10
+  return (
+    <section className="card">
+      <CardHead title="Water" note={`${hit} of 14 days`} />
+      <p className="small muted card-sub">Days you reached {goal.toFixed(1)} L are full blue.</p>
+      <TrendChart
+        bars
+        buckets={buckets}
+        granularity="day"
+        target={goal}
+        targetLabel="goal"
+        barColor={(v) => (v >= goal ? 'var(--cyan)' : 'color-mix(in srgb, var(--cyan) 45%, var(--card))')}
+        format={(v) => v.toFixed(1)}
+        unit="L"
+        ariaLabel="Water each day, last 14 days"
+      />
     </section>
   )
 }

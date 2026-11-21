@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { displayWeight, weightUnit, weightValue } from '../lib/calc.js'
 import { daysBetween, formatShortDate } from '../lib/dates.js'
 import { newBadges } from '../lib/milestones.js'
@@ -259,7 +260,8 @@ export function BadgeCelebration({ badges, units, onDone }) {
   if (!b) return null
   const more = badges.length - i - 1
   const next = () => (more > 0 ? setI(i + 1) : onDone())
-  return (
+  // Portal to <body>: an animating page (transform) would otherwise trap this fixed overlay.
+  return createPortal(
     <div className="celebrate" role="dialog" aria-modal="true" aria-label={`New badge: ${b.title}`} onClick={next}>
       <div className="celebrate-card" key={b.id} style={{ '--c': b.color }} onClick={(e) => e.stopPropagation()}>
         <div className="celebrate-burst" aria-hidden="true" />
@@ -278,7 +280,8 @@ export function BadgeCelebration({ badges, units, onDone }) {
           {more > 0 ? `Nice! Next (${more} more)` : 'Nice!'}
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -289,7 +292,7 @@ export function BadgeDetail({ badge, units, onClose }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  return (
+  return createPortal(
     <div className="celebrate quiet" role="dialog" aria-modal="true" aria-label={badge.title} onClick={onClose}>
       <div className="celebrate-card" style={{ '--c': badge.color }} onClick={(e) => e.stopPropagation()}>
         <div className={`celebrate-medal${badge.earned ? '' : ' locked'}`} aria-hidden="true">
@@ -306,7 +309,8 @@ export function BadgeDetail({ badge, units, onClose }) {
         </p>
         <button className="btn gray block" autoFocus onClick={onClose}>Close</button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { entryTotals, exerciseAllowance, ringsClosed, sumEntries } from '../lib/calc.js'
@@ -7,7 +7,7 @@ import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
 import { LogDock } from './QuickLog.jsx'
-import { Avatar, Icon, PenguinFace, Sheet, Spinner, Stepper } from './ui.jsx'
+import { Avatar, CountUp, Icon, PenguinFace, Sheet, Stepper } from './ui.jsx'
 import { foodEmoji } from '../lib/foodEmoji.js'
 import { RingStack, WeekBalance, WeekRecapCard, WinsCard, skyFor, useRecentLog, useRingCheer } from './Motivation.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
@@ -87,6 +87,14 @@ export default function Today() {
   ]
   const emptyMeals = entries ? MEALS.filter((m) => !entries.some((e) => e.meal === m)) : []
 
+  // Stepping between days slides the day in from the side you moved towards.
+  const shownDate = useRef(date)
+  const dayDir = useRef(null)
+  if (shownDate.current !== date) {
+    dayDir.current = date > shownDate.current ? 'fwd' : 'back'
+    shownDate.current = date
+  }
+
   return (
     <div className="dashboard">
       <div className="sky" data-sky={skyFor(now.getHours())} aria-hidden="true" />
@@ -112,6 +120,7 @@ export default function Today() {
         </button>
       </header>
 
+      <div key={date} className="day-swap" data-dir={dayDir.current || undefined}>
       {isToday && <WinsCard recent={recent} />}
 
       <section className={`card hero-card rise${allClosed && isToday ? ' all-closed' : ''}`} style={{ '--i': 1 }}>
@@ -119,7 +128,7 @@ export default function Today() {
           <RingStack rings={rings} cheer={cheer} />
           <div className="grow hero-stats">
             <div className="hero-left">
-              <span className="hero-big num">{fmt(Math.abs(left))}</span>
+              <span className="hero-big num"><CountUp value={Math.abs(left)} /></span>
               <span className={`hero-unit${over ? ' over' : ''}`}>{over ? 'kcal over' : 'kcal left'}</span>
             </div>
             <RingLegend color="var(--ring-a)" label="Food" value={`${fmt(totals.calories)}`} of={fmt(target)} done={closed.calories} />
@@ -161,8 +170,16 @@ export default function Today() {
         Food<span className="list-header-note">{totals.calories > 0 ? `${fmt(totals.calories)} kcal` : ''}</span>
       </div>
       {entries === null ? (
-        <div className="center" style={{ padding: 32, color: 'var(--text-3)' }}>
-          <Spinner />
+        <div className="list food-list skeleton-list" aria-label="Loading food">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="list-row skeleton-row" style={{ '--i': i }}>
+              <span className="skeleton sk-icon" />
+              <span className="grow">
+                <span className="skeleton sk-line" />
+                <span className="skeleton sk-line short" />
+              </span>
+            </div>
+          ))}
         </div>
       ) : (
         <>
@@ -233,6 +250,7 @@ export default function Today() {
           <button className="btn sm gray" disabled={copying} onClick={copyYesterday}>Copy the day before</button>
         </p>
       )}
+      </div>
 
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
     </div>

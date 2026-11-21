@@ -152,6 +152,44 @@ export function Avatar({ profile, name, size = 60, className = '' }) {
   )
 }
 
+// ---------------------------------------------------------------- numbers
+
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const fmtWhole = (n) => Math.round(n).toLocaleString('en-GB')
+
+/**
+ * A number that counts to its value: up from `from` when it first shows, then
+ * from the old value to the new one whenever it changes. Plain text, so it
+ * drops into any label. Respects Reduce Motion.
+ */
+export function CountUp({ value, format = fmtWhole, from = 0, duration = 750 }) {
+  const target = Number(value)
+  const ok = Number.isFinite(target)
+  const [shown, setShown] = useState(() => (ok && !reducedMotion() ? from : target))
+  const cur = useRef(shown)
+  useEffect(() => {
+    if (!ok) return
+    const start = cur.current
+    if (reducedMotion() || start === target) {
+      cur.current = target
+      setShown(target)
+      return
+    }
+    const t0 = performance.now()
+    let raf
+    const tick = (t) => {
+      const k = Math.min(1, (t - t0) / duration)
+      const v = k >= 1 ? target : start + (target - start) * (1 - Math.pow(1 - k, 4)) // ease out quart
+      cur.current = v
+      setShown(v)
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target, ok, duration])
+  return ok ? format(shown) : String(value ?? '')
+}
+
 // ---------------------------------------------------------------- sheet
 
 const CLOSE_MS = 280

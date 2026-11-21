@@ -1434,3 +1434,137 @@ input[type='date'].input::-webkit-date-and-time-value { text-align: left; }
 @media (prefers-reduced-motion: reduce) {
   .rs-ring.cheer, .hero-cheer { animation: none; }
 }
+
+/* ===================== v0.7: one motion language, new charts ===================== */
+
+/* Moving sideways (tabs, Progress sections, days) slides the new screen in
+   from the side you moved towards. The Mimi tab only fades: its composer is
+   position: fixed, which a transform on the page would drag along. */
+.app { overflow-x: clip; }
+@keyframes slide-fwd { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: none; } }
+@keyframes slide-back { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+.page[data-dir='fwd']:not([data-tab='coach']) { animation: slide-fwd 0.5s var(--spring) backwards; }
+.page[data-dir='back']:not([data-tab='coach']) { animation: slide-back 0.5s var(--spring) backwards; }
+.view-swap[data-dir='fwd'], .day-swap[data-dir='fwd'] { animation: slide-fwd 0.45s var(--spring) backwards; }
+.view-swap[data-dir='back'], .day-swap[data-dir='back'] { animation: slide-back 0.45s var(--spring) backwards; }
+
+/* Everything you can tap gives a little under your finger */
+button.card { transition: transform 0.35s var(--spring); }
+button.card:active { transform: scale(0.985); }
+.trend-head { transition: background-color 0.2s; }
+
+/* Loading: shapes of what's coming instead of a spinner */
+.skeleton {
+  display: block; border-radius: 8px;
+  background: linear-gradient(90deg, var(--fill-2) 25%, var(--fill) 50%, var(--fill-2) 75%);
+  background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.chart-skel { height: 200px; margin-top: 16px; border-radius: 14px; }
+.cal-skel { height: 150px; margin-top: 12px; border-radius: 12px; }
+.skeleton-row { gap: 12px; }
+.sk-icon { width: 32px; height: 32px; border-radius: 10px; flex: none; }
+.sk-line { height: 12px; width: 68%; }
+.sk-line.short { width: 38%; height: 10px; margin-top: 8px; }
+.skeleton-row:nth-child(2) .sk-line { width: 54%; }
+
+/* Card header with a quiet figure on the right */
+.card-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.card-head h2 { margin: 0; flex: 1; min-width: 0; }
+.card-note { flex: none; font-size: 14px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.card-sub { margin: 0 0 2px; }
+
+/* Bars (same chart, same tap-to-read, as the lines) */
+.chart-bar {
+  transform-box: fill-box; transform-origin: 50% 100%;
+  animation: bar-grow 0.7s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 22ms);
+  transition: opacity 0.2s var(--ease);
+}
+.chart-bar.neg { transform-origin: 50% 0; }
+.chart-bar.dim { opacity: 0.38; }
+@keyframes bar-grow { from { transform: scaleY(0); } }
+.chart text.on { fill: var(--text); font-weight: 700; }
+/* The target label stays readable where the line runs through it */
+.chart-target { paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
+.sheet .chart-target { stroke: var(--sheet-card); }
+
+/* Bars or line */
+.chart-controls { display: flex; align-items: center; gap: 8px; }
+.chart-controls .segmented { flex: 1; min-width: 0; }
+.chart-style { flex: none; display: inline-flex; padding: 2px; border-radius: 999px; background: var(--fill); }
+.chart-style button {
+  width: 38px; height: 32px; border: 0; border-radius: 999px; background: none; color: var(--text-2);
+  display: grid; place-items: center; cursor: pointer;
+  transition: background-color 0.25s var(--ease), color 0.25s, box-shadow 0.25s, transform 0.3s var(--spring);
+}
+.chart-style button.on { background: var(--seg-thumb); color: var(--text); box-shadow: 0 2px 6px rgb(0 0 0 / 0.12); }
+.chart-style button:active { transform: scale(0.88); }
+
+/* 100% stacked bars (macro mix) */
+.stacked { margin-top: 8px; }
+.stacked-read {
+  display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 4px 14px;
+  min-height: 46px; font-size: 14px; color: var(--text-2);
+}
+.stacked-when { width: 100%; font-weight: 600; color: var(--text); }
+.stacked-chip { display: inline-flex; align-items: center; gap: 6px; }
+.stacked-chip i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.stacked-chip b { color: var(--text); }
+.stacked-cols {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-top: 6px;
+  touch-action: pan-y; cursor: crosshair; -webkit-user-select: none; user-select: none;
+}
+.stacked-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; transition: opacity 0.2s var(--ease); }
+.stacked-col.dim { opacity: 0.38; }
+.stacked-bar {
+  width: 100%; max-width: 30px; height: 140px; display: flex; flex-direction: column-reverse; gap: 2px;
+  border-radius: 8px; overflow: hidden; transform-origin: 50% 100%;
+  animation: bar-grow 0.7s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 35ms);
+}
+.stacked-bar i { display: block; flex-basis: 0; min-height: 0; }
+.stacked-bar i.empty { flex-grow: 1; background: var(--fill-2); }
+.stacked-label { font-size: 10.5px; color: var(--text-2); white-space: nowrap; letter-spacing: -0.01em; }
+
+/* One bar split by meal */
+.split-bar { display: flex; gap: 3px; height: 14px; margin: 14px 0 6px; border-radius: 7px; overflow: hidden; }
+.split-bar i {
+  display: block; flex-basis: 0; background: var(--c); transform-origin: 0 50%;
+  animation: split-in 0.7s var(--spring) backwards; animation-delay: calc(var(--i, 0) * 70ms);
+}
+@keyframes split-in { from { transform: scaleX(0); } }
+.split-rows { display: flex; flex-direction: column; }
+.split-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; font-size: 16px; border-bottom: 0.5px solid var(--sep); }
+.split-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.split-row > i { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.split-row .muted { font-size: 13px; white-space: nowrap; }
+.split-row b { width: 44px; text-align: right; }
+
+/* Logging calendar */
+.cal { margin-top: 12px; }
+.cal-grid { display: grid; grid-template-columns: 12px repeat(var(--weeks), minmax(0, 1fr)); gap: 3px; }
+.cal-col { display: grid; grid-template-rows: 14px repeat(7, auto); gap: 3px; }
+/* Stretches to the columns' height, so its 7 equal rows line up with the squares */
+.cal-days { display: grid; grid-template-rows: 14px repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal-days span { font-size: 10px; line-height: 1; color: var(--text-3); align-self: center; }
+.cal-month { font-size: 10px; line-height: 14px; color: var(--text-2); white-space: nowrap; overflow: visible; }
+.cal-cell {
+  position: relative; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 4px; cursor: pointer;
+  background: var(--c, var(--fill-2));
+  animation: cal-in 0.5s var(--spring) backwards; animation-delay: calc(var(--w, 0) * 22ms);
+  transition: transform 0.3s var(--spring-snappy), box-shadow 0.2s;
+}
+.cal-cell.lv-none { background: var(--fill-2); }
+.cal-cell:disabled { background: transparent; box-shadow: inset 0 0 0 1px var(--fill-2); cursor: default; }
+.cal-cell.today { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.cal-cell.picked { z-index: 1; transform: scale(1.3); box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--text); }
+@keyframes cal-in { from { opacity: 0; transform: scale(0.3); } }
+.cal-foot { display: flex; align-items: center; min-height: 38px; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.cal-key { display: inline-flex; align-items: center; gap: 5px; }
+.cal-key i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.cal-read { animation: fade-in 0.25s var(--ease); }
+.cal-read b { color: var(--text); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}

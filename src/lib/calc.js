@@ -732,3 +732,120 @@ export function weekRecap({ start, daily = {}, targets, series = [], workouts = 
     bestDay: best && best.score > 0 ? best.date : null, trendChangeKg, workouts: sessions,
   }
 }
+
+// ---------- Patterns (Progress → Habits) ----------
+
+/**
+ * Average calories for each weekday (Monday first) across logged days in
+ * [from, to]. Partial days (under LOGGED_DAY_KCAL) are left out.
+ * Returns [{ dow: 0..6, avg: number|null, n }].
+ */
+export function weekdayAverages(daily, from, to) {
+  const acc = Array.from({ length: 7 }, (_, dow) => ({ dow, sum: 0, n: 0 }))
+  for (const [date, t] of Object.entries(daily || {})) {
+    if (date < from || date > to || !isLoggedDay(t)) continue
+    const [y, m, d] = date.split('-').map(Number)
+    const dow = (new Date(y, m - 1, d, 12).getDay() + 6) % 7
+    acc[dow].sum += Number(t.calories) || 0
+    acc[dow].n += 1
+  }
+  return acc.map(({ dow, sum, n }) => ({ dow, n, avg: n ? Math.round(sum / n) : null }))
+}
+
+/**
+ * How the weight trend moved in each of the last `count` weeks (Monday to
+ * Sunday, the last one ending with endIso's week). A week with no weigh-in
+ * has no change (null) rather than a misleading flat 0.
+ * Returns [{ start, end, changeKg }] oldest first.
+ */
+export function weeklyTrendChange(series, endIso, count = 12) {
+  const out = []
+  let start = weekStart(endIso)
+  for (let i = 0; i < count; i++) {
+    const end = addDays(start, 6)
+    const before = trendOn(series, addDays(start, -1))
+    const after = trendOn(series, end)
+    const changeKg = before && after && after.date >= start ? after.trend - before.trend : null
+    out.unshift({ start, end, changeKg })
+    start = addDays(start, -7)
+  }
+  return out
+}
+
+/**
+ * Where each week's calories came from: protein, carbs and fat as whole
+ * percentages of calories (adding up to 100), over logged days only.
+ * Returns [{ start, protein, carbs, fat, days }] oldest first; a week with no
+ * logged days has nulls.
+ */
+export function macroShareByWeek(daily, endIso, count = 8) {
+  const out = []
+  let start = weekStart(endIso)
+  for (let i = 0; i < count; i++) {
+    let p = 0
+    let c = 0
+    let f = 0
+    let days = 0
+    for (let k = 0; k < 7; k++) {
+      const t = daily?.[addDays(start, k)]
+      if (!isLoggedDay(t)) continue
+      days++
+      p += (Number(t.protein) || 0) * 4
+      c += (Number(t.carbs) || 0) * 4
+      f += (Number(t.fat) || 0) * 9
+    }
+    const [protein, carbs, fat] = days && p + c + f > 0 ? wholePercents([p, c, f]) : [null, null, null]
+    out.unshift({ start, protein, carbs, fat, days })
+    start = addDays(start, -7)
+  }
+  return out
+}
+
+/**
+ * Calories by meal across a list of entries. Returns
+ * [{ meal, kcal, share }] in the order given, shares adding up to 100.
+ */
+export function mealSplit(entries, meals = ['breakfast', 'lunch', 'dinner', 'snack']) {
+  const kcal = Object.fromEntries(meals.map((m) => [m, 0]))
+  for (const e of entries || []) if (e.meal in kcal) kcal[e.meal] += entryTotals(e).calories
+  const shares = wholePercents(meals.map((m) => kcal[m]))
+  return meals.map((m, i) => ({ meal: m, kcal: Math.round(kcal[m]), share: shares[i] }))
+}
+
+/**
+ * How a day's food compares with the target, for the logging calendar:
+ * 'none' (nothing logged), 'partial' (under LOGGED_DAY_KCAL), 'under'
+ * (below 90% of target), 'on' (90–100%), 'over' (above target).
+ */
+export function dayLevel(totals, target) {
+  const kcal = Number(totals?.calories) || 0
+  if (!totals?.count && kcal <= 0) return 'none'
+  if (kcal < LOGGED_DAY_KCAL) return 'partial'
+  const t = Number(target) || 0
+  if (!t) return 'on'
+  if (kcal > t) return 'over'
+  return kcal >= t * RING_CLOSE.caloriesMin ? 'on' : 'under'
+}
+
+/**
+ * Monday-first weeks for a calendar heatmap: `weeks` columns ending with
+ * endIso's week. Days after endIso are marked future.
+ * targetFor(date) gives that day's calorie target.
+ * Returns [[{ date, kcal, level, future }] × 7] oldest week first.
+ */
+export function calendarWeeks(daily, endIso, weeks, targetFor = () => 0) {
+  const cols = []
+  let start = addDays(weekStart(endIso), -7 * (weeks - 1))
+  for (let w = 0; w < weeks; w++) {
+    const col = []
+    for (let k = 0; k < 7; k++) {
+      const date = addDays(start, k)
+      const t = daily?.[date]
+      const future = date > endIso
+      col.push({ date, kcal: Math.round(Number(t?.calories) || 0), future, level: future ? 'none' : dayLevel(t, targetFor(date)) })
+    }
+    cols.push(col)
+    start = addDays(start, 7)
+  }
+  return cols
+}

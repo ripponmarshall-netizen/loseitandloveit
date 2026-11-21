@@ -64,6 +64,9 @@ const writeUser = (id) => {
   }
 }
 
+// Left to right as in the tab bar: a tab change slides the way you moved.
+const TAB_ORDER = ['today', 'progress', 'coach', 'settings']
+
 // Every bottom sheet the app opens from more than one place.
 const SHEETS = {
   log: LogSheet,
@@ -92,6 +95,7 @@ export default function App() {
   const profile = useMemo(() => exactProfile(rawProfile), [rawProfile])
   const [weights, setWeights] = useState([])
   const [tab, setTab] = useState('today')
+  const [navDir, setNavDir] = useState(null) // 'fwd' | 'back': which way the last tab change went
   const [selectedDate, setSelectedDate] = useState(null)
   const [sheet, setSheet] = useState(null) // { type, props }
   const [coachAsk, setCoachAsk] = useState(null) // { text, id } handed to the Coach tab
@@ -129,6 +133,7 @@ export default function App() {
   const goTab = useCallback((t) => {
     if (t === tabRef.current) return window.scrollTo({ top: 0, behavior: 'smooth' }) // tap again: back to top
     scrollPos.current[tabRef.current] = window.scrollY
+    setNavDir(TAB_ORDER.indexOf(t) > TAB_ORDER.indexOf(tabRef.current) ? 'fwd' : 'back')
     tabRef.current = t
     setTab(t)
     setVisited((v) => (v.has(t) ? v : new Set(v).add(t)))
@@ -395,7 +400,7 @@ export default function App() {
     body = <Onboarding />
   } else {
     const show = (id) => (visited.has(id) || tab === id) && (
-      <div key={id} hidden={tab !== id} className={tab === id ? 'page' : undefined}>
+      <div key={id} hidden={tab !== id} className={tab === id ? 'page' : undefined} data-tab={id} data-dir={tab === id ? navDir || undefined : undefined}>
         {id === 'today' && <Today />}
         {id === 'progress' && <Progress />}
         {id === 'coach' && <Coach active={tab === 'coach'} />}
@@ -405,7 +410,7 @@ export default function App() {
     body = (
       <MimiProvider>
         <SyncPill sync={sync} />
-        {['today', 'progress', 'coach', 'settings'].map(show)}
+        {TAB_ORDER.map(show)}
         {tab !== 'coach' && <MimiPeek />}
         <TabBar tab={tab} setTab={goTab} onLog={() => openSheet('log', { date })} shrink={tab !== 'coach'} />
         {sheet && SHEETS[sheet.type] && (() => {
