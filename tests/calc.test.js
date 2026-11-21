@@ -13,6 +13,8 @@ import {
   inputToKg,
   latestWeight,
   latestWeighIn,
+  weightStatus,
+  readingStats,
   projectGoalDate,
   goalProgress,
   cmToFtIn,
@@ -624,4 +626,44 @@ test('kcalLooksWrong flags one item over the check, counting servings', () => {
   assert.equal(kcalLooksWrong({ calories: 45000, servings: 1 }), true) // an extra zero
   assert.equal(kcalLooksWrong({ calories: 1800, servings: 3 }), true)
   assert.equal(kcalLooksWrong({ calories: 'abc', servings: 1 }), false)
+})
+
+test('weightStatus: where you are, from the newest reading', () => {
+  assert.equal(weightStatus({ weights: [], series: [], startKg: 100, goalKg: 85, today: '2026-01-10' }), null)
+  const weights = [
+    { id: 'a', log_date: '2026-01-01', weight_kg: 100, weighed_at: '2026-01-01T12:00:00Z' },
+    { id: 'b', log_date: '2026-01-09', weight_kg: 98, weighed_at: '2026-01-09T12:00:00Z' },
+    { id: 'c', log_date: '2026-01-10', weight_kg: 97.5, weighed_at: '2026-01-10T07:00:00Z' },
+    { id: 'd', log_date: '2026-01-10', weight_kg: 97, weighed_at: '2026-01-10T20:00:00Z' },
+  ]
+  const series = trendSeries(weights)
+  const s = weightStatus({ weights, series, startKg: 101, goalKg: 91, today: '2026-01-10' })
+  assert.equal(s.newest.id, 'd')
+  assert.equal(s.currentKg, 97)
+  assert.equal(s.prev.id, 'c') // the earlier reading the same day
+  assert.equal(s.sinceLastKg, -0.5)
+  assert.equal(s.sinceStartKg, -4)
+  assert.equal(s.goal.toGoalKg, 6)
+  assert.equal(s.goal.fraction, 0.4)
+  // Trend now vs the trend on 3 Jan (last point on or before: 1 Jan).
+  assert.equal(s.weekKg, Math.round((series.at(-1).trend - series[0].trend) * 100) / 100)
+  assert.ok(s.weekKg < 0)
+  // Nothing 7+ days back: no weekly change rather than a made-up one.
+  const recent = weights.slice(1)
+  assert.equal(weightStatus({ weights: recent, series: trendSeries(recent), startKg: 101, goalKg: 91, today: '2026-01-10' }).weekKg, null)
+  // No start weight: no since-start or goal figures.
+  const bare = weightStatus({ weights, series, startKg: null, goalKg: null, today: '2026-01-10' })
+  assert.equal(bare.sinceStartKg, null)
+  assert.equal(bare.goal, null)
+})
+
+test('readingStats uses actual readings, not the trend', () => {
+  const w = [
+    { log_date: '2026-01-01', weight_kg: 100 },
+    { log_date: '2026-01-05', weight_kg: 96 },
+    { log_date: '2026-01-05', weight_kg: 97 },
+    { log_date: '2026-01-09', weight_kg: 98 },
+  ]
+  assert.deepEqual(readingStats(w, '2026-01-02', '2026-01-09'), { avg: 97, min: 96, max: 98, count: 3 })
+  assert.equal(readingStats(w, '2026-02-01', '2026-02-28'), null)
 })

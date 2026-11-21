@@ -1059,6 +1059,18 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 .expand-inner { min-height: 0; overflow: hidden; }
 .trend-body { padding: 2px var(--card-pad) var(--card-pad); opacity: 0; transform: translateY(-6px); transition: opacity var(--dur-base) var(--ease), transform 0.45s var(--spring); }
 .trend-card.open .trend-body { opacity: 1; transform: none; transition-delay: 0.08s; }
+/* Weight tab: where you are now */
+.where-now { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); }
+.where-big { font-family: var(--font-round); font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: -0.03em; }
+.where-big small { font-size: 17px; font-weight: 600; color: var(--text-2); letter-spacing: 0; }
+.where-delta { font-size: 15px; font-weight: 600; color: var(--text-2); }
+.where-delta.good { color: var(--good); }
+.where-delta.bad { color: var(--over); }
+.where-goal { margin-top: var(--sp-3); }
+.where-bar { height: 10px; border-radius: var(--r-full); }
+.where-bar > i { border-radius: var(--r-full); }
+.where-ends { display: flex; justify-content: space-between; gap: var(--sp-2); margin-top: var(--sp-2); font-size: 13px; color: var(--text-2); }
+.where-ends strong { color: var(--text); }
 .trend-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 .trend-note { margin: var(--sp-3) 2px 0; }
 
