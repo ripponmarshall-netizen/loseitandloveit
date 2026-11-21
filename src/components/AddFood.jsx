@@ -269,7 +269,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
 
 function MacroTiles({ food, n = 1 }) {
   const tiles = [
-    ['kcal', Math.round(food.calories * n), 'var(--green)'],
+    ['kcal', Math.round(food.calories * n), 'var(--kcal)'],
     ['Protein', `${Math.round(food.protein_g * n)} g`, 'var(--protein)'],
     ['Carbs', `${Math.round(food.carbs_g * n)} g`, 'var(--carbs)'],
     ['Fat', `${Math.round(food.fat_g * n)} g`, 'var(--fat)'],

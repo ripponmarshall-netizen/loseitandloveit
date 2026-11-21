@@ -162,7 +162,7 @@ const fmtWhole = (n) => Math.round(n).toLocaleString('en-GB')
  * from the old value to the new one whenever it changes. Plain text, so it
  * drops into any label. Respects Reduce Motion.
  */
-export function CountUp({ value, format = fmtWhole, from = 0, duration = 750 }) {
+export function CountUp({ value, format = fmtWhole, from = 0, duration = 600 }) {
   const target = Number(value)
   const ok = Number.isFinite(target)
   const [shown, setShown] = useState(() => (ok && !reducedMotion() ? from : target))
