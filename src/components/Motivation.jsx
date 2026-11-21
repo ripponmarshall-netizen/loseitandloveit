@@ -9,7 +9,7 @@ import {
 } from '../lib/calc.js'
 import { addDays, formatShortDate, parseISODate } from '../lib/dates.js'
 import { buildMilestones, milestoneProgress } from '../lib/milestones.js'
-import { milestoneLabel } from './Milestones.jsx'
+import { milestoneText } from './Milestones.jsx'
 import { Icon, PenguinFace } from './ui.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
@@ -95,7 +95,7 @@ export function WinsCard({ recent }) {
   }
   if (goal && !goal.reached) chips.push(`${Math.round(goal.fraction * 100)}% to goal`)
   if (goal?.reached) chips.push('Goal reached 🏆')
-  if (next && next.kind !== 'goal') chips.push(`Next: ${milestoneLabel(next, units)}`)
+  if (next && next.kind !== 'goal') chips.push(`Next: ${milestoneText(next, units)}`)
   if (!last) chips.push('Weigh in to track your progress')
 
   return (
@@ -126,9 +126,11 @@ export function WinsCard({ recent }) {
       </div>
       {chips.length > 0 && (
         <span className="wins-chips" aria-hidden="true">
-          {chips.map((c) => (
-            <span key={c} className="wins-chip num">{c}</span>
-          ))}
+          <span className="wins-chip-list">
+            {chips.map((c) => (
+              <span key={c} className="wins-chip num">{c}</span>
+            ))}
+          </span>
           <Icon name="right" size={16} className="wins-more" />
         </span>
       )}
@@ -154,8 +156,9 @@ export function RingStack({ rings, size = 128, stroke = 12, gap = 3, cheer = [] 
   }, [fracKey])
   const c = size / 2
   return (
-    <div className="ring-stack" style={{ width: size, height: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+    // Drawn at `size`; CSS may scale it down on small phones (the viewBox keeps it sharp).
+    <div className="ring-stack" style={{ '--rs': `${size}px` }}>
+      <svg viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
         <defs>
           {rings.map((r) => (
             <linearGradient key={r.key} id={`rs-${id}-${r.key}`} x1="0" y1="0" x2="1" y2="1">

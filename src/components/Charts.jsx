@@ -97,7 +97,7 @@ function useChartCursor(reset) {
  * labelOf(bucket, long) overrides the date labels (e.g. weekdays).
  */
 export function TrendChart({
-  buckets, dots, granularity = 'day', color = 'var(--blue)', color2, target, targetLabel = 'target',
+  buckets, dots, granularity = 'day', color = 'var(--brand)', color2, target, targetLabel = 'target',
   format = (v) => Math.round(v), tipFormat, tipNote, unit = '', ariaLabel = 'Trend chart', step = false, zero = false,
   bars = false, barColor, labelOf,
 }) {
@@ -152,6 +152,8 @@ export function TrendChart({
     if (best) setHover(best[2])
   }
   const hb = hover != null && buckets[hover]?.value != null ? buckets[hover] : null
+  // Bars grow in one after another, but the whole wave takes the same short time however many there are.
+  const stagger = Math.min(1, 14 / Math.max(1, buckets.length))
   const hx = hb ? x(hover) : 0
   const y0 = y(Math.max(geo.min, Math.min(geo.max, 0)))
 
@@ -198,7 +200,7 @@ export function TrendChart({
                   height={Math.max(1.5, Math.abs(y(b.value) - y0))}
                   rx={Math.min(5, barW / 2.5)}
                   fill={barColor ? barColor(b.value, i) : `url(#line-${id})`}
-                  style={{ '--i': i }}
+                  style={{ '--i': i * stagger }}
                 />
               ),
             )}
@@ -270,7 +272,7 @@ export function StackedBars({ columns, series, ariaLabel, unit = '%' }) {
       </div>
       <div ref={ref} className="stacked-cols" role="img" aria-label={ariaLabel} {...handlers(pick)}>
         {columns.map((c, i) => (
-          <div key={c.key} className={`stacked-col${hc && hover !== i ? ' dim' : ''}`} style={{ '--i': i }}>
+          <div key={c.key} className={`stacked-col${hc && hover !== i ? ' dim' : ''}`} style={{ '--i': i * Math.min(1, 8 / columns.length) }}>
             <div className="stacked-bar">
               {c.parts ? (
                 c.parts.map((v, k) => <i key={k} style={{ flexGrow: v, background: series[k].color }} />)
@@ -347,7 +349,7 @@ export function CalendarHeat({ weeks, levels, today, describe }) {
 }
 
 /** Tiny line with no axes, for dashboard and collapsed cards. */
-export function Sparkline({ values, color = 'var(--blue)', width = 96, height = 32, className = '' }) {
+export function Sparkline({ values, color = 'var(--brand)', width = 96, height = 32, className = '' }) {
   const id = useId().replace(/:/g, '')
   const vals = values.map((v, i) => [i, v]).filter(([, v]) => v != null)
   if (vals.length < 2) return <span className={`sparkline empty ${className}`} style={{ width, height }} aria-hidden="true" />

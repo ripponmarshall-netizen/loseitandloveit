@@ -25,7 +25,8 @@ import { applyTheme, readPrefs, writePrefs } from './lib/prefs.js'
 import { guessMeal } from './lib/quicklog.js'
 import { watchKeyboard } from './lib/viewport.js'
 import { buildMilestones } from './lib/milestones.js'
-import { milestoneLabel } from './components/Milestones.jsx'
+import { milestoneText } from './components/Milestones.jsx'
+import { skyFor } from './components/Motivation.jsx'
 
 const MODE_KEY = 'lili:mode'
 const readMode = () => {
@@ -301,7 +302,7 @@ export default function App() {
     msBaseline.current = { plan: msPlan, ids }
     if (added.length) {
       const m = added[added.length - 1]
-      const msg = m.kind === 'goal' ? '🏆 Goal reached! Amazing work.' : `🎉 Milestone reached: ${m.kind === 'health' ? `${m.pct}% lighter` : milestoneLabel(m, msUnits)}`
+      const msg = m.kind === 'goal' ? '🏆 Goal reached! Amazing work.' : `🎉 Milestone reached: ${milestoneText(m, msUnits)}`
       // After the sheet's own "Weight saved" toast, which would otherwise replace this one.
       setTimeout(() => toast(msg), 1400)
     }
@@ -409,6 +410,9 @@ export default function App() {
     )
     body = (
       <MimiProvider>
+        {/* One sky behind every tab's header, outside the pages: a sliding page
+            would otherwise carry it along and shrink it to the page's width. */}
+        <div className="sky" data-sky={skyFor(new Date(clock).getHours())} aria-hidden="true" />
         <SyncPill sync={sync} />
         {TAB_ORDER.map(show)}
         {tab !== 'coach' && <MimiPeek />}

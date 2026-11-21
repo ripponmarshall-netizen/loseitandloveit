@@ -100,7 +100,12 @@ export default function Coach({ active = true }) {
   if (mode !== 'cloud') {
     return (
       <div>
-        <h1>Mimi</h1>
+        <header className="page-head">
+          <div className="grow">
+            <div className="eyebrow">Your coach · Mimi the Penguin</div>
+            <h1>Mimi</h1>
+          </div>
+        </header>
         <div className="center" style={{ marginBottom: 8 }}>
           <Penguin kind="thinking" size={130} />
         </div>

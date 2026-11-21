@@ -240,7 +240,7 @@ export default function Progress() {
       {view === 'weight' && (
       <>
       <div className="stats" style={{ marginBottom: 18 }}>
-        <Stat label="Current" color="var(--blue)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
+        <Stat label="Current" color="var(--weight)" value={last ? displayWeight(last.weight, units) : '—'} sub={last ? (last.date === today ? 'today' : formatShortDate(last.date)) : undefined} />
         <Stat
           label="Goal"
           color="var(--teal)"
@@ -277,7 +277,7 @@ export default function Progress() {
       <>
       <div className="stats" style={{ marginBottom: 18 }}>
         <Stat label="7-day avg" color="var(--orange)" value={avgWeek ? <CountUp value={avgWeek} /> : loaded.food ? '—' : '…'} sub={avgWeek ? 'kcal a day' : loaded.food ? 'no full days' : 'loading'} />
-        <Stat label="Target" color="var(--green)" value={targets ? <CountUp value={targets.calories} /> : '—'} sub="kcal a day" />
+        <Stat label="Target" color="var(--kcal)" value={targets ? <CountUp value={targets.calories} /> : '—'} sub="kcal a day" />
         <Stat label="Maintenance" color="var(--blue)" value={adaptive ? <CountUp value={adaptive.tdee} /> : targets?.tdee ? <CountUp value={targets.tdee} /> : '—'} sub={adaptive ? 'measured' : 'formula'} />
       </div>
 
@@ -388,11 +388,11 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
       open={open}
       onToggle={onToggle}
       icon="scale"
-      color="var(--indigo)"
+      color="var(--weight)"
       title="Weight"
       value={last ? displayWeight(last.weight, units) : 'No weigh-ins yet'}
       sub={change != null ? `Trend ${signedV(change)} · ${PERIOD[gran]}` : last ? 'Latest weigh-in' : 'Log one to start'}
-      spark={<Sparkline values={series.slice(-30).map((p) => conv(p.trend))} color="var(--indigo)" width={72} height={28} />}
+      spark={<Sparkline values={series.slice(-30).map((p) => conv(p.trend))} color="var(--weight)" width={72} height={28} />}
     >
       <Segmented label="Weight chart period" value={gran} onChange={setGran} options={GRANULARITY} />
       {series.length < 2 ? (
@@ -403,7 +403,7 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
             buckets={buckets}
             dots={dots}
             granularity={gran}
-            color="var(--blue)"
+            color="var(--weight)"
             color2="var(--purple)"
             target={goalKg ? conv(goalKg) : null}
             targetLabel="goal"
@@ -436,7 +436,7 @@ function WeightTrend({ open, onToggle, goalKg, extra = [] }) {
 }
 
 const MACROS = [
-  ['calories', 'kcal', 'var(--green)', 'var(--mint)', 'kcal'],
+  ['calories', 'kcal', 'var(--kcal)', 'var(--kcal-b)', 'kcal'],
   ['protein', 'Protein', 'var(--protein)', null, 'g'],
   ['carbs', 'Carbs', 'var(--carbs)', null, 'g'],
   ['fat', 'Fat', 'var(--fat)', null, 'g'],
@@ -463,11 +463,11 @@ function MacroTrend({ open, onToggle, daily, loaded }) {
       open={open}
       onToggle={onToggle}
       icon="chart"
-      color="var(--green)"
+      color="var(--kcal)"
       title="Calories & macros"
       value={stats ? `${fmtN(stats.avg)} ${unit === 'g' ? 'g' : 'kcal'}` : loaded ? 'Nothing logged yet' : 'Loading…'}
       sub={stats ? `${label === 'kcal' ? 'Calories' : label}, daily avg · ${PERIOD[gran]}` : loaded ? 'Log food to see trends' : '\u00a0'}
-      spark={<Sparkline values={week.map((b) => b.value)} color="var(--green)" width={72} height={28} />}
+      spark={<Sparkline values={week.map((b) => b.value)} color="var(--kcal)" width={72} height={28} />}
     >
       <div className="chart-controls">
         <Segmented label="Macro chart period" value={gran} onChange={setGran} options={GRANULARITY} />
@@ -786,7 +786,7 @@ function CardHead({ title, note, children }) {
   )
 }
 
-/** Weight: how far the trend moved each week, down in green, up in orange. */
+/** Weight: how far the trend moved each week, down in teal, up in orange. */
 function WeeklyChange() {
   const { series, today, units } = useApp()
   const unit = weightUnit(units)
@@ -807,7 +807,7 @@ function WeeklyChange() {
         bars
         buckets={buckets}
         granularity="week"
-        barColor={(v) => (v < 0 ? 'var(--green)' : 'var(--over)')}
+        barColor={(v) => (v < 0 ? 'var(--good)' : 'var(--over)')}
         format={signedV}
         unit={unit}
         ariaLabel="Weekly change in your weight trend, last 12 weeks"
@@ -958,7 +958,7 @@ function WeekdayRhythm({ daily, loaded }) {
         bars
         buckets={buckets}
         labelOf={(b, long) => (long ? `${DAY_NAMES[b.key]}s · ${b.n} day${b.n === 1 ? '' : 's'}` : DAY_NAMES[b.key][0])}
-        barColor={(v) => (target && v > target ? 'var(--over)' : 'var(--green)')}
+        barColor={(v) => (target && v > target ? 'var(--over)' : 'var(--kcal)')}
         target={target}
         format={fmtN}
         unit="kcal"

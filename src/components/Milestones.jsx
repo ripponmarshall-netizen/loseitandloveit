@@ -15,6 +15,11 @@ export function milestoneLabel(m, units) {
   return `−${r1(weightValue(m.lostKg, units))} ${weightUnit(units)}`
 }
 
+/** The label in a sentence, where a bare "5%" would be unclear. */
+export function milestoneText(m, units) {
+  return m.kind === 'health' ? `${m.pct}% lighter` : milestoneLabel(m, units)
+}
+
 function milestoneName(m, units) {
   if (m.kind === 'goal') return `your goal (${displayWeight(m.targetKg, units)})`
   if (m.kind === 'health') return `${m.pct}% lighter (${displayWeight(m.targetKg, units)})`
@@ -41,7 +46,7 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
     <section className="card milestones" aria-labelledby="ms-title">
       <div className="row between" style={{ marginBottom: 12 }}>
         <h2 id="ms-title" style={{ margin: 0 }}>Milestones</h2>
-        <span className="small muted num">
+        <span className="card-note num">
           {reachedCount} of {total}
         </span>
       </div>
@@ -80,7 +85,7 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
                   <span className="muted">It counts once your trend gets there too.</span>
                 ) : (
                   <>
-                    Next milestone: <strong className="num">{milestoneLabel(next, units)}</strong>
+                    Next milestone: <strong className="num">{milestoneText(next, units)}</strong>
                     {next.kind !== 'goal' &&
                       (toNextKg < 0.05 ? (
                         <span className="muted"> · your weigh-ins are there; the trend is catching up</span>
@@ -89,7 +94,7 @@ export function MilestonesCard({ milestones, progress, goal, series, units, pcos
                       ))}
                   </>
                 )}
-                {last && <span className="muted"> · last: {milestoneLabel(last, units)} on {formatShortDate(last.reachedOn)}</span>}
+                {last && <span className="muted"> · last: {milestoneText(last, units)} on {formatShortDate(last.reachedOn)}</span>}
               </div>
             </>
           )}
@@ -206,7 +211,7 @@ export function BadgeGrid({ badges, fresh = [], units, onOpen }) {
     <section className="card" aria-labelledby="badges-title">
       <div className="row between" style={{ marginBottom: 12 }}>
         <h2 id="badges-title" style={{ margin: 0 }}>Badges</h2>
-        <span className="small muted num">
+        <span className="card-note num">
           {earned} of {badges.length}
         </span>
       </div>

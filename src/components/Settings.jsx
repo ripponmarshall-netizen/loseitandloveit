@@ -159,7 +159,12 @@ export default function Settings() {
 
   return (
     <div>
-      <h1>Settings</h1>
+      <header className="page-head">
+        <div className="grow">
+          <div className="eyebrow">Plan, data and account</div>
+          <h1>Settings</h1>
+        </div>
+      </header>
 
       {/* Profile header */}
       <div className="list row" style={{ width: '100%', padding: 14, gap: 14 }}>
@@ -175,7 +180,7 @@ export default function Settings() {
             {mode === 'cloud' ? session?.user?.email : 'Local mode: data stays on this device'}
           </span>
           {targets && (
-            <span className="tiny" style={{ color: 'var(--green)', fontWeight: 600 }}>
+            <span className="tiny" style={{ color: 'var(--kcal)', fontWeight: 600 }}>
               {targets.calories.toLocaleString('en-GB')} kcal a day{targets.overridden ? ' (manual)' : ''}
             </span>
           )}
@@ -183,7 +188,7 @@ export default function Settings() {
       </div>
 
       <ListSection header="Plan" footer="Your calorie target updates as your weight changes.">
-        <ListRow icon="target" color="var(--green)" label="Daily target" value={targets ? `${targets.calories.toLocaleString('en-GB')} kcal` : '—'} onClick={() => setSheet('plan')} />
+        <ListRow icon="target" color="var(--kcal)" label="Daily target" value={targets ? `${targets.calories.toLocaleString('en-GB')} kcal` : '—'} onClick={() => setSheet('plan')} />
         <ListRow icon="trend" color="var(--teal)" label="Goal weight" value={displayWeight(Number(profile.goal_weight_kg), units)} onClick={() => setSheet('plan')} />
         <ListRow
           icon="clock"

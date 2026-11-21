@@ -9,7 +9,7 @@ import { useWater, useWaterTarget } from './Checkin.jsx'
 import { LogDock } from './QuickLog.jsx'
 import { Avatar, CountUp, Icon, PenguinFace, Sheet, Stepper } from './ui.jsx'
 import { foodEmoji } from '../lib/foodEmoji.js'
-import { RingStack, WeekBalance, WeekRecapCard, WinsCard, skyFor, useRecentLog, useRingCheer } from './Motivation.jsx'
+import { RingStack, WeekBalance, WeekRecapCard, WinsCard, useRecentLog, useRingCheer } from './Motivation.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
 
 const fmt = (n) => Math.round(n).toLocaleString('en-GB')
@@ -97,7 +97,6 @@ export default function Today() {
 
   return (
     <div className="dashboard">
-      <div className="sky" data-sky={skyFor(now.getHours())} aria-hidden="true" />
       <header className="page-head">
         <div className="grow">
           {isToday ? (

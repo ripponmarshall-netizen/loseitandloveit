@@ -207,10 +207,10 @@ export function TargetPreview({ values, currentWeightKg }) {
   )
   if (!preview) return null
   return (
-    <div className="card tinted" style={{ '--c': 'var(--green)' }}>
+    <div className="card tinted" style={{ '--c': 'var(--kcal)' }}>
       <div className="row between">
         <span className="headline">Daily target</span>
-        <span className="num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--green)' }}>
+        <span className="num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--kcal)' }}>
           {preview.calories.toLocaleString('en-GB')}
           <span className="small muted" style={{ fontWeight: 500 }}> kcal</span>
         </span>
