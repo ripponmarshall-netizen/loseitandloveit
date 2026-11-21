@@ -60,57 +60,100 @@ function stepPath(pts) {
 }
 
 /**
- * Interactive trend line for day / week / month buckets.
- * buckets: [{ key, start, end, value }] oldest first (value null = no data).
- * dots: optional raw values per bucket (e.g. scale weigh-ins under the trend).
- * Drag across it to read any point.
+ * Tap or drag to read a point. Shared by every chart so they all behave the
+ * same: the reading stays up for a moment after the finger lifts (on touch,
+ * pointerleave fires straight after pointerup, which used to hide it at once).
+ * `reset` changes when the data does, so a stale index never points at a
+ * different (or empty) point.
  */
-export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--blue)', color2, target, targetLabel = 'target', format = (v) => Math.round(v), tipFormat, unit = '', ariaLabel = 'Trend chart', step = false, zero = false }) {
-  const id = useId().replace(/:/g, '')
-  const svgRef = useRef()
+function useChartCursor(reset) {
   const [hover, setHover] = useState(null)
   const hideTimer = useRef()
   useEffect(() => () => clearTimeout(hideTimer.current), [])
+  useEffect(() => setHover(null), [reset])
+  const linger = () => {
+    clearTimeout(hideTimer.current)
+    hideTimer.current = setTimeout(() => setHover(null), 2200)
+  }
+  const handlers = (pick) => ({
+    onPointerDown: (e) => {
+      clearTimeout(hideTimer.current)
+      pick(e)
+    },
+    onPointerMove: (e) => (e.pointerType === 'mouse' || e.buttons) && pick(e),
+    onPointerLeave: (e) => e.pointerType === 'mouse' && setHover(null),
+    onPointerUp: (e) => e.pointerType !== 'mouse' && linger(),
+    onPointerCancel: linger, // the page took over to scroll
+  })
+  return [hover, setHover, handlers]
+}
+
+/**
+ * Interactive trend chart for day / week / month buckets.
+ * buckets: [{ key, start, end, value }] oldest first (value null = no data).
+ * dots: optional raw values per bucket (e.g. scale weigh-ins under the trend).
+ * bars: draw a bar per bucket instead of a line (always from zero; negative
+ * values hang below it). barColor(value, i) picks each bar's colour.
+ * labelOf(bucket, long) overrides the date labels (e.g. weekdays).
+ */
+export function TrendChart({
+  buckets, dots, granularity = 'day', color = 'var(--blue)', color2, target, targetLabel = 'target',
+  format = (v) => Math.round(v), tipFormat, tipNote, unit = '', ariaLabel = 'Trend chart', step = false, zero = false,
+  bars = false, barColor, labelOf,
+}) {
+  const id = useId().replace(/:/g, '')
+  const svgRef = useRef()
+  const n = buckets.length
+  const sig = `${granularity}|${n}|${buckets[0]?.key}|${bars}`
+  const [hover, setHover, handlers] = useChartCursor(sig)
 
   const geo = useMemo(() => {
     const vals = buckets.map((b) => b.value).filter((v) => v != null)
     const dotVals = (dots || []).filter((v) => v != null)
     if (!vals.length) return null
-    let min = zero ? 0 : Math.min(...vals, ...dotVals)
+    const fromZero = zero || bars
+    let min = Math.min(...vals, ...dotVals)
     let max = Math.max(...vals, ...dotVals)
+    if (fromZero) {
+      min = Math.min(0, min)
+      max = Math.max(0, max)
+    }
     const showTarget = target != null && target > 0 && target >= min - (max - min) * 0.8 && target <= max + (max - min) * 0.8 + 1
     if (showTarget) {
       min = Math.min(min, target)
       max = Math.max(max, target)
     }
     const pad = (max - min) * 0.12 || Math.max(1, Math.abs(max) * 0.05)
-    if (!zero) min -= pad
-    max += pad
-    const n = buckets.length
-    const x = (i) => PAD.l + (n === 1 ? 0.5 : i / (n - 1)) * (W - PAD.l - PAD.r)
+    if (!fromZero || min < 0) min -= pad
+    if (max > 0 || !fromZero) max += pad
+    const plotW = W - PAD.l - PAD.r
+    // Bars sit in slots, so the first and last aren't cut in half by the edges.
+    const x = bars ? (i) => PAD.l + ((i + 0.5) / n) * plotW : (i) => PAD.l + (n === 1 ? 0.5 : i / (n - 1)) * plotW
     const y = (v) => PAD.t + (1 - (v - min) / (max - min)) * (H - PAD.t - PAD.b)
     const pts = buckets.map((b, i) => (b.value == null ? null : [x(i), y(b.value), i])).filter(Boolean)
-    const line = step ? stepPath(pts) : smoothPath(pts)
-    const area = pts.length > 1 ? `${line} L${pts[pts.length - 1][0].toFixed(1)},${H - PAD.b} L${pts[0][0].toFixed(1)},${H - PAD.b} Z` : ''
-    return { min, max, x, y, pts, line, area, ticks: niceTicks(min, max), showTarget }
-  }, [buckets, dots, target, step, zero])
+    const line = bars ? '' : step ? stepPath(pts) : smoothPath(pts)
+    const area = !bars && pts.length > 1 ? `${line} L${pts[pts.length - 1][0].toFixed(1)},${H - PAD.b} L${pts[0][0].toFixed(1)},${H - PAD.b} Z` : ''
+    const barW = Math.max(2, Math.min(26, (plotW / n) * 0.64))
+    return { min, max, x, y, pts, line, area, ticks: niceTicks(min, max), showTarget, barW }
+  }, [buckets, dots, target, step, zero, bars, n])
 
   if (!geo) return <p className="small muted chart-empty">Nothing logged in this period yet.</p>
 
-  const { x, y, pts, line, area, ticks, showTarget } = geo
-  const n = buckets.length
-  const labelIdx = n <= 2 ? [0, n - 1] : [0, Math.round((n - 1) / 2), n - 1]
+  const { x, y, pts, line, area, ticks, showTarget, barW } = geo
+  const labelIdx = labelOf && n <= 7 ? buckets.map((_, i) => i) : n <= 2 ? [0, n - 1] : [0, Math.round((n - 1) / 2), n - 1]
+  const label = (b, long) => (labelOf ? labelOf(b, long) : bucketLabel(b, granularity, long))
 
-  function pick(clientX) {
+  const pick = (e) => {
     const r = svgRef.current?.getBoundingClientRect()
     if (!r) return
-    const sx = ((clientX - r.left) / r.width) * W
+    const sx = ((e.clientX - r.left) / r.width) * W
     let best = null
     for (const p of pts) if (!best || Math.abs(p[0] - sx) < Math.abs(best[0] - sx)) best = p
     if (best) setHover(best[2])
   }
-  const hb = hover != null ? buckets[hover] : null
+  const hb = hover != null && buckets[hover]?.value != null ? buckets[hover] : null
   const hx = hb ? x(hover) : 0
+  const y0 = y(Math.max(geo.min, Math.min(geo.max, 0)))
 
   return (
     <div className="chart trend-chart">
@@ -121,27 +164,11 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
               {(tipFormat || format)(hb.value)}
               {unit && <span className="chart-tip-unit"> {unit}</span>}
             </strong>
-            <span>{bucketLabel(hb, granularity, true)}</span>
+            <span>{label(hb, true)}{tipNote ? ` · ${tipNote(hb)}` : ''}</span>
           </>
         )}
       </div>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        role="img"
-        aria-label={ariaLabel}
-        onPointerDown={(e) => {
-          clearTimeout(hideTimer.current)
-          pick(e.clientX)
-        }}
-        onPointerMove={(e) => (e.pointerType === 'mouse' || e.buttons) && pick(e.clientX)}
-        onPointerLeave={() => setHover(null)}
-        onPointerUp={(e) => {
-          if (e.pointerType === 'mouse') return
-          clearTimeout(hideTimer.current)
-          hideTimer.current = setTimeout(() => setHover(null), 1600)
-        }}
-      >
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel} {...handlers(pick)}>
         <defs>
           <linearGradient id={`line-${id}`} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0" stopColor={color} />
@@ -154,10 +181,29 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
         </defs>
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--sep)" />
+            <line x1={PAD.l} x2={W - PAD.r} y1={y(t)} y2={y(t)} stroke="var(--sep)" strokeWidth={t === 0 && bars ? 1.5 : 1} />
             <text x={PAD.l - 6} y={y(t) + 3} textAnchor="end">{format(t)}</text>
           </g>
         ))}
+        {bars && (
+          <g key={sig} className="chart-bars">
+            {buckets.map((b, i) =>
+              b.value == null || b.value === 0 ? null : (
+                <rect
+                  key={b.key}
+                  className={`chart-bar${b.value < 0 ? ' neg' : ''}${hb && hover !== i ? ' dim' : ''}`}
+                  x={x(i) - barW / 2}
+                  width={barW}
+                  y={Math.min(y(b.value), y0)}
+                  height={Math.max(1.5, Math.abs(y(b.value) - y0))}
+                  rx={Math.min(5, barW / 2.5)}
+                  fill={barColor ? barColor(b.value, i) : `url(#line-${id})`}
+                  style={{ '--i': i }}
+                />
+              ),
+            )}
+          </g>
+        )}
         {showTarget && (
           <g>
             <line x1={PAD.l} x2={W - PAD.r} y1={y(target)} y2={y(target)} stroke="var(--text-2)" strokeDasharray="4 4" strokeOpacity="0.7" />
@@ -166,20 +212,136 @@ export function TrendChart({ buckets, dots, granularity = 'day', color = 'var(--
         )}
         {area && <path className="chart-area" d={area} fill={`url(#area-${id})`} />}
         {dots?.map((v, i) => (v == null ? null : <circle key={`d${i}`} cx={x(i)} cy={y(v)} r={step ? 3.6 : 2.4} className={`chart-dot${step ? ' marked' : ''}`} style={step ? { fill: color } : undefined} />))}
-        <path key={`${granularity}-${n}-${line.length}`} className="draw" pathLength="1" d={line} fill="none" stroke={`url(#line-${id})`} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        {pts.length === 1 && <circle cx={pts[0][0]} cy={pts[0][1]} r="4" fill={color} />}
+        {line && <path key={`${granularity}-${n}-${line.length}`} className="draw" pathLength="1" d={line} fill="none" stroke={`url(#line-${id})`} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />}
+        {!bars && pts.length === 1 && <circle cx={pts[0][0]} cy={pts[0][1]} r="4" fill={color} />}
         {hb && (
           <g className="chart-cursor">
-            <line x1={hx} x2={hx} y1={PAD.t} y2={H - PAD.b} stroke="var(--text-3)" />
-            <circle cx={hx} cy={y(hb.value)} r="5.5" fill="var(--card)" stroke={color} strokeWidth="2.5" />
+            {!bars && <line x1={hx} x2={hx} y1={PAD.t} y2={H - PAD.b} stroke="var(--text-3)" />}
+            {!bars && <circle cx={hx} cy={y(hb.value)} r="5.5" fill="var(--card)" stroke={color} strokeWidth="2.5" />}
           </g>
         )}
         {labelIdx.map((i, k) => (
-          <text key={i} x={x(i)} y={H - 6} textAnchor={k === 0 ? 'start' : k === labelIdx.length - 1 ? 'end' : 'middle'}>
-            {bucketLabel(buckets[i], granularity)}
+          <text key={i} x={x(i)} y={H - 6} textAnchor={labelOf ? 'middle' : k === 0 ? 'start' : k === labelIdx.length - 1 ? 'end' : 'middle'} className={hb && hover === i ? 'on' : undefined}>
+            {label(buckets[i], false)}
           </text>
         ))}
       </svg>
+    </div>
+  )
+}
+
+/**
+ * One 100% bar per column, split into coloured parts (e.g. each week's
+ * calories from protein, carbs and fat). columns: [{ key, label, long, parts: [value…] | null }],
+ * series: [{ label, color }] matching the parts. Tap a column to read it.
+ */
+export function StackedBars({ columns, series, ariaLabel, unit = '%' }) {
+  const [hover, setHover, handlers] = useChartCursor(columns.map((c) => c.key).join())
+  const ref = useRef()
+  const n = columns.length
+  const pick = (e) => {
+    const r = ref.current?.getBoundingClientRect()
+    if (!r) return
+    const i = Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width) * n)))
+    setHover(columns[i]?.parts ? i : null)
+  }
+  const hc = hover != null ? columns[hover] : null
+  return (
+    <div className="stacked">
+      <div className="stacked-read" aria-live="polite">
+        {hc ? (
+          <>
+            <span className="stacked-when">{hc.long}</span>
+            {series.map((s, k) => (
+              <span key={s.label} className="stacked-chip" style={{ '--c': s.color }}>
+                <i />
+                {s.label} <b className="num">{hc.parts[k]}{unit}</b>
+              </span>
+            ))}
+          </>
+        ) : (
+          series.map((s) => (
+            <span key={s.label} className="stacked-chip" style={{ '--c': s.color }}>
+              <i />
+              {s.label}
+            </span>
+          ))
+        )}
+      </div>
+      <div ref={ref} className="stacked-cols" role="img" aria-label={ariaLabel} {...handlers(pick)}>
+        {columns.map((c, i) => (
+          <div key={c.key} className={`stacked-col${hc && hover !== i ? ' dim' : ''}`} style={{ '--i': i }}>
+            <div className="stacked-bar">
+              {c.parts ? (
+                c.parts.map((v, k) => <i key={k} style={{ flexGrow: v, background: series[k].color }} />)
+              ) : (
+                <i className="empty" />
+              )}
+            </div>
+            <span className="stacked-label">{c.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const CAL_DAY = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })
+const CAL_MONTH = new Intl.DateTimeFormat('en-GB', { month: 'short' })
+
+/**
+ * A logging calendar, GitHub-contributions style: one column per week
+ * (Monday at the top), each day coloured by how it compared with the target.
+ * weeks: from calendarWeeks(). levels: { level: { label, color } }.
+ */
+export function CalendarHeat({ weeks, levels, today, describe }) {
+  const [picked, setPicked] = useState(null)
+  const flat = weeks.flat()
+  const cell = picked ? flat.find((c) => c.date === picked) : null
+  const days = ['', 'M', '', 'W', '', 'F', '', 'S'] // the first sits beside the month names
+  return (
+    <div className="cal">
+      <div className="cal-grid" style={{ '--weeks': weeks.length }}>
+        <div className="cal-days" aria-hidden="true">
+          {days.map((d, i) => <span key={i}>{d}</span>)}
+        </div>
+        {weeks.map((col, w) => {
+          const firstOfMonth = col.find((c) => c.date.slice(8) === '01')
+          const month = firstOfMonth || (w === 0 ? col[0] : null)
+          return (
+            <div key={col[0].date} className="cal-col" style={{ '--w': w }}>
+              <span className="cal-month" aria-hidden="true">{month ? CAL_MONTH.format(parseISODate(month.date)) : ''}</span>
+              {col.map((c) => (
+                <button
+                  key={c.date}
+                  type="button"
+                  disabled={c.future}
+                  className={`cal-cell lv-${c.level}${c.date === today ? ' today' : ''}${picked === c.date ? ' picked' : ''}`}
+                  style={{ '--c': levels[c.level]?.color }}
+                  aria-label={`${CAL_DAY.format(parseISODate(c.date))}: ${levels[c.level]?.label || 'nothing logged'}${c.kcal ? `, ${c.kcal.toLocaleString('en-GB')} kcal` : ''}`}
+                  onClick={() => setPicked((p) => (p === c.date ? null : c.date))}
+                />
+              ))}
+            </div>
+          )
+        })}
+      </div>
+      <div className="cal-foot">
+        {cell ? (
+          <span className="cal-read">
+            <b>{CAL_DAY.format(parseISODate(cell.date))}</b> · {describe(cell)}
+          </span>
+        ) : (
+          <span className="cal-legend">
+            {Object.entries(levels).map(([k, l]) => (
+              <span key={k} className={`cal-key lv-${k}`} style={{ '--c': l.color }}>
+                <i />
+                {l.label}
+              </span>
+            ))}
+          </span>
+        )}
+      </div>
     </div>
   )
 }

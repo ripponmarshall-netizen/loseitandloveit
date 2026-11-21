@@ -515,3 +515,69 @@ test('weekRecap summarises Monday to Sunday', () => {
   // Partial week (until Wednesday)
   assert.equal(weekRecap({ start: '2026-11-09', daily, targets: { calories: 2000 }, until: '2026-11-11' }).days, 3)
 })
+
+// ---------- Patterns ----------
+import { weekdayAverages, weeklyTrendChange, macroShareByWeek, mealSplit, dayLevel, calendarWeeks } from '../src/lib/calc.js'
+
+test('weekdayAverages is Monday first and skips partial days', () => {
+  // 2026-11-16 is a Monday
+  const daily = {
+    '2026-11-16': { calories: 2000, count: 3 },
+    '2026-11-23': { calories: 1800, count: 3 },
+    '2026-11-21': { calories: 2600, count: 4 }, // Saturday
+    '2026-11-17': { calories: 300, count: 1 }, // partial: ignored
+    '2026-10-01': { calories: 9000, count: 9 }, // outside the window
+  }
+  const w = weekdayAverages(daily, '2026-11-01', '2026-11-30')
+  assert.equal(w.length, 7)
+  assert.deepEqual(w[0], { dow: 0, n: 2, avg: 1900 })
+  assert.equal(w[1].avg, null)
+  assert.equal(w[5].avg, 2600)
+})
+
+test('weeklyTrendChange uses the trend at each week end and leaves empty weeks null', () => {
+  const series = [
+    { date: '2026-11-01', trend: 100, weight: 100 }, // Sunday before
+    { date: '2026-11-04', trend: 99.5, weight: 99 },
+    { date: '2026-11-08', trend: 99.2, weight: 99 }, // Sunday
+    { date: '2026-11-20', trend: 98.6, weight: 98 },
+  ]
+  const w = weeklyTrendChange(series, '2026-11-21', 3)
+  assert.deepEqual(w.map((x) => x.start), ['2026-11-02', '2026-11-09', '2026-11-16'])
+  assert.ok(Math.abs(w[0].changeKg - -0.8) < 1e-9)
+  assert.equal(w[1].changeKg, null) // no weigh-in that week
+  assert.ok(Math.abs(w[2].changeKg - -0.6) < 1e-9)
+})
+
+test('macroShareByWeek gives calorie shares adding to 100', () => {
+  const daily = { '2026-11-16': { calories: 2000, protein: 100, carbs: 200, fat: 80, count: 3 } }
+  const [prev, cur] = macroShareByWeek(daily, '2026-11-21', 2)
+  assert.equal(prev.days, 0)
+  assert.equal(prev.protein, null)
+  assert.equal(cur.days, 1)
+  assert.equal(cur.protein + cur.carbs + cur.fat, 100)
+  assert.equal(cur.protein, 21) // 400 of 1920 kcal
+})
+
+test('mealSplit totals calories by meal', () => {
+  const s = mealSplit([
+    { meal: 'breakfast', calories: 300, servings: 1 },
+    { meal: 'dinner', calories: 350, servings: 2 },
+    { meal: 'snack', calories: 100, servings: 1 },
+  ])
+  assert.deepEqual(s.map((x) => x.kcal), [300, 0, 700, 100])
+  assert.equal(s.reduce((a, x) => a + x.share, 0), 100)
+})
+
+test('dayLevel and calendarWeeks', () => {
+  assert.equal(dayLevel(undefined, 2000), 'none')
+  assert.equal(dayLevel({ calories: 200, count: 1 }, 2000), 'partial')
+  assert.equal(dayLevel({ calories: 1500, count: 3 }, 2000), 'under')
+  assert.equal(dayLevel({ calories: 1900, count: 3 }, 2000), 'on')
+  assert.equal(dayLevel({ calories: 2100, count: 3 }, 2000), 'over')
+  const cols = calendarWeeks({ '2026-11-20': { calories: 1900, count: 2 } }, '2026-11-20', 2, () => 2000)
+  assert.equal(cols.length, 2)
+  assert.equal(cols[1][0].date, '2026-11-16')
+  assert.equal(cols[1][4].level, 'on')
+  assert.equal(cols[1][5].future, true)
+})
