@@ -4,7 +4,7 @@ import { APPETITE, ENERGY, MOOD_BY_V, MOODS, SYMPTOMS } from '../data/glp1.js'
 import { BOTTLE_ML, GLASS_ML, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
 import { displayWeight, inputToKg, isValidWeightKg, weightUnit, weightValue } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatTime, logTimeToIso, timeInputValue, timeMs } from '../lib/dates.js'
-import { Chevron, Icon, Segmented, Sheet } from './ui.jsx'
+import { Chevron, Icon, Segmented, Sheet, useSheetClose } from './ui.jsx'
 
 /** The day's water goal from the profile and current weight. */
 export function useWaterTarget() {
@@ -21,25 +21,29 @@ export function useWater(date, daily) {
   const { store, bumpData, toast } = useApp()
   const saved = Number(daily?.water_ml) || 0
   const [ml, setMl] = useState(saved)
-  const pending = useRef(null)
+  const pending = useRef(null) // { date, value } waiting to be saved
   const timer = useRef()
 
   useEffect(() => {
-    if (pending.current == null) setMl(saved)
+    // A tap still waiting for another day is saved to that day, not shown on this one.
+    if (pending.current?.date === date) return
+    setMl(saved)
   }, [saved, date])
 
   const flush = useRef()
   flush.current = async () => {
-    const value = pending.current
-    if (value == null) return
+    const p = pending.current
+    if (p == null) return
+    clearTimeout(timer.current)
     try {
-      await store.saveDailyLog(date, { water_ml: value })
+      // The day the taps were made on, even if the screen has moved to another day since.
+      await store.saveDailyLog(p.date, { water_ml: p.value })
       bumpData()
     } catch (e) {
       toast(e.message, 'error')
-      setMl(saved)
+      if (p.date === date) setMl(saved)
     } finally {
-      if (pending.current === value) pending.current = null
+      if (pending.current === p) pending.current = null
     }
   }
   // Closing the sheet straight after a tap still saves it.
@@ -54,8 +58,11 @@ export function useWater(date, daily) {
   )
 
   function add(delta) {
-    const next = Math.max(0, Math.min(15000, (pending.current ?? ml) + delta))
-    pending.current = next
+    // Taps for another day still waiting: save those first, then start from this day's amount.
+    if (pending.current && pending.current.date !== date) flush.current()
+    const base = pending.current?.date === date ? pending.current.value : ml
+    const next = Math.max(0, Math.min(15000, base + delta))
+    pending.current = { date, value: next }
     setMl(next)
     clearTimeout(timer.current)
     timer.current = setTimeout(() => flush.current(), 450)
@@ -67,11 +74,12 @@ export function WaterSheet({ date, daily, onClose }) {
   const { today } = useApp()
   const target = useWaterTarget()
   const { ml, add } = useWater(date, daily)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const pct = Math.min(1, ml / target)
   const glasses = Math.round(ml / GLASS_ML)
   const day = formatDayLabel(date, today)
   return (
-    <Sheet title={`Water${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
+    <Sheet ref={sheetRef} title={`Water${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
       <div className="water-hero">
         <div className="water-glass" style={{ '--p': pct }} aria-hidden="true">
           <i />
@@ -92,7 +100,7 @@ export function WaterSheet({ date, daily, onClose }) {
         A glass is 250 ml, a bottle 500 ml. Goal ≈ 30 ml per kg of body weight; drink more in the heat, on shift, or if you’re being sick. Change it in
         Settings → Tracking.
       </p>
-      <button className="btn block" onClick={onClose}>Done</button>
+      <button className="btn block" onClick={dismiss}>Done</button>
     </Sheet>
   )
 }
@@ -131,6 +139,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
   const [symptoms, setSymptoms] = useState(daily?.symptoms || [])
   const [note, setNote] = useState(daily?.note || '')
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const day = formatDayLabel(date, today)
   const urgent = symptoms.some((s) => SYMPTOMS.find((x) => x.id === s)?.urgent)
   // A day logged before moods could repeat shows its one mood as a check-in.
@@ -145,7 +154,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
   const toggle = (id) => setSymptoms((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
   async function save() {
-    if (mood == null && !dayChanged) return onClose()
+    if (mood == null && !dayChanged) return dismiss()
     // Blank = now today; midday on a past day (never today's clock on an old date).
     const loggedAt = mood == null ? undefined : time || !isToday ? logTimeToIso(date, time || '12:00', profile.day_start_hour ?? 0) : undefined
     if (loggedAt && Date.parse(loggedAt) > Date.now() + 5 * 60e3) return toast('That time hasn’t happened yet.', 'error')
@@ -157,7 +166,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
       if (dayChanged) await store.saveDailyLog(date, { appetite, symptoms, note: note.trim() || null })
       bumpData()
       toast(mood != null ? `Feeling ${MOOD_BY_V[mood].label.toLowerCase()}, saved` : 'Check-in saved')
-      onClose()
+      dismiss()
     } catch (e) {
       toast(e.message, 'error')
       setBusy(false)
@@ -177,7 +186,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
   }
 
   return (
-    <Sheet title={`How are you feeling${isToday ? ' now' : ` · ${day}`}?`} onClose={onClose}>
+    <Sheet ref={sheetRef} title={`How are you feeling${isToday ? ' now' : ` · ${day}`}?`} onClose={onClose}>
       <div className="mood-row" role="radiogroup" aria-label="Mood">
         {MOODS.map((m) => (
           <button
@@ -297,6 +306,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
   )
   const [note, setNote] = useState(weight?.note || '')
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
 
   const kg = inputToKg(val, units)
   const future = date > today
@@ -318,7 +328,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
       await fn()
       await reloadWeights()
       toast(msg)
-      onClose()
+      dismiss()
     } catch (e) {
       toast(e.message, 'error')
       setBusy(false)
@@ -345,7 +355,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
   ]
 
   return (
-    <Sheet title={editing ? 'Edit weigh-in' : 'Weigh-in'} onClose={onClose}>
+    <Sheet ref={sheetRef} title={editing ? 'Edit weigh-in' : 'Weigh-in'} onClose={onClose}>
       <form onSubmit={save}>
         <label className="field">
           <span>Weight ({weightUnit(units)})</span>

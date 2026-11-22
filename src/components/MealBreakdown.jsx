@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../appContext.js'
-import { macroBreakdown } from '../lib/calc.js'
+import { exerciseAllowance, macroBreakdown } from '../lib/calc.js'
 import { formatDayLabel } from '../lib/dates.js'
 import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
 import { useDay } from '../lib/useDay.js'
@@ -122,11 +122,14 @@ export function MacroSplit({ entries, size = 150 }) {
  * calories, macro split chart, share of the day's targets and each food.
  */
 export function MealBreakdownSheet({ date, meal = 'all', onClose, onEdit }) {
-  const { today, targets, openAdd } = useApp()
+  const { today, targets: base, openAdd, profile } = useApp()
   const day = useDay(date)
   const [which, setWhich] = useState(meal)
   const all = day?.entries ?? null
   const entries = all ? (which === 'all' ? all : all.filter((e) => e.meal === which)) : null
+  // The day's calorie target, with its exercise allowance: the same one the rings use.
+  const burned = (day?.workouts || []).reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
+  const targets = base && { ...base, calories: base.calories + exerciseAllowance(burned, profile.exercise_eatback_pct) }
   const b = entries ? macroBreakdown(entries, targets) : null
   const dayLabel = formatDayLabel(date, today)
   const title = `${which === 'all' ? 'Day' : MEAL_LABEL[which]} nutrition${dayLabel === 'Today' ? '' : ` · ${dayLabel}`}`

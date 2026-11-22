@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { PENGUIN_FACE, PENGUIN_THINKING, PENGUIN_WORKOUT } from '../assets/penguins.js'
 import { SPRINGS, animateSpring, projectFling, rubberBand, trackVelocity } from '../lib/spring.js'
@@ -251,14 +251,41 @@ export function CountUp({ value, format = fmtWhole, from = 0, duration = 600 }) 
 
 const CLOSE_MS = 280
 
+// Sheets can stack (a food's editor over the meal breakdown). The page stays
+// locked until the last one closes, whichever order they close in.
+let openSheets = []
+const lockPage = (id) => {
+  openSheets = [...openSheets, id]
+  document.body.style.overflow = 'hidden'
+}
+const unlockPage = (id) => {
+  openSheets = openSheets.filter((x) => x !== id)
+  if (!openSheets.length) document.body.style.overflow = ''
+}
+const isTopSheet = (id) => openSheets[openSheets.length - 1] === id
+
+/**
+ * For a sheet's own buttons (Save, Delete, Done): close it with the same
+ * slide-down as the close button, instead of it vanishing mid-frame.
+ *   const [sheetRef, dismiss] = useSheetClose(onClose)
+ *   <Sheet ref={sheetRef} …> … dismiss()
+ */
+export function useSheetClose(onClose) {
+  const ref = useRef(null)
+  const dismiss = useCallback(() => (ref.current ? ref.current.close() : onClose?.()), [onClose])
+  return [ref, dismiss]
+}
+
 /** Bottom sheet: slides up, swipe down on the header (or flick it) or tap outside to close. */
-export function Sheet({ title, onClose, children, action, tall = false }) {
+export function Sheet({ ref, title, onClose, children, action, tall = false }) {
   const [closing, setClosing] = useState(false) // false | 'slide' | 'flung'
   const sheetRef = useRef()
   const drag = useRef(null)
   const anim = useRef(null)
+  const closeTimer = useRef()
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  const id = useRef(Symbol('sheet')).current
 
   const closingRef = useRef(false)
   const close = () => {
@@ -266,22 +293,25 @@ export function Sheet({ title, onClose, children, action, tall = false }) {
     closingRef.current = true
     anim.current?.stop()
     setClosing('slide')
-    setTimeout(() => closeRef.current(), CLOSE_MS)
+    closeTimer.current = setTimeout(() => closeRef.current(), CLOSE_MS)
   }
   const animatedClose = useRef(close)
   animatedClose.current = close
+  useImperativeHandle(ref, () => ({ close: () => animatedClose.current() }), [])
 
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e) => e.key === 'Escape' && animatedClose.current()
+    lockPage(id)
+    // Escape closes only the sheet on top.
+    const onKey = (e) => e.key === 'Escape' && isTopSheet(id) && animatedClose.current()
     window.addEventListener('keydown', onKey)
     return () => {
-      document.body.style.overflow = prev
+      unlockPage(id)
       window.removeEventListener('keydown', onKey)
       anim.current?.stop()
+      // Replaced by another sheet mid-close: its close mustn't shut the new one.
+      clearTimeout(closeTimer.current)
     }
-  }, [])
+  }, [id])
 
   const offset = (y) => {
     sheetRef.current.style.transform = y ? `translateY(${y}px)` : ''

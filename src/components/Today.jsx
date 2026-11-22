@@ -7,7 +7,7 @@ import { dailyNudge, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
 import { LogDock } from './QuickLog.jsx'
-import { Avatar, CountUp, Icon, PageHeader, PenguinFace, SectionTitle, Sheet, Stepper } from './ui.jsx'
+import { Avatar, CountUp, Icon, PageHeader, PenguinFace, SectionTitle, Sheet, Stepper, useSheetClose } from './ui.jsx'
 import { foodEmoji } from '../lib/foodEmoji.js'
 import { RingStack, WeekBalance, WeekRecapCard, WinsCard, useRecentLog, useRingCheer } from './Motivation.jsx'
 import { MacroSplit } from './MealBreakdown.jsx'
@@ -297,6 +297,7 @@ function EditEntry({ entry, onClose }) {
     fat_g: String(Number(entry.fat_g)),
   })
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const set = (k) => (ev) => setE((s) => ({ ...s, [k]: ev.target.value }))
   // While the servings field is empty or 0 the total reads 0, but the breakdown
   // stays put: if it vanished, tapping Save (which tidies the field on blur)
@@ -311,19 +312,19 @@ function EditEntry({ entry, onClose }) {
       await fn()
       bumpData()
       toast(msg, 'info', action)
-      onClose()
+      dismiss()
     } catch (err) {
       toast(err.message, 'error')
       setBusy(false)
     }
   }
 
-  // Deleting is one tap, so it can be undone: re-add the same entry.
+  // Deleting is one tap, so it can be undone: the entry comes back in its old place.
   const undoDelete = {
     label: 'Undo',
     run: async () => {
       try {
-        await store.addEntries([entry])
+        await store.restoreEntries([entry])
         bumpData()
       } catch (err) {
         toast(err.message, 'error')
@@ -342,7 +343,7 @@ function EditEntry({ entry, onClose }) {
   })
 
   return (
-    <Sheet title="Edit entry" onClose={onClose}>
+    <Sheet ref={sheetRef} title="Edit entry" onClose={onClose}>
       <label className="field">
         <span>Name</span>
         <input className="input" value={e.name} onChange={set('name')} />

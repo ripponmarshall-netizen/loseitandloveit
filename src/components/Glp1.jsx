@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { FREQUENCY_LABEL, GLP1_MEDS, INJECTION_SITES, MED_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, suggestSite } from '../lib/glp1.js'
-import { daysBetween, formatDayLabel, formatShortDate, logTimeToIso, timeInputValue } from '../lib/dates.js'
+import { daysBetween, formatDayLabel, formatShortDate, formatTime, logTimeToIso, timeInputValue } from '../lib/dates.js'
 import { displayWeight, trendOn, weightValue, weightUnit } from '../lib/calc.js'
-import { Icon, ListRow, ListSection, Sheet, Switch } from './ui.jsx'
+import { Icon, ListRow, ListSection, Sheet, Switch, useSheetClose } from './ui.jsx'
 
 
 // ---------------------------------------------------------------- body map
@@ -123,7 +123,8 @@ function MedSelect({ value, onChange }) {
 
 /** Log or edit one GLP-1 dose: medicine, dose, time and injection site. */
 export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
-  const { store, profile, saveProfile, bumpData, toast, today } = useApp()
+  const { store, profile, saveProfile, bumpData, toast, today, openSheet } = useApp()
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const plan = glp1Plan(profile)
   const startMed = existing?.med || preset.med || plan?.id || 'mounjaro'
   const [med, setMed] = useState(startMed)
@@ -204,7 +205,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
       }
       bumpData()
       toast(existing ? 'Dose updated' : `${label} ${formatDose(doseNum, unit)} logged`)
-      onClose()
+      dismiss()
     } catch (e) {
       bumpData()
       toast(e.message, 'error')
@@ -219,7 +220,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
       await store.deleteDose(existing.id)
       bumpData()
       toast('Dose deleted')
-      onClose()
+      dismiss()
     } catch (e) {
       toast(e.message, 'error')
       setBusy(false)
@@ -228,9 +229,23 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
 
   const step = doseStep(med, doseNum)
   const dayLabel = formatDayLabel(day, today)
+  // A weekly medicine already logged that day: most likely a second tap, not a second jab.
+  const weekly = (med === 'other' ? plan?.frequency : info.frequency) === 'weekly'
+  const sameDay = !existing && weekly ? (recent || []).find((r) => r.log_date === day) : null
 
   return (
-    <Sheet title={existing ? 'Edit dose' : 'Log GLP-1 dose'} onClose={onClose}>
+    <Sheet ref={sheetRef} title={existing ? 'Edit dose' : 'Log GLP-1 dose'} onClose={onClose}>
+      {sameDay && (
+        <div className="card tinted small dose-dupe" role="note">
+          <span className="grow">
+            <strong>Already logged {dayLabel === 'Today' ? 'today' : `on ${dayLabel}`}:</strong> {sameDay.med_name} {formatDose(sameDay.dose, sameDay.unit)}
+            {sameDay.taken_at ? ` at ${formatTime(sameDay.taken_at)}` : ''}.
+          </span>
+          <button type="button" className="btn sm secondary" onClick={() => openSheet('dose', { date: sameDay.log_date, dose: sameDay })}>
+            Edit it
+          </button>
+        </div>
+      )}
       <MedSelect value={med} onChange={changeMed} />
       {med === 'other' && (
         <label className="field">
@@ -307,6 +322,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
 /** Set up or change the GLP-1 plan on the profile (Settings, Today, onboarding). */
 export function MedicationSheet({ onClose }) {
   const { store, profile, saveProfile, toast, today, bumpData } = useApp()
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const plan = glp1Plan(profile)
   const [med, setMed] = useState(plan?.id || 'mounjaro')
   const [name, setName] = useState(plan?.id === 'other' ? plan.name : '')
@@ -356,7 +372,7 @@ export function MedicationSheet({ onClose }) {
         bumpData()
       }
       toast(msg)
-      onClose()
+      dismiss()
     } catch (e) {
       bumpData()
       toast(e.message, 'error')
@@ -365,7 +381,7 @@ export function MedicationSheet({ onClose }) {
   }
 
   return (
-    <Sheet title="GLP-1 medicine" onClose={onClose}>
+    <Sheet ref={sheetRef} title="GLP-1 medicine" onClose={onClose}>
       <MedSelect value={med} onChange={changeMed} />
       {med === 'other' && (
         <label className="field">
