@@ -1,12 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#14b8a6"/>
-      <stop offset="1" stop-color="#0f766e"/>
-    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14b8a6"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
+    <clipPath id="c"><rect width="512" height="512" rx="112"/></clipPath>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <path d="M256 404c-12 0-150-86-150-196 0-50 38-88 86-88 30 0 52 15 64 36 12-21 34-36 64-36 48 0 86 38 86 88 0 110-138 196-150 196z" fill="#fff"/>
-  <path d="M168 214l58 52 40-34 78 74" fill="none" stroke="#f59e0b" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M310 306h40v-40" fill="none" stroke="#f59e0b" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Mimi the Penguin (src/assets/penguins.js) on the brand teal, with a sun for wins -->
+  <g clip-path="url(#c)">
+    <rect width="512" height="512" fill="url(#g)"/>
+    <circle cx="426" cy="86" r="44" fill="#ffc233"/>
+    <g transform="translate(-204 -150) scale(4.6)">
+      <path fill="#1f2240" d="M100 52c30 0 46 26 48 60 2 34-16 60-48 60s-50-26-48-60c2-34 18-60 48-60z"/>
+      <ellipse fill="#fff" cx="100" cy="128" rx="32" ry="40"/>
+      <path fill="#fff" d="M100 70c-12-8-28-4-28 12 0 12 12 18 28 18s28-6 28-18c0-16-16-20-28-12z"/>
+      <circle fill="#111" cx="88" cy="82" r="4.6"/><circle fill="#111" cx="112" cy="82" r="4.6"/>
+      <circle fill="#fff" cx="89.6" cy="80.4" r="1.5"/><circle fill="#fff" cx="113.6" cy="80.4" r="1.5"/>
+      <circle fill="#ff6b8a" opacity=".45" cx="79" cy="92" r="5"/><circle fill="#ff6b8a" opacity=".45" cx="121" cy="92" r="5"/>
+      <path fill="#ff9f0a" d="M93 90h14l-7 9z"/>
+    </g>
+  </g>
 </svg>

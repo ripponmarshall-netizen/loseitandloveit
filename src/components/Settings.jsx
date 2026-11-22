@@ -101,7 +101,7 @@ export default function Settings() {
   async function exportJson() {
     try {
       const data = await store.exportAll()
-      await shareOrDownload(`loseitandloveit-${today}.json`, JSON.stringify(data, null, 2), 'application/json')
+      await shareOrDownload(`mimi-${today}.json`, JSON.stringify(data, null, 2), 'application/json')
     } catch (e) {
       toast(e.message, 'error')
     }
@@ -130,7 +130,8 @@ export default function Settings() {
     if (!file) return
     try {
       const data = JSON.parse(await file.text())
-      if (data.app !== 'loseitandloveit') throw new Error('That file is not a Lose It & Love It export.')
+      // Backups keep the app's first id, so files made before the rename still import.
+      if (data.app !== 'loseitandloveit') throw new Error('That file is not a Mimi backup.')
       if (!window.confirm(`Import ${data.entries?.length || 0} food entries and ${data.weights?.length || 0} weigh-ins? Anything already in your log is skipped, so importing the same file twice is safe.`)) return
       await store.importAll(data)
       const p = await store.getProfile()
