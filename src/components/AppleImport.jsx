@@ -4,7 +4,7 @@ import { matchesWorkout, readAppleWorkouts } from '../lib/appleHealth.js'
 import { WORKOUT_GROUPS as GROUPS } from '../data/appleWorkouts.js'
 import { addDays } from '../lib/dates.js'
 import { workoutDetail } from './Workouts.jsx'
-import { Icon, Segmented, Sheet } from './ui.jsx'
+import { Icon, Segmented, Sheet, useSheetClose } from './ui.jsx'
 
 const RANGES = [
   ['30', '30 days'],
@@ -36,6 +36,7 @@ export function AppleImportSheet({ onClose }) {
   const [range, setRange] = useState('90')
   const [group, setGroup] = useState('all')
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const fileRef = useRef()
 
   async function onFile(e) {
@@ -113,7 +114,7 @@ export function AppleImportSheet({ onClose }) {
       setPrefs({ appleImportAt: Date.now(), appleLatest: found[0]?.log_date || prefs.appleLatest || null })
       bumpData()
       toast(added ? `Added ${added} workout${added === 1 ? '' : 's'} from Apple Fitness` : 'Those were already added')
-      onClose()
+      dismiss()
     } catch (err) {
       toast(err.message, 'error')
       setBusy(false)
@@ -152,7 +153,7 @@ export function AppleImportSheet({ onClose }) {
   }
 
   return (
-    <Sheet title="Apple Fitness" onClose={onClose} tall={phase === 'results'}>
+    <Sheet ref={sheetRef} title="Apple Fitness" onClose={onClose} tall={phase === 'results'}>
       <input ref={fileRef} type="file" accept=".zip,.xml,application/zip,text/xml,application/xml" hidden onChange={onFile} />
 
       {phase === 'intro' && (

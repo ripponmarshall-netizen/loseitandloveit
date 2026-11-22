@@ -3,7 +3,7 @@ import { useApp } from '../appContext.js'
 import { MOOD_BY_V } from '../data/glp1.js'
 import { doseStatusLabel, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
 import { guessMeal, parseQuickLog } from '../lib/quicklog.js'
-import { displayWeight, latestWeighIn, lbToKg, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
+import { displayWeight, isValidWeightKg, latestWeighIn, lbToKg, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
 import { MEAL_LABEL } from '../lib/meals.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
@@ -44,25 +44,29 @@ function useQuickLog(date, { onDone } = {}) {
       water.add(p.ml)
       toast(`+${formatWater(p.ml)} water`)
       setText('')
+      onDone?.() // the + sheet closes, as it does for everything else (the water still saves)
       return
     }
     setText('')
-    if (p.type === 'weight' && p.unit && isToday) {
+    // "85 kg" typed by someone who weighs in pounds (or the other way round).
+    const kg = p.type === 'weight' && p.unit ? (p.unit === 'kg' ? p.value : lbToKg(p.value)) : null
+    if (kg != null && isToday && isValidWeightKg(kg)) {
       // "212 lb": save straight away.
-      const kg = p.unit === 'kg' ? p.value : lbToKg(p.value)
-      if (kg >= 30 && kg <= 350) {
-        try {
-          await store.addWeight({ log_date: today, weight_kg: Math.round(kg * 100) / 100 })
-          await reloadWeights()
-          toast('Weight saved')
-          onDone?.()
-        } catch (err) {
-          toast(err.message, 'error')
-        }
-        return
+      try {
+        await store.addWeight({ log_date: today, weight_kg: Math.round(kg * 100) / 100 })
+        await reloadWeights()
+        toast('Weight saved')
+        onDone?.()
+      } catch (err) {
+        toast(err.message, 'error')
       }
+      return
     }
-    if (p.type === 'weight') return open('weight', { value: p.value })
+    if (p.type === 'weight') {
+      // The sheet's field is in the user's units, so convert what was typed.
+      const value = kg != null ? Math.round(weightValue(kg, units) * 10) / 10 : p.value
+      return open('weight', { value })
+    }
     if (p.type === 'mood') return open('mood', { mood: p.mood })
     if (p.type === 'dose') return open('dose', { med: p.med, dose: p.dose })
     if (p.type === 'exercise') {

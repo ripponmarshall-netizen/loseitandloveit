@@ -183,6 +183,8 @@ export function pickProfile(p) {
   return out
 }
 
+const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))
+
 // A valid timestamp as ISO, or null.
 const isoTime = (v) => {
   const t = v == null || v === '' ? NaN : Date.parse(v)
@@ -329,6 +331,19 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     wrote('daily_logs', 'upsert', row.id)
   }
 
+  // The day's check-in row, created if needed, with the patch applied (not saved yet).
+  const upsertDaily = (log_date, patch) => {
+    if (!isDate(log_date)) throw new Error('Pick a date for the check-in.')
+    let row = db.daily_logs.find((l) => l.log_date === log_date)
+    if (!row) {
+      row = { id: newId(), log_date, mood: null, energy: null, appetite: null, water_ml: 0, symptoms: [], note: null }
+      db.daily_logs.push(row)
+    }
+    Object.assign(row, cleanDaily(patch), { updated_at: now() })
+    wrote('daily_logs', 'upsert', row.id)
+    return row
+  }
+
   const api = {
     /** The live database object (sync.js merges server rows into it). */
     get db() {
@@ -367,6 +382,25 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     },
     async deleteEntry(id) {
       remove('entries', id)
+    },
+    /**
+     * Undo a delete: put entries back with their own id and time, so they
+     * return to the same place in the day (and sync as the same rows).
+     * Any that are still here are left alone.
+     */
+    async restoreEntries(list) {
+      const have = new Set(db.entries.map((e) => e.id))
+      const rows = []
+      for (const e of list || []) {
+        if (!e?.id || have.has(e.id) || String(e.id).includes(':') || !isDate(e.log_date)) continue
+        const row = { ...cleanEntry(e), id: e.id, created_at: isoTime(e.created_at) || now() }
+        db.entries.push(row)
+        have.add(row.id)
+        rows.push(row)
+        wrote('entries', 'upsert', row.id)
+      }
+      if (rows.length) save()
+      return rows.map(copy)
     },
     async listRecentFoods(limit = 30) {
       const rows = [...db.entries].sort((a, b) => byCreated(b, a)).slice(0, 300)
@@ -437,6 +471,17 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
     async deleteWorkout(id) {
       remove('workouts', id)
     },
+    /** Undo a delete: the workout comes back with its own id, time and source (an Apple import stays one). */
+    async restoreWorkout(w) {
+      if (!w?.id || !isDate(w.log_date)) throw new Error('Nothing to restore')
+      const existing = db.workouts.find((x) => x.id === w.id)
+      if (existing) return copy(existing)
+      const row = { ...cleanWorkout(w), id: String(w.id), created_at: isoTime(w.created_at) || now() }
+      db.workouts.push(row)
+      wrote('workouts', 'upsert', row.id)
+      save()
+      return copy(row)
+    },
     /**
      * Log a saved workout again on another day: same type, time and calories,
      * as the user's own entry (not an Apple import any more).
@@ -502,13 +547,7 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       return db.daily_logs.filter((l) => l.log_date >= from && l.log_date <= to).sort(byDate).map(copy)
     },
     async saveDailyLog(log_date, patch) {
-      let row = db.daily_logs.find((l) => l.log_date === log_date)
-      if (!row) {
-        row = { id: newId(), log_date, mood: null, energy: null, appetite: null, water_ml: 0, symptoms: [], note: null }
-        db.daily_logs.push(row)
-      }
-      Object.assign(row, cleanDaily(patch), { updated_at: now() })
-      wrote('daily_logs', 'upsert', row.id)
+      const row = upsertDaily(log_date, patch)
       save()
       return copy(row)
     },
@@ -649,8 +688,8 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
         db.weights.push(row)
         wrote('weights', 'upsert', row.id)
       }
-      save()
-      for (const l of data.daily_logs || []) await api.saveDailyLog(l.log_date, l)
+      // Check-ins: one row a day. A year of them is saved once, not once a row.
+      for (const l of data.daily_logs || []) if (l && isDate(l.log_date)) upsertDaily(l.log_date, l)
       const moodKey = (m) => `${m.log_date}|${ms(m.logged_at)}|${m.mood}`
       const haveMood = new Set(db.mood_logs.map(moodKey))
       const moodDays = new Set()

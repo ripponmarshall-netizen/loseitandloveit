@@ -88,14 +88,15 @@ export default function Coach({ active = true }) {
 
   // A question asked from elsewhere (e.g. a check-in): send it once the history has loaded
   // (so it lands after earlier messages), or just focus the box.
+  // Asked while Mimi is still replying: it waits for that reply instead of being dropped.
   const ask = app.coachAsk
   useEffect(() => {
-    if (!ask || !active || messages === null) return
+    if (!ask || !active || messages === null || busy) return
     app.clearCoachAsk()
     if (ask.text && mode === 'cloud') send(ask.text)
     else setTimeout(() => inputRef.current?.focus(), 350)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ask?.id, active, messages === null])
+  }, [ask?.id, active, messages === null, busy])
 
   if (mode !== 'cloud') {
     return (

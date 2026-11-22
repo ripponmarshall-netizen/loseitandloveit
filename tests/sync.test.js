@@ -522,3 +522,50 @@ test('restoring a backup twice adds food, workouts and doses once, keeping their
   assert.equal((await src.listEntries('2026-11-01', '2026-11-01')).length, 2)
   assert.equal((await src.listFoods()).length, 1)
 })
+
+test('undoing a delete puts the entry back in its place, as the same row on the server', async () => {
+  const { engine, sync, remote } = setup()
+  const rows = await engine.addEntries([entry({ name: 'Porridge' }), entry({ name: 'Patty' }), entry({ name: 'Tea' })])
+  await sync.flush()
+  const patty = (await engine.listEntries('2026-11-10', '2026-11-10'))[1]
+  await engine.deleteEntry(patty.id)
+  const [back] = await engine.restoreEntries([patty])
+  assert.equal(back.id, patty.id)
+  assert.deepEqual((await engine.listEntries('2026-11-10', '2026-11-10')).map((e) => e.name), ['Porridge', 'Patty', 'Tea'])
+  // Restoring twice, or something that's still here, adds nothing.
+  assert.equal((await engine.restoreEntries([patty, rows[0]])).length, 0)
+  assert.equal(await sync.flush(), true)
+  assert.deepEqual(remote.tables.food_entries.map((e) => e.id).sort(), rows.map((e) => e.id).sort())
+})
+
+test('undoing a workout delete keeps its id, time and Apple source', async () => {
+  const { engine, sync, remote } = setup()
+  await engine.importWorkouts([{ id: 'apple-1', log_date: '2026-11-10', kind: 'other', activity: 'bodyweight', name: 'Cycling', duration_min: 40, calories_burned: 300, calories_source: 'device', source: 'apple', started_at: '2026-11-10 07:05:12 -0500' }])
+  const [w] = await engine.listWorkouts('2026-11-10', '2026-11-10')
+  await engine.deleteWorkout(w.id)
+  const back = await engine.restoreWorkout(w)
+  assert.equal(back.id, 'apple-1')
+  assert.equal(back.source, 'apple')
+  assert.equal(back.created_at, w.created_at)
+  assert.equal((await engine.importWorkouts([{ ...w, started_at: null }])).added, 0) // a later import still knows it
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.workouts.length, 1)
+})
+
+test('restoring a backup skips check-ins without a date and saves once', async () => {
+  let saves = 0
+  const engine = createEngine({ persist: () => saves++ })
+  await engine.importAll({
+    app: 'loseitandloveit',
+    daily_logs: [
+      { log_date: '2026-11-01', water_ml: 1500 },
+      { log_date: '2026-11-02', water_ml: 2000 },
+      { water_ml: 999 }, // no date: an old or edited backup
+      null,
+    ],
+  })
+  const logs = await engine.listDailyLogs('2026-01-01', '2026-12-31')
+  assert.deepEqual(logs.map((l) => l.water_ml), [1500, 2000])
+  assert.equal(saves, 1)
+  await assert.rejects(engine.saveDailyLog('', { water_ml: 250 }), /date/)
+})

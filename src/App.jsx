@@ -241,9 +241,14 @@ export default function App() {
       setSync(null)
       return
     }
-    setSync(store.syncStatus())
+    // Status events come several to a write: only a real change re-renders the app.
+    const readStatus = () => {
+      const next = store.syncStatus()
+      setSync((cur) => (cur && Object.keys(next).every((k) => cur[k] === next[k]) ? cur : next))
+    }
+    readStatus()
     return store.subscribe((event) => {
-      if (event.type === 'status') setSync(store.syncStatus())
+      if (event.type === 'status') readStatus()
       else if (event.type === 'error') toast(event.message, 'error')
       else if (event.type === 'change') {
         Promise.all([store.getProfile(), store.listWeights()])
@@ -352,37 +357,51 @@ export default function App() {
     setLocalMode(true)
   }, [])
 
-  const ctx = {
-    store,
-    mode: store?.mode,
-    session,
-    profile,
-    saveProfile,
-    weights,
-    series,
-    currentWeightKg: currentWeight,
-    targets,
-    today,
-    date,
-    setDate: (d) => setSelectedDate(d === today ? null : d),
-    units: profile?.units || 'imperial',
-    reloadWeights,
-    toast,
-    dataVersion,
-    bumpData: () => setDataVersion((v) => v + 1),
-    openAdd: (opts = {}) => openSheet('food', { date, ...opts, meal: opts.meal || (date === today ? guessMeal() : 'dinner') }),
-    openSheet,
-    askCoach,
-    coachAsk,
-    clearCoachAsk: () => setCoachAsk(null),
-    signOut,
-    setTab: goTab,
-    openProgress,
-    progressFocus,
-    prefs,
-    setPrefs,
-    sync,
-  }
+  const setDate = useCallback((d) => setSelectedDate(d === today ? null : d), [today])
+  const bumpData = useCallback(() => setDataVersion((v) => v + 1), [])
+  const openAdd = useCallback(
+    (opts = {}) => openSheet('food', { date, ...opts, meal: opts.meal || (date === today ? guessMeal() : 'dinner') }),
+    [openSheet, date, today],
+  )
+  const clearCoachAsk = useCallback(() => setCoachAsk(null), [])
+  // One object for the whole app. Memoised so a toast (or the sheet opening)
+  // doesn't re-render every mounted tab; `clock` still refreshes it once a
+  // minute for screens that read the time of day.
+  const ctx = useMemo(
+    () => ({
+      store,
+      mode: store?.mode,
+      session,
+      profile,
+      saveProfile,
+      weights,
+      series,
+      currentWeightKg: currentWeight,
+      targets,
+      today,
+      date,
+      setDate,
+      units: profile?.units || 'imperial',
+      reloadWeights,
+      toast,
+      dataVersion,
+      bumpData,
+      openAdd,
+      openSheet,
+      askCoach,
+      coachAsk,
+      clearCoachAsk,
+      signOut,
+      setTab: goTab,
+      openProgress,
+      progressFocus,
+      prefs,
+      setPrefs,
+      sync,
+      clock,
+    }),
+    [store, session, profile, saveProfile, weights, series, currentWeight, targets, today, date, setDate, reloadWeights, toast, dataVersion, bumpData, openAdd, openSheet, askCoach, coachAsk, clearCoachAsk, signOut, goTab, openProgress, progressFocus, prefs, setPrefs, sync, clock],
+  )
 
   let body
   if (store && loadError) {

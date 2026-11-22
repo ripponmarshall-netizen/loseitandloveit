@@ -5,7 +5,7 @@ import { addDays, formatDayLabel, formatShortDate } from '../lib/dates.js'
 import { useDay } from '../lib/useDay.js'
 import { HOME_PRESETS, TREADMILL_PRESETS } from '../data/workouts.js'
 import { WORKOUT_CHOICES, WORKOUT_GROUPS, WORKOUT_TYPE_BY_KEY, workoutTypeForName } from '../data/appleWorkouts.js'
-import { Icon, Segmented, Sheet, Spinner } from './ui.jsx'
+import { Chevron, Icon, Segmented, Sheet, Spinner, useSheetClose } from './ui.jsx'
 
 const r1 = (n) => Math.round(n * 10) / 10
 const INTENSITY = [
@@ -24,7 +24,9 @@ export function workoutDetail(w, units) {
     return [`${Math.round(w.duration_min)} min`, speed, incline].filter(Boolean).join(' · ')
   }
   const a = HOME_ACTIVITIES[w.activity]
-  return [`${Math.round(w.duration_min)} min`, a?.label, w.intensity].filter(Boolean).join(' · ')
+  // "Bodyweight circuit · 30 min · Bodyweight circuit" said the type twice.
+  const type = a && a.label.toLowerCase() !== String(w.name || '').trim().toLowerCase() ? a.label : null
+  return [`${Math.round(w.duration_min)} min`, type, w.intensity].filter(Boolean).join(' · ')
 }
 
 const workoutLook = (w) =>
@@ -52,7 +54,7 @@ function WorkoutRow({ w, units, onEdit, showDate }) {
 }
 
 /** The day's workouts plus an Add button (in the Workouts sheet). */
-function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
+function ExerciseCard({ workouts, error, onAdd, onEdit, allowance, isToday }) {
   const { units } = useApp()
   const burned = workouts.reduce((s, w) => s + (Number(w.calories_burned) || 0), 0)
   return (
@@ -73,7 +75,7 @@ function ExerciseCard({ workouts, error, onAdd, onEdit, allowance }) {
       {burned > 0 && (
         <div className="list-footer">
           {allowance > 0
-            ? `${allowance} kcal added to today's food target (Settings → Exercise calories).`
+            ? `${allowance} kcal added to ${isToday ? 'today’s' : 'that day’s'} food target (Settings → Exercise calories).`
             : 'Not added to your food target: your activity level already allows for training.'}
         </div>
       )}
@@ -140,7 +142,7 @@ export function WorkoutsSheet({ date, onClose }) {
 
   return (
     <Sheet title={`Workouts${isToday ? '' : ` · ${formatDayLabel(date, today)}`}`} onClose={onClose}>
-      <ExerciseCard workouts={workouts} error={day?.workoutError} allowance={allowance} onAdd={() => openSheet('workout', { date })} onEdit={edit} />
+      <ExerciseCard workouts={workouts} error={day?.workoutError} allowance={allowance} isToday={isToday} onAdd={() => openSheet('workout', { date })} onEdit={edit} />
 
       {last && (
         <button type="button" className="repeat-card" disabled={repeating} onClick={repeat} style={{ '--c': workoutLook(last).color }}>
@@ -165,9 +167,7 @@ export function WorkoutsSheet({ date, onClose }) {
             Browse {WORKOUT_CHOICES.length} workout types
             <span className="sub">Cycling, swimming, dance, cricket, tennis…</span>
           </span>
-          <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
-            <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Chevron />
         </button>
         <button className="list-row has-icon" onClick={() => openSheet('appleImport')}>
           <span className="row-icon fitness-icon" aria-hidden="true">
@@ -177,9 +177,7 @@ export function WorkoutsSheet({ date, onClose }) {
             Import from Apple Fitness
             <span className="sub">Search your Health export and pick workouts</span>
           </span>
-          <svg className="chev" viewBox="0 0 8 14" aria-hidden="true">
-            <path d="M1 1l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <Chevron />
         </button>
       </div>
 
@@ -298,6 +296,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
   const { store, units, currentWeightKg, profile, bumpData, toast, today, openSheet } = useApp()
   const [f, setF] = useState(() => (workout ? fromWorkout(workout, units) : fromPreset(preset)))
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e?.target ? e.target.value : e }))
   const imperial = units === 'imperial'
   const weightKg = currentWeightKg || Number(profile.start_weight_kg)
@@ -393,7 +392,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
       await fn()
       bumpData()
       toast(msg, 'info', action)
-      onClose()
+      dismiss()
     } catch (e) {
       toast(e.message, 'error')
       setBusy(false)
@@ -417,8 +416,8 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
     label: 'Undo',
     run: async () => {
       try {
-        // Imported workouts keep their id, so a later import still knows them.
-        await (workout.source === 'apple' ? store.importWorkouts([workout]) : store.addWorkout(workout))
+        // Back with its own id (a later Apple import still knows it) and in its old place.
+        await store.restoreWorkout(workout)
         bumpData()
       } catch (e) {
         toast(e.message, 'error')
@@ -427,7 +426,7 @@ export function WorkoutSheet({ date, workout, preset, onClose }) {
   }
 
   return (
-    <Sheet title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
+    <Sheet ref={sheetRef} title={`${workout ? 'Edit' : 'Log'} workout · ${formatDayLabel(date, today)}`} onClose={onClose}>
       {!workout && (
         <div className="mb-3">
           <Segmented

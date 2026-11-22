@@ -95,3 +95,21 @@ test('badges: earned, progress and dates', () => {
   assert.equal(by.halfway.earned, false)
   assert.deepEqual(newBadges(badges, ['weigh-1', 'streak-3']).map((b) => b.id).sort(), ['step-1', 'streak-7', 'workout-1'])
 })
+
+test('streak badges forgive a rest day a week, like the Dashboard streak', () => {
+  // 1–5 Oct logged, 6th missed, 7–12 logged: one 11-day streak, not 5 then 6.
+  const dates = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-11', '2026-10-12']
+  assert.equal(longestStreak(dates), 6)
+  assert.equal(longestStreak(dates, 7), 11)
+  assert.equal(streakReachedOn(dates, 7, 7), '2026-10-08')
+  // Two misses within a week: the second one ends it.
+  assert.equal(longestStreak(['2026-10-01', '2026-10-03', '2026-10-05', '2026-10-06'], 7), 3)
+  // Two missed in a row never count.
+  assert.equal(longestStreak(['2026-10-01', '2026-10-02', '2026-10-05'], 7), 2)
+
+  const daily = Object.fromEntries(dates.map((d) => [d, { calories: 1800, protein: 50 }]))
+  const by = Object.fromEntries(computeBadges({ daily, today: '2026-10-12' }).map((b) => [b.id, b]))
+  assert.equal(by['streak-7'].earned, true)
+  assert.equal(by['streak-7'].earnedOn, '2026-10-08')
+  assert.equal(by['streak-30'].value, 11)
+})

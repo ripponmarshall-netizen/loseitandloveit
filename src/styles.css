@@ -744,7 +744,8 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 /* The sheet's contents follow it up, a beat behind */
 .sheet > :not(.sheet-top) { animation: sheet-content-in 0.45s var(--spring) 0.06s backwards; }
 @keyframes sheet-content-in { from { opacity: 0; transform: translateY(14px); } }
-.sheet-backdrop.closing { animation: fade-out 0.28s var(--ease) both; }
+/* On its way out, a sheet no longer catches taps: the next one lands straight away. */
+.sheet-backdrop.closing { animation: fade-out 0.28s var(--ease) both; pointer-events: none; }
 .sheet-backdrop.closing .sheet { animation: sheet-down 0.28s var(--ease) both; }
 /* Flicked away: the finger's spring carries the sheet off (no canned slide, no fade) */
 .sheet-backdrop.flung { animation: none; background-color: transparent; transition: background-color 0.35s var(--ease); }
@@ -777,6 +778,10 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 .amount-total .figure { line-height: 44px; } /* same height as the stepper, so the labels line up */
 .amount-total .field-label { margin-right: 0; }
 .grams-field { width: 110px; }
+
+/* A dose already logged that day: say so before a second one is added */
+.dose-dupe { --c: var(--orange); display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.dose-dupe .btn { flex: none; }
 
 /* AI estimate: one card per item; unticked items fade back */
 .ai-item { transition: opacity var(--dur-fast) var(--ease); }

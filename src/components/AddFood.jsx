@@ -6,7 +6,7 @@ import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods } from '
 import { formatDayLabel } from '../lib/dates.js'
 import { kcalLooksWrong, validServings } from '../lib/calc.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
-import { CountUp, Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking } from './ui.jsx'
+import { CountUp, Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking, useSheetClose } from './ui.jsx'
 
 const MEAL_OPTS = MEALS.map((m) => [m, MEAL_LABEL[m]])
 const SOURCE_BADGE = {
@@ -31,10 +31,11 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, quer
   const aiFirst = mode === 'cloud' && !drinks
   const [tab, setTab] = useState(initialTab || (aiFirst ? 'ai' : 'search'))
   const [aiText, setAiText] = useState(aiFirst ? query : '')
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const day = formatDayLabel(date, today)
 
   return (
-    <Sheet tall title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
+    <Sheet ref={sheetRef} tall title={`${drinks ? 'Add a drink' : 'Add food'}${day === 'Today' ? '' : ` · ${day}`}`} onClose={onClose}>
       <div className="stack mb-4">
         <Segmented label="Meal" value={meal} onChange={setMeal} options={MEAL_OPTS} />
         <div className="mode-tabs" role="tablist" aria-label="How to add">
@@ -55,15 +56,15 @@ export default function AddFood({ date, meal: initialMeal, tab: initialTab, quer
           meal={meal}
           initialQuery={query}
           drinks={drinks}
-          onDone={onClose}
+          onDone={dismiss}
           onAskAi={(q) => {
             setAiText(q)
             setTab('ai')
           }}
         />
       )}
-      {tab === 'ai' && <AiTab date={date} meal={meal} onDone={onClose} initialText={aiText} />}
-      {tab === 'quick' && <QuickTab date={date} meal={meal} onDone={onClose} />}
+      {tab === 'ai' && <AiTab date={date} meal={meal} onDone={dismiss} initialText={aiText} />}
+      {tab === 'quick' && <QuickTab date={date} meal={meal} onDone={dismiss} />}
     </Sheet>
   )
 }
@@ -90,13 +91,15 @@ function useAdd(onDone) {
 
 // ---------------------------------------------------------------- search
 
-function FoodRow({ food, onPick, i = 0 }) {
+/** One food in a list. `badge`: show where it's from (lists that mix sources; elsewhere the section header says it). */
+function FoodRow({ food, onPick, i = 0, badge = false }) {
   return (
     <button className="list-row rise" style={{ '--i': Math.min(i, 10) }} onClick={() => onPick(food)}>
       <span className="label">
         <span className="ellipsis d-block">{food.name}</span>
         <span className="sub ellipsis">
-          <Badge food={food} /> {food.serving || '1 serving'}
+          {badge && <><Badge food={food} />{' '}</>}
+          {food.serving || '1 serving'}
         </span>
       </span>
       <span className="entry-kcal">{Math.round(food.calories)}</span>
@@ -235,7 +238,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
           {online.results.length > 0 && (
             <div className="list">
               {online.results.map((f, i) => (
-                <FoodRow key={f.id} food={f} i={i} onPick={setPicked} />
+                <FoodRow key={f.id} food={f} i={i} onPick={setPicked} badge />
               ))}
             </div>
           )}

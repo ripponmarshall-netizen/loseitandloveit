@@ -95,7 +95,7 @@ const GRANULARITY = [
 ]
 const COUNT = { day: 30, week: 12, month: 12 }
 
-// Progress is split into four short views instead of one long page.
+// Progress is split into five short views instead of one long page.
 const VIEWS = [
   ['weight', 'Weight'],
   ['food', 'Food'],
@@ -187,9 +187,9 @@ export default function Progress() {
     () =>
       computeBadges({
         weights, daily, workouts, targets, milestones: ms, startKg, goalKg, currentKg: last?.trend,
-        stepLabel: units === 'imperial' ? '5 lb' : '2 kg',
+        stepLabel: units === 'imperial' ? '5 lb' : '2 kg', today,
       }),
-    [weights, daily, workouts, targets, ms, startKg, goalKg, last?.trend, units],
+    [weights, daily, workouts, targets, ms, startKg, goalKg, last?.trend, units, today],
   )
   const recentWorkouts = useMemo(() => workouts.filter((w) => w.log_date >= addDays(today, -27)), [workouts, today])
   const celebration = useNewBadges(badges, loaded.food && loaded.workouts, session?.user?.id)
@@ -861,14 +861,16 @@ const MACRO_SERIES = [
 function MacroMix({ daily }) {
   const { today, targets } = useApp()
   const weeks = useMemo(() => macroShareByWeek(daily, today, 8), [daily, today])
-  if (!weeks.some((w) => w.days)) return null
+  // A week of calorie-only quick adds has days but no macros to split.
+  const hasSplit = (w) => w.days && w.protein != null
+  if (!weeks.some(hasSplit)) return null
   const columns = weeks.map((w) => ({
     key: w.start,
     label: formatShortDate(w.start),
     long: `Week of ${formatShortDate(w.start)} · ${w.days} day${w.days === 1 ? '' : 's'}`,
-    parts: w.days ? [w.protein, w.carbs, w.fat] : null,
+    parts: hasSplit(w) ? [w.protein, w.carbs, w.fat] : null,
   }))
-  const latest = [...weeks].reverse().find((w) => w.days)
+  const latest = [...weeks].reverse().find(hasSplit)
   const aim = targets?.protein ? wholePercents([targets.protein * 4, targets.carbs * 4, targets.fat * 9]) : null
   return (
     <section className="card">
@@ -969,6 +971,8 @@ function WeekdayRhythm({ daily, loaded }) {
   const target = targets?.calories || null
   const hi = have.reduce((m, d) => (d.avg > m.avg ? d : m), have[0])
   const lo = have.reduce((m, d) => (d.avg < m.avg ? d : m), have[0])
+  // Under ~100 kcal apart is noise, not a pattern worth naming.
+  const steady = hi.avg - lo.avg < 100
   const avgOf = (list) => (list.length ? list.reduce((s, d) => s + d.avg * d.n, 0) / list.reduce((s, d) => s + d.n, 0) : null)
   const weekend = avgOf(have.filter((d) => d.dow >= 5))
   const weekday = avgOf(have.filter((d) => d.dow < 5))
@@ -978,9 +982,9 @@ function WeekdayRhythm({ daily, loaded }) {
   return (
     <section className="card">
       <CardHeader title="Your week’s rhythm" note="12 weeks"
-        sub={<>{hi.dow !== lo.dow
-          ? `${DAY_NAMES[hi.dow]}s are your biggest day, about ${fmtN(hi.avg - lo.avg)} kcal more than ${DAY_NAMES[lo.dow]}s.`
-          : 'Average calories for each day of the week.'}</>}
+        sub={<>{steady
+          ? 'You eat about the same every day of the week. Steady is good.'
+          : `${DAY_NAMES[hi.dow]}s are your biggest day, about ${fmtN(hi.avg - lo.avg)} kcal more than ${DAY_NAMES[lo.dow]}s.`}</>}
       />
       <TrendChart
         bars

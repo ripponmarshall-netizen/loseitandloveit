@@ -17,7 +17,7 @@ import {
   TargetPreview,
   useProfileForm,
 } from './ProfileForm.jsx'
-import { Avatar, Icon, ListRow, ListSection, MenuRow, PageHeader, Segmented, Sheet, ToggleRow } from './ui.jsx'
+import { Avatar, Icon, ListRow, ListSection, MenuRow, PageHeader, Segmented, Sheet, ToggleRow, useSheetClose } from './ui.jsx'
 import { photoToAvatar } from '../lib/image.js'
 import { FREQUENCY_LABEL } from '../data/glp1.js'
 import { formatDose, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
@@ -412,6 +412,7 @@ function ProfileSheet({ title, groups, children, onClose }) {
   const form = useProfileForm(profile)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
 
   async function save(e) {
     e.preventDefault()
@@ -433,7 +434,7 @@ function ProfileSheet({ title, groups, children, onClose }) {
         await reloadWeights()
       }
       toast(syncFirst ? `Saved. Your first weigh-in (${formatShortDate(first.log_date)}) was updated too.` : 'Saved')
-      onClose()
+      dismiss()
     } catch (ex) {
       setErr(ex.message)
       setBusy(false)
@@ -441,7 +442,7 @@ function ProfileSheet({ title, groups, children, onClose }) {
   }
 
   return (
-    <Sheet title={title} onClose={onClose}>
+    <Sheet ref={sheetRef} title={title} onClose={onClose}>
       <form onSubmit={save}>
         {children(form)}
         {err && (
@@ -459,6 +460,7 @@ function ChangePassword({ onClose }) {
   const { toast } = useApp()
   const [pw, setPw] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   async function save(e) {
     e.preventDefault()
     setBusy(true)
@@ -466,14 +468,14 @@ function ChangePassword({ onClose }) {
       const { error } = await supabase.auth.updateUser({ password: pw })
       if (error) throw error
       toast('Password updated')
-      onClose()
+      dismiss()
     } catch (err) {
       toast(err.message || 'Could not change the password', 'error')
       setBusy(false)
     }
   }
   return (
-    <Sheet title="Change password" onClose={onClose}>
+    <Sheet ref={sheetRef} title="Change password" onClose={onClose}>
       <form onSubmit={save}>
         <label className="field">
           <span>New password</span>
@@ -490,6 +492,7 @@ function PhotoSheet({ name, onClose }) {
   const { profile, saveProfile, toast } = useApp()
   const [preview, setPreview] = useState(profile.avatar || null)
   const [busy, setBusy] = useState(false)
+  const [sheetRef, dismiss] = useSheetClose(onClose)
   const fileRef = useRef()
 
   async function pick(e) {
@@ -508,7 +511,7 @@ function PhotoSheet({ name, onClose }) {
     try {
       await saveProfile({ ...profile, avatar })
       toast(avatar ? 'Photo saved' : 'Photo removed')
-      onClose()
+      dismiss()
     } catch (err) {
       toast(err.message, 'error')
       setBusy(false)
@@ -517,7 +520,7 @@ function PhotoSheet({ name, onClose }) {
 
   const changed = preview !== (profile.avatar || null)
   return (
-    <Sheet title="Profile photo" onClose={onClose}>
+    <Sheet ref={sheetRef} title="Profile photo" onClose={onClose}>
       <div className="photo-hero">
         <Avatar profile={{ ...profile, avatar: preview }} name={name} size={144} />
       </div>
