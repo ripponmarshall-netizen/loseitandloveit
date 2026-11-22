@@ -30,6 +30,8 @@ export const PROFILE_FIELDS = [
 //             error (sync names it instead of a raw database message)
 //   recent:  only the newest N rows are kept on the device
 //   migration: the file to run if the table is missing
+//   quiet:   diagnostics, not the user's log: a row the server refuses is
+//            dropped without an error message
 export const TABLES = {
   foods: { remote: 'foods', cols: ['id', 'name', 'serving', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'created_at'] },
   entries: {
@@ -54,7 +56,8 @@ export const TABLES = {
   },
   daily_logs: {
     remote: 'daily_logs',
-    cols: ['id', 'log_date', 'mood', 'energy', 'appetite', 'water_ml', 'symptoms', 'note', 'updated_at'],
+    // sleep_min, steps: 0009 (from Apple Health)
+    cols: ['id', 'log_date', 'mood', 'energy', 'appetite', 'water_ml', 'symptoms', 'note', 'sleep_min', 'steps', 'updated_at'],
     dated: true,
     perDay: true,
     migration: 'supabase/migrations/0003_glp1_checkins.sql',
@@ -73,10 +76,19 @@ export const TABLES = {
     recent: 30,
     migration: 'supabase/migrations/0004_avatar_mimi_checkins.sql',
   },
+  // Searches that found nothing and AI estimates changed before logging: what
+  // the built-in food list is missing.
+  food_feedback: {
+    remote: 'food_feedback',
+    cols: ['id', 'kind', 'query', 'picked', 'name', 'serving', 'est_kcal', 'est_protein_g', 'est_carbs_g', 'est_fat_g', 'kcal', 'protein_g', 'carbs_g', 'fat_g', 'created_at'],
+    recent: 300,
+    migration: 'supabase/migrations/0009_sleep_steps_food_feedback.sql',
+    quiet: true,
+  },
 }
 export const TABLE_NAMES = Object.keys(TABLES)
 
-export const emptyDb = () => ({ profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], mood_logs: [], coach_messages: [], insights: [] })
+export const emptyDb = () => ({ profile: null, entries: [], foods: [], weights: [], workouts: [], doses: [], daily_logs: [], mood_logs: [], coach_messages: [], insights: [], food_feedback: [] })
 
 // ---------- cleaning: the same rules the database enforces ----------
 
@@ -161,8 +173,36 @@ function cleanDaily(patch) {
   if ('water_ml' in patch) out.water_ml = Math.max(0, Math.min(15000, Math.round(Number(patch.water_ml) || 0)))
   if ('symptoms' in patch) out.symptoms = [...new Set((patch.symptoms || []).map((x) => String(x).slice(0, 40)))].slice(0, 20)
   if ('note' in patch) out.note = patch.note ? String(patch.note).slice(0, 1000) : null
+  // From Apple Health: null when there's no figure for the day.
+  if ('sleep_min' in patch) out.sleep_min = patch.sleep_min == null || patch.sleep_min === '' ? null : Math.max(0, Math.min(1440, Math.round(Number(patch.sleep_min) || 0)))
+  if ('steps' in patch) out.steps = patch.steps == null || patch.steps === '' ? null : Math.max(0, Math.min(200000, Math.round(Number(patch.steps) || 0)))
   return out
 }
+
+const FEEDBACK_KINDS = new Set(['search_miss', 'ai_correction'])
+const text200 = (v) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, 200))
+const optKcal = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : kcal(v))
+const optG = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : pos(v))
+
+function cleanFeedback(f) {
+  if (!FEEDBACK_KINDS.has(f.kind)) throw new Error('Unknown feedback')
+  return {
+    kind: f.kind,
+    query: text200(f.query),
+    picked: text200(f.picked),
+    name: text200(f.name),
+    serving: text200(f.serving),
+    est_kcal: optKcal(f.est_kcal),
+    est_protein_g: optG(f.est_protein_g),
+    est_carbs_g: optG(f.est_carbs_g),
+    est_fat_g: optG(f.est_fat_g),
+    kcal: optKcal(f.kcal),
+    protein_g: optG(f.protein_g),
+    carbs_g: optG(f.carbs_g),
+    fat_g: optG(f.fat_g),
+  }
+}
+const sameWords = (a, b) => String(a || '').trim().toLowerCase().replace(/\s+/g, ' ') === String(b || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 function cleanInsight(i) {
   return {
@@ -551,6 +591,28 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       save()
       return copy(row)
     },
+    /**
+     * Sleep and steps for many days at once (an Apple Health import), saved
+     * once. Only the figures given are changed, so a day's water and mood
+     * stay as they are, and importing the same export again changes nothing.
+     * days: [{ log_date, sleep_min?, steps? }]. Returns how many days changed.
+     */
+    async saveDailyHealth(days) {
+      let changed = 0
+      for (const d of days || []) {
+        if (!d || !isDate(d.log_date)) continue
+        const patch = {}
+        if (d.sleep_min != null) patch.sleep_min = d.sleep_min
+        if (d.steps != null) patch.steps = d.steps
+        const clean = cleanDaily(patch)
+        const have = db.daily_logs.find((l) => l.log_date === d.log_date)
+        if (!Object.keys(clean).length || (have && Object.entries(clean).every(([k, v]) => have[k] === v))) continue
+        upsertDaily(d.log_date, clean)
+        changed++
+      }
+      if (changed) save()
+      return changed
+    },
 
     // Mood check-ins: as many a day as you like. The day's daily_logs row
     // keeps the latest mood and energy, which is what the rest of the app reads.
@@ -623,6 +685,34 @@ export function createEngine({ initial, persist, onWrite = () => {}, profileId =
       row.dismissed = true
       wrote('insights', 'upsert', id)
       save()
+    },
+
+    // What the food list is missing (see TABLES.food_feedback).
+    async listFoodFeedback(limit = 300) {
+      return [...db.food_feedback].sort((a, b) => byCreated(b, a)).slice(0, limit).map(copy)
+    },
+    /**
+     * Note a missed search or a corrected AI estimate. The same search twice in
+     * a day is noted once (the online pick, if any, is added to it).
+     */
+    async logFoodFeedback(input) {
+      const clean = cleanFeedback(input)
+      const at = now()
+      if (clean.kind === 'search_miss') {
+        const same = db.food_feedback.find((f) => f.kind === 'search_miss' && sameWords(f.query, clean.query) && String(f.created_at).slice(0, 10) === at.slice(0, 10))
+        if (same) {
+          if (!clean.picked || same.picked === clean.picked) return copy(same)
+          same.picked = clean.picked
+          wrote('food_feedback', 'upsert', same.id)
+          save()
+          return copy(same)
+        }
+      }
+      const row = { ...clean, id: newId(), created_at: at }
+      db.food_feedback = [...db.food_feedback, row].sort(byCreated).slice(-300)
+      wrote('food_feedback', 'upsert', row.id)
+      save()
+      return copy(row)
     },
 
     async getAiUsage() {

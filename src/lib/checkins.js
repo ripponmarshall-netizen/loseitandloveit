@@ -59,6 +59,8 @@ export function buildCheckinContext({
   weeklyChangeKg = null,
   glp1 = null,
   previous = null,
+  patterns = [],
+  health = null,
 }) {
   const t = sumEntries(entries)
   const byMeal = {}
@@ -95,5 +97,8 @@ export function buildCheckinContext({
     glp1: glp1 || undefined,
     coach_notes: profile.coach_notes ? String(profile.coach_notes).slice(0, 300) : undefined,
     previous_checkin: previous ? { headline: previous.headline, tips: (previous.tips || []).map((x) => x.text) } : undefined,
+    // Worked out by the app (lib/findings.js) with minimum sample sizes: real, but optional to mention.
+    patterns: patterns.length ? patterns.slice(0, 2) : undefined,
+    sleep_and_steps: health || undefined,
   }
 }

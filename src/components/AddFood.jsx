@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { estimateMeal, photoToBase64, searchFoodDatabases } from '../lib/ai.js'
-import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods } from '../lib/foodSearch.js'
+import { buildRefs, correctionRefs, dbItemToFood, gramsToServings, isBarcode, isCorrection, rankFoods } from '../lib/foodSearch.js'
 import { formatDayLabel } from '../lib/dates.js'
 import { kcalLooksWrong, validServings } from '../lib/calc.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
@@ -179,6 +179,17 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
   }, [q, recent, mine, showAll, drinks])
   const localCount = sections.reduce((s, [, l]) => s + l.length, 0)
 
+  // A search the app's own lists couldn't answer, noted when the search is
+  // left (not on every keystroke): what the food list should add next.
+  const typed = q.trim()
+  const miss = useRef(null)
+  miss.current = typed.length >= 3 && !isBarcode(typed) && localCount === 0 && !online.loading ? typed : null
+  useEffect(() => () => miss.current && store.logFoodFeedback({ kind: 'search_miss', query: miss.current }).catch(() => {}), [store])
+  const pickOnline = (f) => {
+    if (miss.current) store.logFoodFeedback({ kind: 'search_miss', query: miss.current, picked: f.name }).catch(() => {})
+    setPicked(f)
+  }
+
   if (picked) {
     return (
       <ServingPicker
@@ -238,7 +249,7 @@ function SearchTab({ date, meal, onDone, onAskAi, initialQuery = '', drinks = fa
           {online.results.length > 0 && (
             <div className="list">
               {online.results.map((f, i) => (
-                <FoodRow key={f.id} food={f} i={i} onPick={setPicked} badge />
+                <FoodRow key={f.id} food={f} i={i} onPick={pickOnline} badge />
               ))}
             </div>
           )}
@@ -409,8 +420,12 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
   const fileRef = useRef()
   const { add, busy } = useAdd(onDone)
 
+  // Her saved foods, and AI estimates she corrected before: the AI checks both first.
   useEffect(() => {
-    if (mode === 'cloud') store.listFoods().then(setMine).catch(() => {})
+    if (mode !== 'cloud') return
+    Promise.all([store.listFoods(), store.listFoodFeedback().catch(() => [])])
+      .then(([foods, feedback]) => setMine([...correctionRefs(feedback), ...foods]))
+      .catch(() => {})
   }, [store, mode])
 
   useEffect(() => {
@@ -464,6 +479,8 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
           fat_g: String(Math.round(it.fat_g)),
           confidence: it.confidence,
           reference: it.reference,
+          // What the AI said, to notice a correction when it's added.
+          orig: { name: it.name, calories: Math.round(it.calories), protein_g: Math.round(it.protein_g), carbs_g: Math.round(it.carbs_g), fat_g: Math.round(it.fat_g) },
         })),
       })
     } catch (err) {
@@ -490,6 +507,15 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
       fat_g: Number(it.fat_g) || 0,
       source: 'ai',
     }))
+    chosen.forEach((it, i) => {
+      if (!it.orig || !isCorrection(it.orig, entries[i])) return
+      const e = entries[i]
+      store.logFoodFeedback({
+        kind: 'ai_correction', query: text.trim() || null, name: e.name, serving: e.serving,
+        est_kcal: it.orig.calories, est_protein_g: it.orig.protein_g, est_carbs_g: it.orig.carbs_g, est_fat_g: it.orig.fat_g,
+        kcal: e.calories, protein_g: e.protein_g, carbs_g: e.carbs_g, fat_g: e.fat_g,
+      }).catch(() => {})
+    })
     add(entries, { saveFoods: saveToMine ? entries : [] })
   }
 

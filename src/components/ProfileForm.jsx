@@ -168,7 +168,7 @@ export function LifestyleFields({ form }) {
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
-        <small className="tiny muted">For night shifts: food eaten before this time counts toward the previous day.</small>
+        <small className="tiny muted">For late nights: food eaten before this time counts toward the previous day.</small>
       </label>
       <label className="field">
         <span>Exercise calories</span>
@@ -190,7 +190,7 @@ export function CoachNotesField({ form }) {
       <span>Notes for Mimi, your coach (optional)</span>
       <textarea
         className="input"
-        placeholder="e.g. Rotating 24h shifts. Gym 3×/week. Don't like fish. Bad knee."
+        placeholder="e.g. Busy mornings. Gym 3×/week. Don't like fish. Bad knee."
         value={form.f.coach_notes}
         onChange={form.set('coach_notes')}
         maxLength={2000}

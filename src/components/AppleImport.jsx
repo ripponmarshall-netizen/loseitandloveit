@@ -1,10 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { matchesWorkout, readAppleWorkouts } from '../lib/appleHealth.js'
+import { matchesWorkout, readAppleHealth } from '../lib/appleHealth.js'
 import { WORKOUT_GROUPS as GROUPS } from '../data/appleWorkouts.js'
 import { addDays } from '../lib/dates.js'
 import { workoutDetail } from './Workouts.jsx'
-import { Icon, Segmented, Sheet, useSheetClose } from './ui.jsx'
+import { Icon, Segmented, Sheet, Switch, useSheetClose } from './ui.jsx'
 
 const RANGES = [
   ['30', '30 days'],
@@ -20,9 +20,13 @@ const parse = (iso) => {
   return new Date(y, m - 1, d, 12)
 }
 
+// Sleep and steps from the last year: enough for Mimi to see patterns, small enough to sync.
+const HEALTH_DAYS = 365
+
 /**
  * Apple Fitness import. The Health app's export is read on the phone (never
- * uploaded); then search, filter and pick which workouts to add.
+ * uploaded); then search, filter and pick which workouts to add. Sleep and
+ * steps come in too, one figure a day, for Mimi to read.
  */
 export function AppleImportSheet({ onClose }) {
   const { store, profile, currentWeightKg, units, today, toast, bumpData, prefs, setPrefs } = useApp()
@@ -30,6 +34,8 @@ export function AppleImportSheet({ onClose }) {
   const [progress, setProgress] = useState({ p: 0, n: 0 })
   const [error, setError] = useState(null)
   const [found, setFound] = useState([])
+  const [days, setDays] = useState([]) // sleep and steps, one row a day
+  const [withHealth, setWithHealth] = useState(true)
   const [have, setHave] = useState(() => new Set())
   const [picked, setPicked] = useState(() => new Set())
   const [query, setQuery] = useState('')
@@ -48,7 +54,7 @@ export function AppleImportSheet({ onClose }) {
     setProgress({ p: 0, n: 0 })
     let last = 0
     try {
-      const list = await readAppleWorkouts(file, {
+      const { workouts: list, days: health } = await readAppleHealth(file, {
         dayStartHour: profile.day_start_hour ?? 0,
         weightKg: currentWeightKg || Number(profile.start_weight_kg) || null,
         onProgress: (p, n) => {
@@ -61,6 +67,9 @@ export function AppleImportSheet({ onClose }) {
         },
       })
       const recent = list.filter((w) => w.log_date <= today)
+      const from = addDays(today, -(HEALTH_DAYS - 1))
+      const healthRecent = health.filter((d) => d.log_date >= from && d.log_date <= today)
+      setDays(healthRecent)
       const oldest = recent[recent.length - 1]?.log_date
       const existing = oldest ? await store.listWorkouts(oldest, today) : []
       const ids = new Set(existing.map((w) => w.id))
@@ -70,7 +79,7 @@ export function AppleImportSheet({ onClose }) {
       setHave(ids)
       setFound(recent)
       setPhase('results')
-      if (!recent.length) setError('No workouts in that export.')
+      if (!recent.length && !healthRecent.length) setError('No workouts, sleep or steps in that export.')
     } catch (err) {
       setError(err.message || 'Couldn’t read that file.')
       setPhase('intro')
@@ -106,14 +115,20 @@ export function AppleImportSheet({ onClose }) {
       return n
     })
 
+  const healthOn = withHealth && days.length > 0
+  const sleepNights = days.filter((d) => d.sleep_min != null).length
+  const stepDays = days.filter((d) => d.steps != null).length
+
   async function add() {
-    if (!chosen.length) return
+    if (!chosen.length && !healthOn) return
     setBusy(true)
     try {
-      const { added } = await store.importWorkouts(chosen)
+      const { added } = chosen.length ? await store.importWorkouts(chosen) : { added: 0 }
+      const healthAdded = healthOn ? await store.saveDailyHealth(days) : 0
       setPrefs({ appleImportAt: Date.now(), appleLatest: found[0]?.log_date || prefs.appleLatest || null })
       bumpData()
-      toast(added ? `Added ${added} workout${added === 1 ? '' : 's'} from Apple Fitness` : 'Those were already added')
+      const parts = [added && `${added} workout${added === 1 ? '' : 's'}`, healthAdded && `sleep and steps for ${healthAdded} day${healthAdded === 1 ? '' : 's'}`].filter(Boolean)
+      toast(parts.length ? `Added ${parts.join(' and ')} from Apple Health` : 'That was all added already')
       dismiss()
     } catch (err) {
       toast(err.message, 'error')
@@ -153,7 +168,7 @@ export function AppleImportSheet({ onClose }) {
   }
 
   return (
-    <Sheet ref={sheetRef} title="Apple Fitness" onClose={onClose} tall={phase === 'results'}>
+    <Sheet ref={sheetRef} title="Apple Health" onClose={onClose} tall={phase === 'results'}>
       <input ref={fileRef} type="file" accept=".zip,.xml,application/zip,text/xml,application/xml" hidden onChange={onFile} />
 
       {phase === 'intro' && (
@@ -161,8 +176,8 @@ export function AppleImportSheet({ onClose }) {
           <div className="fit-hero">
             <span className="fit-hero-icon" aria-hidden="true"><Icon name="heart" size={28} strokeWidth={2.4} /></span>
             <div>
-              <div className="headline">Bring in your workouts</div>
-              <p className="small muted mt-1 mb-0">Walks, runs, strength, classes: with Apple’s own calories.</p>
+              <div className="headline">Bring in workouts, sleep and steps</div>
+              <p className="small muted mt-1 mb-0">Walks, runs, strength and classes with Apple’s own calories, plus a year of sleep and steps for Mimi.</p>
             </div>
           </div>
           <ol className="fit-steps">
@@ -175,7 +190,7 @@ export function AppleImportSheet({ onClose }) {
             Choose export.zip
           </button>
           <p className="list-footer mt-3">
-            Read on this phone and never uploaded. Only the workouts you pick are saved.
+            Read on this phone and never uploaded. Only the workouts you pick are saved, plus one sleep and one step figure a day if you leave that on.
             {prefs.appleImportAt ? ` Last import ${new Date(prefs.appleImportAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}; newer workouts will be ticked for you.` : ''}
           </p>
         </>
@@ -194,6 +209,22 @@ export function AppleImportSheet({ onClose }) {
 
       {phase === 'results' && (
         <>
+          {days.length > 0 && (
+            <div className="list mb-4">
+              <label className="list-row has-icon">
+                <span className="row-icon" style={{ '--c': 'var(--indigo)' }} aria-hidden="true">
+                  <Icon name="moon" strokeWidth={2.2} />
+                </span>
+                <span className="label">
+                  Add sleep and steps
+                  <span className="sub">{[sleepNights && `${sleepNights.toLocaleString('en-GB')} nights of sleep`, stepDays && `${stepDays.toLocaleString('en-GB')} days of steps`].filter(Boolean).join(' · ')}, last 12 months. Mimi uses them to spot patterns.</span>
+                </span>
+                <Switch checked={withHealth} onChange={setWithHealth} label="Add sleep and steps" />
+              </label>
+            </div>
+          )}
+          {found.length > 0 && (
+          <>
           <div className="search-field mb-3">
             <Icon name="search" />
             <input className="input" type="search" placeholder="Search: run, cycle, March, Saturday…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search workouts" />
@@ -224,11 +255,19 @@ export function AppleImportSheet({ onClose }) {
             <p className="list-footer">{error || 'Nothing matches. Try another word or a longer period.'}</p>
           )}
           {shown.length > SHOW_MAX && <p className="list-footer">Showing the newest {SHOW_MAX}. Search or narrow the period to see others.</p>}
+          </>
+          )}
+          {!found.length && error && <p className="list-footer">{error}</p>}
+          {!found.length && days.length > 0 && <p className="list-footer">No workouts in this export.</p>}
           <button type="button" className="link small mt-4" onClick={() => fileRef.current?.click()}>Choose a different file</button>
 
           <div className="fit-footer">
-            <button className="btn block" disabled={busy || !chosen.length} onClick={add}>
-              {chosen.length ? `Add ${chosen.length} workout${chosen.length === 1 ? '' : 's'} · ${chosenKcal.toLocaleString('en-GB')} kcal` : 'Tap workouts to add them'}
+            <button className="btn block" disabled={busy || (!chosen.length && !healthOn)} onClick={add}>
+              {chosen.length
+                ? `Add ${chosen.length} workout${chosen.length === 1 ? '' : 's'} · ${chosenKcal.toLocaleString('en-GB')} kcal${healthOn ? ' + sleep and steps' : ''}`
+                : healthOn
+                  ? 'Add sleep and steps'
+                  : found.length ? 'Tap workouts to add them' : 'Nothing to add'}
             </button>
           </div>
         </>

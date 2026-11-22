@@ -678,7 +678,7 @@ export const isLoggedDay = (totals) => (Number(totals?.calories) || 0) >= LOGGED
 
 /**
  * Days-logged streak that forgives one missed day in any 7 (a rest day), so a
- * night shift or a day off doesn't wipe out weeks of logging. Two missed days
+ * busy day or a day off doesn't wipe out weeks of logging. Two missed days
  * close together end it. Today never breaks it: until today is logged the
  * streak runs to yesterday and today is "pending" (and if yesterday was
  * missed, it is today's rest day: log today to keep the streak).

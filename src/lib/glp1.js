@@ -110,7 +110,7 @@ export function suggestSite(doses = [], order = ROTATION_ORDER) {
 
 /**
  * Daily water goal: ~30 ml per kg of body weight, 2–3.5 L, in 250 ml steps.
- * A rule of thumb: drink more in the heat, on shift and with vomiting or diarrhoea.
+ * A rule of thumb: drink more in the heat, when active and with vomiting or diarrhoea.
  */
 export function waterTargetMl(weightKg, override) {
   if (Number(override) > 0) return Math.round(Number(override))

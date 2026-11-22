@@ -1,4 +1,5 @@
-// Apple Fitness workouts, from the Health app's "Export All Health Data" file.
+// Apple Fitness workouts, sleep and steps, from the Health app's "Export All
+// Health Data" file.
 //
 // A web app can't read HealthKit, so the export is the way in: the Health app
 // writes export.zip (apple_health_export/export.xml inside). It is read here,
@@ -69,7 +70,7 @@ export function stableId(str) {
 /**
  * Parse one <Workout ...>...</Workout> block from export.xml into a workout
  * ready for store.importWorkouts, or null if it isn't usable.
- *   dayStartHour: a 2am workout after a night shift counts toward the day before
+ *   dayStartHour: a 2am workout counts toward the day before
  *   weightKg:     for an estimate when Health has no energy figure
  */
 export function parseWorkout(xml, { dayStartHour = 0, weightKg = null } = {}) {
@@ -131,41 +132,146 @@ export function parseWorkout(xml, { dayStartHour = 0, weightKg = null } = {}) {
   return { ...w, kind: 'other', activity: type.fallback, intensity: 'moderate' }
 }
 
+// ---------- sleep and steps ----------
+//
+// Health keeps them as <Record> elements, with `type` as the first attribute:
+//   <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" … startDate="2026-11-02 07:05:12 -0500" … value="412"/>
+//   <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Apple Watch" … startDate=… endDate=… value="HKCategoryValueSleepAnalysisAsleepCore">…</Record>
+// iPhone and Watch both record steps and sleep, and the Health app shows one
+// of them rather than the sum, so each day takes the source with the most.
+
+const STEP_TAG = '<Record type="HKQuantityTypeIdentifierStepCount"'
+const SLEEP_TAG = '<Record type="HKCategoryTypeIdentifierSleepAnalysis"'
+const attr = (tag, name) => {
+  const i = tag.indexOf(` ${name}="`)
+  if (i < 0) return ''
+  const from = i + name.length + 3
+  return tag.slice(from, tag.indexOf('"', from))
+}
+// "2026-11-02 23:10:00 -0500" -> epoch ms, and its wall-clock parts.
+const timeOf = (s) => Date.parse(String(s).replace(' ', 'T').replace(/ ([+-]\d{2})(\d{2})$/, '$1:$2'))
+const wall = (s) => s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
+const ASLEEP = /Asleep/ // Asleep, AsleepUnspecified, AsleepCore, AsleepDeep, AsleepREM (not InBed or Awake)
+
+/**
+ * Collects step and sleep records into one figure per day.
+ *   steps: summed per source on the day they started (before the day-start
+ *          hour counts to the day before, like everything else in the app)
+ *   sleep: minutes asleep that ended between 6 pm the evening before and
+ *          6 pm that day: "last night", plus any nap that day
+ */
+export function healthDays({ dayStartHour = 0 } = {}) {
+  const steps = new Map() // date -> Map(source -> count)
+  const sleep = new Map() // `${night}|${source}` -> [[start, end]]
+  const add = (map, key, source, v) => {
+    const bySource = map.get(key) || new Map()
+    bySource.set(source, (bySource.get(source) || 0) + v)
+    map.set(key, bySource)
+  }
+  return {
+    steps(tag) {
+      const w = wall(attr(tag, 'startDate'))
+      const v = Number(attr(tag, 'value'))
+      if (!w || !(v > 0)) return
+      const date = `${w[1]}-${w[2]}-${w[3]}`
+      add(steps, Number(w[4]) < dayStartHour ? addDays(date, -1) : date, attr(tag, 'sourceName'), v)
+    },
+    sleep(tag) {
+      if (!ASLEEP.test(attr(tag, 'value'))) return
+      const endText = attr(tag, 'endDate')
+      const start = timeOf(attr(tag, 'startDate'))
+      const end = timeOf(endText)
+      const w = wall(endText)
+      if (!w || !(end > start) || end - start > 16 * 3600e3) return
+      const night = new Date(Date.UTC(+w[1], +w[2] - 1, +w[3], +w[4] + 6, +w[5])).toISOString().slice(0, 10)
+      const key = `${night}|${attr(tag, 'sourceName')}`
+      if (!sleep.has(key)) sleep.set(key, [])
+      sleep.get(key).push([start, end])
+    },
+    /** [{ log_date, steps?, sleep_min? }] oldest first. */
+    days() {
+      const out = new Map()
+      const day = (d) => out.get(d) || out.set(d, { log_date: d }).get(d)
+      for (const [d, bySource] of steps) day(d).steps = Math.round(Math.max(...bySource.values()))
+      const perNight = new Map()
+      for (const [key, spans] of sleep) {
+        // Stages from one source can overlap (or repeat): count each minute once.
+        spans.sort((a, b) => a[0] - b[0])
+        let total = 0
+        let [s0, e0] = spans[0]
+        for (const [s1, e1] of spans.slice(1)) {
+          if (s1 <= e0) e0 = Math.max(e0, e1)
+          else {
+            total += e0 - s0
+            ;[s0, e0] = [s1, e1]
+          }
+        }
+        total += e0 - s0
+        const night = key.slice(0, 10)
+        perNight.set(night, Math.max(perNight.get(night) || 0, total))
+      }
+      for (const [d, msAsleep] of perNight) day(d).sleep_min = Math.min(1440, Math.round(msAsleep / 60000))
+      return [...out.values()].sort((a, b) => (a.log_date < b.log_date ? -1 : 1))
+    },
+  }
+}
+
 // ---------- streaming the file ----------
 
 /**
- * Pull every <Workout> out of a stream of text chunks (export.xml is mostly
- * other records; workouts are a tiny part of it).
+ * Pull workouts, step counts and sleep out of a stream of text chunks. Only
+ * the kinds with a handler are looked for. export.xml is mostly other
+ * records, so the scan jumps from match to match and never re-reads text.
  * @param {AsyncIterable<string>} chunks
- * @param {(xml:string)=>void} onWorkout
+ * @param {{ workout?:(xml:string)=>void, steps?:(tag:string)=>void, sleep?:(tag:string)=>void }} on
+ * @returns {Promise<number>} how many elements were handed over
  */
-export async function scanWorkouts(chunks, onWorkout) {
+export async function scanHealth(chunks, on) {
+  const kinds = [
+    ['<Workout ', '</Workout>', on.workout, false],
+    [STEP_TAG, '</Record>', on.steps, true],
+    [SLEEP_TAG, '</Record>', on.sleep, true],
+  ].filter((k) => k[2])
+  const keep = Math.max(...kinds.map((k) => k[0].length)) - 1 // a tag split across chunks
   let buf = ''
   let n = 0
   for await (const chunk of chunks) {
     buf += chunk
+    const next = kinds.map(([open]) => buf.indexOf(open))
+    let rest = null // where an element that isn't complete yet starts
+    let done = 0
     for (;;) {
-      const i = buf.indexOf('<Workout ')
-      if (i < 0) {
-        buf = buf.slice(-9) // a tag split across chunks
+      let k = -1
+      for (let i = 0; i < kinds.length; i++) if (next[i] >= 0 && (k < 0 || next[i] < next[k])) k = i
+      if (k < 0) break
+      const [, close, handle, tagOnly] = kinds[k]
+      const start = next[k]
+      const gt = buf.indexOf('>', start)
+      let end = -1
+      if (gt >= 0) {
+        if (buf[gt - 1] === '/') end = gt + 1
+        else {
+          const c = buf.indexOf(close, gt)
+          if (c >= 0) end = c + close.length
+        }
+      }
+      if (end < 0) {
+        rest = start
         break
       }
-      if (i > 0) buf = buf.slice(i)
-      const gt = buf.indexOf('>')
-      if (gt < 0) break
-      let end
-      if (buf[gt - 1] === '/') end = gt + 1
-      else {
-        const close = buf.indexOf('</Workout>', gt)
-        if (close < 0) break
-        end = close + 10
-      }
-      onWorkout(buf.slice(0, end))
+      handle(tagOnly ? buf.slice(start, gt + 1) : buf.slice(start, end))
       n++
-      buf = buf.slice(end)
+      done = end
+      for (let i = 0; i < kinds.length; i++) if (next[i] >= 0 && next[i] < end) next[i] = buf.indexOf(kinds[i][0], end)
     }
+    buf = rest != null ? buf.slice(rest) : buf.slice(Math.max(done, buf.length - keep))
   }
   return n
+}
+
+/** Pull every <Workout> out of a stream of text chunks. */
+export function scanWorkouts(chunks, onWorkout) {
+  return scanHealth(chunks, { workout: onWorkout })
 }
 
 async function* textChunks(stream) {
@@ -259,13 +365,14 @@ async function findZipEntry(blob, test) {
 }
 
 /**
- * Read workouts from export.zip (or an unzipped export.xml).
+ * Read workouts, sleep and steps from export.zip (or an unzipped export.xml).
  * @param {Blob} file
- * @param {{ dayStartHour?:number, weightKg?:number, onProgress?:(fraction:number, found:number)=>void }} [opts]
- * @returns {Promise<object[]>} newest first
+ * @param {{ dayStartHour?:number, weightKg?:number, health?:boolean, onProgress?:(fraction:number, found:number)=>void }} [opts]
+ * @returns {Promise<{ workouts: object[], days: object[] }>} workouts newest first; days ({ log_date, steps?, sleep_min? }) oldest first
  */
-export async function readAppleWorkouts(file, { dayStartHour = 0, weightKg = null, onProgress } = {}) {
+export async function readAppleHealth(file, { dayStartHour = 0, weightKg = null, health = true, onProgress } = {}) {
   const found = []
+  const daily = health ? healthDays({ dayStartHour }) : null
   let bytes = file
   let total = file.size
   let stream
@@ -282,11 +389,12 @@ export async function readAppleWorkouts(file, { dayStartHour = 0, weightKg = nul
   } else {
     stream = bytes.stream().pipeThrough(counter((b) => onProgress?.(b / total, found.length)))
   }
-  let blocks = 0
-  await scanWorkouts(textChunks(stream), (xml) => {
-    blocks++
-    const w = parseWorkout(xml, { dayStartHour, weightKg })
-    if (w) found.push(w)
+  const blocks = await scanHealth(textChunks(stream), {
+    workout: (xml) => {
+      const w = parseWorkout(xml, { dayStartHour, weightKg })
+      if (w) found.push(w)
+    },
+    ...(daily && { steps: daily.steps, sleep: daily.sleep }),
   })
   if (!blocks && !isZip && !/<HealthData|<!DOCTYPE HealthData/i.test(await file.slice(0, 4096).text())) {
     throw new Error('That doesn’t look like a Health export. Choose export.zip or export.xml.')
@@ -295,7 +403,12 @@ export async function readAppleWorkouts(file, { dayStartHour = 0, weightKg = nul
   // One workout recorded by both iPhone and Watch has the same start and type: keep one.
   const byId = new Map()
   for (const w of found) if (!byId.has(w.id) || w.calories_burned > byId.get(w.id).calories_burned) byId.set(w.id, w)
-  return [...byId.values()].sort((x, y) => (x.started_at < y.started_at ? 1 : -1))
+  return { workouts: [...byId.values()].sort((x, y) => (x.started_at < y.started_at ? 1 : -1)), days: daily ? daily.days() : [] }
+}
+
+/** Workouts only, newest first. */
+export async function readAppleWorkouts(file, opts = {}) {
+  return (await readAppleHealth(file, { ...opts, health: false })).workouts
 }
 
 /** Free-text search over imported workouts: name, type, month, weekday, source. */

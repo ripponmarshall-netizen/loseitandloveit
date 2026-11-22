@@ -192,14 +192,14 @@ export function createSync({ engine, remote, userId, emit = () => {}, now = () =
                   }
                   dropped = true
                   db.outbox = db.outbox.filter((x) => x !== op)
-                  emit({ type: 'error', message: friendly(op.table, e1) })
+                  if (!TABLES[op.table]?.quiet) emit({ type: 'error', message: friendly(op.table, e1) })
                 }
               }
               batch = ok
             } else {
               dropped = true
               db.outbox = db.outbox.filter((x) => x !== batch[0])
-              emit({ type: 'error', message: friendly(batch[0].table, e) })
+              if (!TABLES[batch[0].table]?.quiet) emit({ type: 'error', message: friendly(batch[0].table, e) })
               batch = []
             }
           }
@@ -245,7 +245,12 @@ export function createSync({ engine, remote, userId, emit = () => {}, now = () =
       if (pendingDelete.has(row.id)) continue
       if (mine(row.id)) {
         if (local.has(row.id)) out.push(local.get(row.id)) // else deleted while the pull was in the air
-      } else out.push(row)
+      } else {
+        // A column the server doesn't have yet (its migration hasn't been run)
+        // keeps the value on the device instead of being wiped by every pull.
+        const have = local.get(row.id)
+        out.push(have ? { ...pick(have, t.cols.filter((c) => !(c in raw))), ...row } : row)
+      }
     }
     for (const row of db[table]) {
       if (seen.has(row.id)) continue

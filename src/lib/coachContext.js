@@ -2,6 +2,7 @@ import { addDays, daysBetween, lastNDates } from './dates.js'
 import { CONDITIONS, ageFromBirthYear, adaptiveTdee, cleanConditions, dailyTotals, entryTotals, goalProgress, latestWeighIn, milestones, projectGoalDate, trendOn, weeklyRate, workoutSummary } from './calc.js'
 import { FREQUENCY_LABEL, MOOD_BY_V, SYMPTOM_BY_ID, SITE_BY_ID } from '../data/glp1.js'
 import { planDoseStatus, doseStatusLabel, doseStep, formatDose, glp1Plan, summariseDailyLogs, waterTargetMl } from './glp1.js'
+import { computeFindings, recentHealth } from './findings.js'
 
 // The compact snapshot of the user's data sent with each coach message.
 // Keep it small: it is re-sent every turn and billed as input tokens.
@@ -11,16 +12,19 @@ const moodsOn = (moods, date) => {
 }
 
 export async function buildCoachContext({ store, profile, series, weights, targets, today }) {
-  const entries = await store.listEntries(addDays(today, -27), today)
+  // 60 days for the patterns; the day-by-day numbers below use the last 28.
+  const history = await store.listEntries(addDays(today, -59), today)
+  const entries = history.filter((e) => e.log_date >= addDays(today, -27))
   const daily = dailyTotals(entries)
   // Workouts are optional: if the table isn't there yet, coach without them.
   const workouts = await store.listWorkouts(addDays(today, -13), today).catch(() => [])
   // GLP-1 and check-ins are optional too (migration 0003).
-  const [doses, logs, moods] = await Promise.all([
+  const [doses, longLogs, moods] = await Promise.all([
     store.listRecentDoses(12).catch(() => []),
-    store.listDailyLogs(addDays(today, -13), today).catch(() => []),
+    store.listDailyLogs(addDays(today, -89), today).catch(() => []),
     store.listMoods ? store.listMoods(addDays(today, -13), today).catch(() => []) : [],
   ])
+  const logs = longLogs.filter((l) => l.log_date >= addDays(today, -13))
   const last = series[series.length - 1]
   // What the user sees as their weight: the newest reading, not the day's first.
   const newest = latestWeighIn(weights)
@@ -29,6 +33,11 @@ export async function buildCoachContext({ store, profile, series, weights, targe
   const now = new Date()
   const plan = glp1Plan(profile)
   const waterTarget = waterTargetMl(currentKg ?? Number(profile.start_weight_kg), profile.water_target_ml)
+  const patterns = computeFindings({
+    today, entries: history, dailyLogs: longLogs, weights, series, doses, plan, targets,
+    units: profile.units || 'imperial', dayStartHour: profile.day_start_hour ?? 0,
+  })
+  const health = recentHealth({ today, dailyLogs: longLogs })
 
   return {
     note: 'All weights in kg. Talk to the user in their preferred units.',
@@ -116,9 +125,14 @@ export async function buildCoachContext({ store, profile, series, weights, targe
             water_ml: l.water_ml || undefined,
             symptoms: l.symptoms?.length ? l.symptoms.map((x) => SYMPTOM_BY_ID[x]?.label || x).join(', ') : undefined,
             note: l.note || undefined,
+            sleep_h: l.sleep_min != null ? Math.round((l.sleep_min / 60) * 10) / 10 : undefined,
+            steps: l.steps ?? undefined,
           })),
         }
       : 'no check-ins yet',
+    // Worked out by the app with minimum sample sizes (lib/findings.js), most useful first.
+    patterns_found_by_the_app: patterns.length ? patterns.slice(0, 5).map((f) => f.text) : undefined,
+    sleep_and_steps_apple_health: health || undefined,
     today_log: entries
       .filter((e) => e.log_date === today)
       .map((e) => ({ meal: e.meal, food: e.name, servings: Number(e.servings), kcal: entryTotals(e).calories, protein_g: entryTotals(e).protein })),

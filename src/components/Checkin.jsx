@@ -97,7 +97,7 @@ export function WaterSheet({ date, daily, onClose }) {
         <button className="btn gray" disabled={ml <= 0} onClick={() => add(-GLASS_ML)}>− Glass</button>
       </div>
       <p className="list-footer mt-0 mb-4">
-        A glass is 250 ml, a bottle 500 ml. Goal ≈ 30 ml per kg of body weight; drink more in the heat, on shift, or if you’re being sick. Change it in
+        A glass is 250 ml, a bottle 500 ml. Goal ≈ 30 ml per kg of body weight; drink more in the heat, when you’re active, or if you’re being sick. Change it in
         Settings → Tracking.
       </p>
       <button className="btn block" onClick={dismiss}>Done</button>
@@ -264,7 +264,7 @@ export function MoodSheet({ date, daily, onClose, initialMood }) {
 
       <label className="field mt-4">
         <span>Note for the day (optional)</span>
-        <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Slept badly after night shift…" maxLength={1000} />
+        <input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Slept badly, busy day at work…" maxLength={1000} />
       </label>
       <button className="btn block" disabled={busy} onClick={save}>
         {mood != null ? 'Save check-in' : dayChanged ? 'Save' : 'Done'}
@@ -397,7 +397,7 @@ export function WeightSheet({ weight, date: initialDate, initialValue, onClose }
 
         <label className="field">
           <span>Note (optional)</span>
-          <input className="input" maxLength={300} placeholder="After night shift, salty dinner, period week…" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" maxLength={300} placeholder="Salty dinner, period week, poor sleep…" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
 
         {sameDay.length > 0 && (
