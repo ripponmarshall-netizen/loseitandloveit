@@ -80,11 +80,12 @@ export default function Today() {
   const allClosed = closed.calories && closed.protein && closed.water
   const cheer = useRingCheer({ date, active: isToday, ready: entries !== null && day?.daily !== undefined, closed })
   const over = left < 0
-  const rings = [
-    { key: 'calories', value: totals.calories, max: target, a: over ? 'var(--orange)' : 'var(--ring-a)', b: over ? 'var(--red)' : 'var(--ring-b)' },
-    { key: 'protein', value: totals.protein, max: proteinTarget, a: 'var(--pink)', b: 'var(--protein-b)' },
-    { key: 'water', value: water.ml, max: waterTarget, a: 'var(--cyan)', b: 'var(--water-b)' },
-  ]
+  // One ring, calories only, in one colour (orange once over). Protein, carbs,
+  // fat and water are bars underneath, each in its own colour.
+  const kcalColor = over ? 'var(--over)' : 'var(--ring-a)'
+  const kcalRing = [{ key: 'calories', value: totals.calories, max: target, a: kcalColor, b: kcalColor }]
+  const kcalPct = target > 0 ? Math.round((totals.calories / target) * 100) : 0
+  const openMacros = () => openProgress('macros')
   const emptyMeals = entries ? MEALS.filter((m) => !entries.some((e) => e.meal === m)) : []
 
   // Stepping between days slides the day in from the side you moved towards.
@@ -118,16 +119,24 @@ export default function Today() {
       {isToday && <WinsCard recent={recent} />}
 
       <section className={`card hero-card rise${allClosed && isToday ? ' all-closed' : ''}`} style={{ '--i': 1 }}>
-        <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label={`${fmt(Math.abs(left))} kcal ${over ? 'over' : 'left'}. Open the day’s nutrition breakdown`}>
-          <RingStack rings={rings} cheer={cheer} />
+        <button className="hero" onClick={() => openSheet('meal', { date, meal: 'all', onEdit: setEditing })} aria-label={`${fmt(Math.abs(left))} kcal ${over ? 'over' : 'left'}: ${fmt(totals.calories)} eaten of ${fmt(target)}. Open the day’s nutrition breakdown`}>
+          <RingStack rings={kcalRing} size={128} stroke={14} cheer={cheer}>
+            {closed.calories ? (
+              <span className="ring-done"><Icon name="check" size={20} strokeWidth={3.2} /></span>
+            ) : (
+              <>
+                <span className="ring-pct num">{kcalPct}%</span>
+                <span className="ring-pct-label">eaten</span>
+              </>
+            )}
+          </RingStack>
           <div className="grow hero-stats">
             <div className="hero-left">
               <span className="hero-big num"><CountUp value={Math.abs(left)} /></span>
               <span className={`hero-unit${over ? ' over' : ''}`}>{over ? 'kcal over' : 'kcal left'}</span>
             </div>
-            <RingLegend color="var(--ring-a)" label="Food" value={`${fmt(totals.calories)}`} of={fmt(target)} done={closed.calories} />
-            <RingLegend color="var(--pink)" label="Protein" value={Math.round(totals.protein)} of={`${proteinTarget} g`} done={closed.protein} />
-            <RingLegend color="var(--cyan)" label="Water" value={formatLitres(water.ml)} of={`${formatLitres(waterTarget)} L`} done={closed.water} />
+            <span className="kcal-row"><span className="k">Eaten</span><span className="v num">{fmt(totals.calories)}</span></span>
+            <span className="kcal-row"><span className="k">Goal</span><span className="v num">{fmt(target)}</span></span>
             {burned > 0 && (
               <span className="hero-burn num">
                 <Icon name="flame" size={14} /> {allowance > 0 ? `+${fmt(allowance)} from exercise` : `${fmt(burned)} burned`}
@@ -138,14 +147,26 @@ export default function Today() {
         {allClosed && isToday && (
           <div className="hero-cheer">
             <PenguinFace size={26} />
-            <span>All three rings closed today. Mimi’s proud of you.</span>
+            <span>Calories, protein and water all on target today. Mimi’s proud of you.</span>
           </div>
         )}
-        <button className="macro-strip" onClick={() => openProgress('macros')} aria-label="Macros: open trends in Progress">
-          <MacroMini label="Protein" value={totals.protein} target={targets?.protein || 0} color="var(--protein)" />
-          <MacroMini label="Carbs" value={totals.carbs} target={targets?.carbs || 0} color="var(--carbs)" />
-          <MacroMini label="Fat" value={totals.fat} target={targets?.fat || 0} color="var(--fat)" />
-        </button>
+        <div className="goal-bars">
+          <GoalRow label="Protein" value={Math.round(totals.protein)} target={proteinTarget} unit="g" color="var(--protein)" done={closed.protein} cheer={cheer.includes('protein')} onClick={openMacros} />
+          <GoalRow label="Carbs" value={Math.round(totals.carbs)} target={targets?.carbs || 0} unit="g" color="var(--carbs)" limit onClick={openMacros} />
+          <GoalRow label="Fat" value={Math.round(totals.fat)} target={targets?.fat || 0} unit="g" color="var(--fat)" limit onClick={openMacros} />
+          <GoalRow
+            label="Water"
+            value={formatLitres(water.ml)}
+            frac={waterTarget > 0 ? water.ml / waterTarget : 0}
+            target={formatLitres(waterTarget)}
+            unit="L"
+            color="var(--water)"
+            done={closed.water}
+            cheer={cheer.includes('water')}
+            split
+            onClick={() => openSheet('water', { date, daily })}
+          />
+        </div>
         <WeekBalance recent={recent} date={date} />
       </section>
 
@@ -249,39 +270,41 @@ export default function Today() {
   )
 }
 
-/** Ring key: colour, name, amount / target, and a tick once it's closed. */
-function RingLegend({ color, label, value, of, done }) {
-  return (
-    <span className={`ring-legend${done ? ' done' : ''}`} style={{ '--c': color }}>
-      <i aria-hidden="true">{done && <Icon name="check" size={10} strokeWidth={3.4} />}</i>
-      <span className="rl-label">{label}</span>
-      <span className="rl-val num">
-        {value}
-        <span className="muted"> / {of}</span>
-      </span>
-    </span>
-  )
-}
-
 const formatLitres = (ml) => {
   const l = (Number(ml) || 0) / 1000
   return l >= 10 ? l.toFixed(0) : l.toFixed(1)
 }
 
-/** One macro as a slim bar with grams eaten and the target. */
-function MacroMini({ label, value, target, color }) {
-  const pct = target > 0 ? Math.min(100, Math.round((value / target) * 100)) : 0
+/**
+ * One daily goal as a bar: name, how far along, amount / goal. The last slot
+ * says how it's going: a tick once a goal is hit (protein, water), an arrow
+ * once a limit is passed (carbs, fat: `limit`), where a full bar alone would
+ * look like success. `frac` overrides value / target when the shown numbers
+ * are rounded (litres).
+ */
+function GoalRow({ label, value, target, unit, color, frac, done = false, limit = false, cheer = false, split = false, onClick }) {
+  const f = frac ?? (Number(target) > 0 ? value / target : 0)
+  const pct = Math.min(100, Math.max(0, Math.round(f * 100)))
+  const over = limit && f > 1
+  const state = done ? ', goal hit' : over ? ', over the goal' : ''
+  const aria = `${label}: ${value} of ${target} ${unit}${state}. ${label === 'Water' ? 'Log water' : 'Open macro trends in Progress'}`
   return (
-    <span className="macro-mini" style={{ '--c': color }}>
-      <span className="macro-mini-label">{label}</span>
-      <span className="macro-mini-val num">
-        {Math.round(value)}
-        <span className="muted"> / {target} g</span>
-      </span>
-      <span className="macro-mini-bar" aria-hidden="true">
+    <button type="button" className={`goal-row${done ? ' done' : ''}${over ? ' over' : ''}${cheer ? ' cheer' : ''}${split ? ' split' : ''}`} style={{ '--c': color }} onClick={onClick} aria-label={aria}>
+      <span className="goal-label">{label}</span>
+      <span className="goal-bar" aria-hidden="true">
         <i style={{ width: `${pct}%` }} />
       </span>
-    </span>
+      <span className="goal-val num">
+        {value}
+        <span className="muted">
+          <span className="goal-of"> / {target}</span> {unit}
+        </span>
+      </span>
+      <span className="goal-tick" aria-hidden="true">
+        {done && <Icon name="check" size={10} strokeWidth={3.4} />}
+        {over && <Icon name="up" size={10} strokeWidth={3.4} />}
+      </span>
+    </button>
   )
 }
 

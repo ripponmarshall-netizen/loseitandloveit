@@ -509,7 +509,7 @@ export function MacroBar({ label, value, target, color }) {
   const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0
   return (
     <div className="macro" style={{ '--c': color }}>
-      <div className="macro-mini-label">{label}</div>
+      <div className="macro-label">{label}</div>
       <div className="bar">
         <i style={{ width: `${pct}%` }} />
       </div>

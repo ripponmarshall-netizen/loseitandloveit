@@ -692,7 +692,7 @@ function Wellbeing({ today }) {
       </div>
       <div className="stats">
         <Stat label="Mood" color="var(--yellow)" value={sum.mood ? MOOD_BY_V[Math.round(sum.mood)]?.label : '—'} sub={sum.mood ? `${sum.mood} / 5 avg` : 'none yet'} />
-        <Stat label="Water" color="var(--cyan)" value={sum.waterMl ? formatWater(sum.waterMl) : '—'} sub={`goal ${formatWater(waterTarget)}`} />
+        <Stat label="Water" color="var(--water)" value={sum.waterMl ? formatWater(sum.waterMl) : '—'} sub={`goal ${formatWater(waterTarget)}`} />
         <Stat label="Energy" color="var(--green)" value={sum.energy ? `${sum.energy}/5` : '—'} sub="average" />
       </div>
       {sum.symptoms.length > 0 && (
@@ -1108,7 +1108,7 @@ function WaterBars() {
         granularity="day"
         target={goal}
         targetLabel="goal"
-        barColor={(v) => (v >= goal ? 'var(--cyan)' : 'color-mix(in srgb, var(--cyan) 45%, var(--card))')}
+        barColor={(v) => (v >= goal ? 'var(--water)' : 'color-mix(in srgb, var(--water) 45%, var(--card))')}
         format={(v) => v.toFixed(1)}
         unit="L"
         ariaLabel="Water each day, last 14 days"
