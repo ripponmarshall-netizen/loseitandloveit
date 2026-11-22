@@ -171,7 +171,7 @@ async function recordTokens(userId: string, day: string, usage: Record<string, n
 // (the app's own lists) so the model and the app can scale portions.
 
 const USDA_KEY = env("USDA_API_KEY") || "DEMO_KEY";
-const UA = "LoseItAndLoveIt/0.2 (https://github.com/ripponmarshall-netizen/loseitandloveit)";
+const UA = "Mimi/0.10 (https://github.com/ripponmarshall-netizen/loseitandloveit)";
 const FETCH_TIMEOUT_MS = 6000;
 
 type Sources = { usda: boolean; off: boolean };
@@ -467,7 +467,7 @@ function addUsage(total: Record<string, number>, usage: Record<string, number | 
 
 // ---------------------------------------------------------------- coach
 
-const COACH_SYSTEM = `You are Mimi the Penguin ("Mimi" for short), the coach inside "Lose It & Love It", a calorie-tracking app. Most users live in Jamaica.
+const COACH_SYSTEM = `You are Mimi the Penguin ("Mimi" for short), the coach inside Mimi, a calorie-tracking app named after you. Most users live in Jamaica.
 
 Your job: help the user lose fat sustainably and enjoy the process. Many users take a GLP-1 medicine. Be warm, direct and practical. Use British English. In the app you appear as a friendly penguin called Mimi. If asked your name, you're Mimi the Penguin. Don't make penguin jokes unless the user does.
 
@@ -744,7 +744,7 @@ async function estimate(body: Record<string, unknown>, userId: string, day: stri
 // snapshot (well under 1k tokens), no tools, low effort and a small output
 // cap. At Haiku 5.5 prices that is a small fraction of a US cent each.
 
-const CHECKIN_SYSTEM = `You are Mimi the Penguin, the friendly coach in "Lose It & Love It", a calorie-tracking app used mainly in Jamaica. Every few hours the app shows the user a short check-in from you.
+const CHECKIN_SYSTEM = `You are Mimi the Penguin, the friendly coach in Mimi, a calorie-tracking app named after you and used mainly in Jamaica. Every few hours the app shows the user a short check-in from you.
 
 From the <app_data> snapshot (the user's own log: today's food and water so far, targets, the last few days, weight trend, workouts, mood and any GLP-1 medicine), write:
 - "headline": one warm, specific line (under 12 words) about how today is going.
@@ -824,7 +824,7 @@ async function checkin(body: Record<string, unknown>, userId: string, day: strin
 // so the model reads the weigh-ins with the plan and gives a date and range.
 // Same budget as a check-in: small snapshot, no tools, low effort.
 
-const GOAL_SYSTEM = `You estimate when a user of "Lose It & Love It", a calorie-tracking app used mainly in Jamaica, will realistically reach their goal weight.
+const GOAL_SYSTEM = `You estimate when a user of Mimi, a calorie-tracking app used mainly in Jamaica, will realistically reach their goal weight.
 
 <app_data> holds their profile, plan and weigh-ins (in their units, app_data.units): each day's first weigh-in ("weight") and the app's smoothed trend ("trend"). app_data.goal_weight is their goal: estimate when they reach exactly that weight, not an interim milestone.
 

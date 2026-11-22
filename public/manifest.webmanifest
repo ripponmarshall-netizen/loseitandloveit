@@ -1,7 +1,7 @@
 {
-  "name": "Lose It & Love It",
-  "short_name": "Lose It",
-  "description": "Calorie tracker with an AI coach.",
+  "name": "Mimi: Food & Weight Coach",
+  "short_name": "Mimi",
+  "description": "Food and weight tracker with Mimi the Penguin, an AI coach. Jamaican foods built in.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

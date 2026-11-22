@@ -47,7 +47,7 @@ export default function Auth({ onUseLocal }) {
   return (
     <div className="auth">
       <Penguin kind="workout" />
-      <h1 className="center auth-title">Lose It &amp; Love It</h1>
+      <h1 className="center auth-title">Mimi</h1>
       <p className="center muted auth-sub">
         Track what you eat, watch the trend, get coached.
       </p>

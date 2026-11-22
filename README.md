@@ -1,6 +1,8 @@
-# Lose It & Love It
+# Mimi
 
-A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered coach. It has Jamaican foods built in.
+A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered coach. It has Jamaican foods built in. *One one coco full basket.*
+
+The app was called Lose It & Love It until v0.10.0. The repo, the Supabase project, the site URL and the backup file's `app` id keep the old name, `loseitandloveit`.
 
 **Stack:** React 19 + Vite 8 (static site on GitHub Pages) · Supabase (Postgres + Auth + one Edge Function) · Claude API (only called from the Edge Function).
 
@@ -30,7 +32,7 @@ A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered co
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
 | Design | One design system (`src/styles.css`): a 4-point spacing scale, one radius scale (capsule buttons, chips and segmented controls; rounded-rectangle fields; 22 px cards and lists), Apple text styles, and the same header on every tab, card and sheet. System font (SF Pro on iPhone) with SF Pro Rounded numbers, one sea-teal-to-palm-green brand palette with sunshine for wins, a sky tint behind every tab's header that follows the time of day, a picture beside each food, pure black in dark mode, iOS grouped lists. Motion: one press response everywhere, spring physics for sheets, tabs and toggles, cards that arrive in turn, sheet contents that follow the sheet up, rings and charts that draw in. Reduce Motion turns it all off. Appearance: Automatic, Light or Dark. Mimi the Penguin works out while the app loads and thinks while the AI works. Sheets stay above the iPhone keyboard while you type. |
 | Offline and sync | Everything you log is saved on the phone first and sent to your account in the background, so screens open instantly and logging works with no signal (in a dead spot, abroad). Changes wait in an outbox and sync when the connection returns; a small pill says when you're offline or changes are waiting, and Settings → Sync shows the status. Mimi, AI estimates and the online food databases still need a connection. |
-| PWA | Installable on iPhone. The whole app is stored on install, so it opens with no signal. |
+| PWA | Installable on iPhone. The whole app is stored on install, so it opens with no signal. The Home Screen icon and name are fixed when you add the app: to pick up a new icon or name, remove it and add it again (check Settings → Sync shows nothing waiting first, or export a backup, because removing it can delete what's stored only on the phone). |
 
 ## One-time setup (all from an iPhone browser)
 
@@ -56,7 +58,7 @@ Dashboard → **Authentication → URL Configuration**:
 Create your account in the app. Then, under **Authentication → Sign In / Providers**, turn off **Allow new users to sign up** so strangers can't make accounts.
 
 ### 3. AI Edge Function (5 min)
-**Updating:** whenever `supabase/functions/ai/index.ts` changes, open the `ai` function → **Code** → paste the new file → **Deploy**. (v0.2.0 changed it: food databases and the lookup tool. v0.9.0 changed it: how Mimi uses the app's patterns, sleep and steps.)
+**Updating:** whenever `supabase/functions/ai/index.ts` changes, open the `ai` function → **Code** → paste the new file → **Deploy**. (v0.2.0 changed it: food databases and the lookup tool. v0.9.0 changed it: how Mimi uses the app's patterns, sleep and steps. v0.10.0 changed it: the app's new name in Mimi's prompts; optional, nothing else changes.)
 
 Dashboard → **Edge Functions** → Deploy a new function → **Via Editor** → name it `ai` → paste [`supabase/functions/ai/index.ts`](supabase/functions/ai/index.ts) → Deploy.
 Then, in the function's **Details**, turn **JWT verification OFF** (the toggle name varies a little between dashboard versions). The function checks the user itself, and this avoids issues with the newer JWT signing keys.
