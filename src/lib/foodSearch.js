@@ -79,3 +79,53 @@ export function buildRefs(builtins, mine = []) {
 
 /** Barcodes are 8–14 digits (EAN-8, UPC-A, EAN-13, GTIN-14). */
 export const isBarcode = (q) => /^\d{8,14}$/.test(String(q).replace(/\s+/g, ''))
+
+/**
+ * AI estimates the user corrected before logging, as foods the AI can look up
+ * next time (newest correction of each name wins). feedback: newest first,
+ * from store.listFoodFeedback().
+ */
+export function correctionRefs(feedback = [], limit = 50) {
+  const seen = new Set()
+  const out = []
+  for (const f of feedback) {
+    if (f?.kind !== 'ai_correction' || !f.name || f.kcal == null) continue
+    const key = f.name.trim().toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ name: f.name, serving: f.serving || undefined, calories: Number(f.kcal), protein_g: Number(f.protein_g) || 0, carbs_g: Number(f.carbs_g) || 0, fat_g: Number(f.fat_g) || 0, tags: 'corrected' })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/**
+ * Did the user change an AI estimate enough to be worth remembering? A new
+ * name, calories off by 10% (and 20 kcal), or a macro off by 15% (and 3 g).
+ */
+export function isCorrection(orig, final) {
+  const far = (a, b, rel, abs) => Math.abs(Number(b) - Number(a)) >= Math.max(abs, Math.abs(Number(a)) * rel)
+  const renamed = words(orig.name).join(' ') !== words(final.name).join(' ')
+  return renamed || far(orig.calories, final.calories, 0.1, 20) || ['protein_g', 'carbs_g', 'fat_g'].some((k) => far(orig[k], final[k], 0.15, 3))
+}
+
+/**
+ * Missed searches grouped (most asked first) and the latest AI corrections,
+ * for the Settings list of what the food list is missing. feedback: newest first.
+ */
+export function summariseFoodFeedback(feedback = []) {
+  const misses = new Map()
+  for (const f of feedback) {
+    if (f?.kind !== 'search_miss' || !f.query) continue
+    const key = words(f.query).join(' ')
+    if (!key) continue
+    const m = misses.get(key) || { query: f.query.trim(), times: 0, last: f.created_at, picked: null }
+    m.times++
+    m.picked ||= f.picked || null
+    misses.set(key, m)
+  }
+  return {
+    misses: [...misses.values()].sort((a, b) => b.times - a.times || String(b.last).localeCompare(String(a.last))),
+    corrections: feedback.filter((f) => f?.kind === 'ai_correction' && f.name),
+  }
+}

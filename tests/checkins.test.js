@@ -50,7 +50,18 @@ test('check-in context is compact and lists what is missing', () => {
   assert.equal(ctx.so_far_today.kcal, 380)
   assert.deepEqual(ctx.previous_days.map((d) => d.date), ['2026-11-05', '2026-11-07'])
   assert.deepEqual(ctx.previous_checkin.tips, ['Drink water'])
+  assert.equal(ctx.patterns, undefined)
   assert.ok(JSON.stringify(ctx).length < 1500)
+})
+
+test('check-in context: at most two patterns from the app, plus recent sleep and steps', () => {
+  const ctx = buildCheckinContext({
+    today: '2026-11-08',
+    patterns: ['Scale jump explained', 'Light days', 'Top foods'],
+    health: { sleep_avg_hours: 6.4, steps_avg: 5200, days: 5 },
+  })
+  assert.deepEqual(ctx.patterns, ['Scale jump explained', 'Light days'])
+  assert.equal(ctx.sleep_and_steps.steps_avg, 5200)
 })
 
 test('keyboard inset: detects the iPhone keyboard, ignores toolbars and zoom', () => {

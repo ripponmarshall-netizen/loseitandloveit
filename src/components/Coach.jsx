@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import { streamCoach } from '../lib/ai.js'
 import { buildCoachContext } from '../lib/coachContext.js'
-import { buildRefs } from '../lib/foodSearch.js'
+import { buildRefs, correctionRefs } from '../lib/foodSearch.js'
 import { BUILTIN_FOODS } from '../data/foods.js'
 import { glp1Plan } from '../lib/glp1.js'
 import { Avatar, Icon, MiniMarkdown, PageHeader, Penguin, PenguinFace, Spinner, Thinking } from './ui.jsx'
@@ -20,7 +20,7 @@ const GLP1_PROMPTS = [
 const PROMPTS = [
   ['Review my last 7 days', 'var(--blue)'],
   ['What should I eat for the rest of today?', 'var(--green)'],
-  ['Plan my food for a 24-hour shift', 'var(--orange)'],
+  ['Plan my meals for a busy day', 'var(--orange)'],
   ["Why isn't my weight moving?", 'var(--purple)'],
   ['Healthier cookshop order?', 'var(--pink)'],
   ['Give me 3 high-protein Jamaican breakfasts', 'var(--teal)'],
@@ -137,10 +137,12 @@ export default function Coach({ active = true }) {
     try {
       setMessages((m) => [...(m || []), saved])
       setStreaming('')
-      const [context, mine] = await Promise.all([
+      const [context, foods, feedback] = await Promise.all([
         buildCoachContext({ store, profile: app.profile, series: app.series, weights: app.weights, targets: app.targets, today: app.today }),
         store.listFoods().catch(() => []),
+        store.listFoodFeedback().catch(() => []),
       ])
+      const mine = [...correctionRefs(feedback), ...foods]
       abortRef.current = new AbortController()
       const reply = await streamCoach({
         message: question,

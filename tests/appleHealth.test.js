@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { deflateRawSync } from 'node:zlib'
-import { appleType, matchesWorkout, parseWorkout, readAppleWorkouts, scanWorkouts, stableId } from '../src/lib/appleHealth.js'
+import { appleType, healthDays, matchesWorkout, parseWorkout, readAppleHealth, readAppleWorkouts, scanHealth, scanWorkouts, stableId } from '../src/lib/appleHealth.js'
 
 const NEW = `<Workout workoutActivityType="HKWorkoutActivityTypeWalking" duration="32.5" durationUnit="min" sourceName="Rippon&#8217;s Apple Watch" startDate="2026-11-02 07:05:12 -0500" endDate="2026-11-02 07:37:42 -0500">
   <MetadataEntry key="HKIndoorWorkout" value="0"/>
@@ -125,4 +125,64 @@ test('search matches name, type group, month and weekday', () => {
   assert.ok(matchesWorkout(w, 'watch'))
   assert.ok(!matchesWorkout(w, 'swim'))
   assert.ok(matchesWorkout(w, ''))
+})
+
+// ---------- sleep and steps ----------
+
+const step = (src, start, value, close = false) =>
+  `<Record type="HKQuantityTypeIdentifierStepCount" sourceName="${src}" unit="count" startDate="${start} -0500" endDate="${start} -0500" value="${value}"${close ? '><MetadataEntry key="x" value="y"/></Record>' : '/>'}`
+const sleep = (src, start, end, value = 'AsleepCore') =>
+  `<Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="${src}" startDate="${start} -0500" endDate="${end} -0500" value="HKCategoryValueSleepAnalysis${value}">\n  <MetadataEntry key="HKTimeZone" value="America/Jamaica"/>\n </Record>`
+const HEALTH = [
+  '<?xml version="1.0"?>\n<HealthData locale="en_JM">',
+  // Steps: iPhone and Watch both count the same walk; the day takes the bigger source, not the sum.
+  step('iPhone', '2026-11-02 08:00:00', 1200), step('iPhone', '2026-11-02 17:00:00', 2300, true), step('Watch', '2026-11-02 08:00:00', 4100),
+  step('iPhone', '2026-11-03 02:30:00', 500), // before a 4 am day start: counts to the 2nd there
+  '<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" value="61"/>',
+  // Sleep ending on the morning of the 3rd: Watch stages (core and deep overlap by 10 min), plus an iPhone guess that's shorter.
+  sleep('Watch', '2026-11-02 23:00:00', '2026-11-03 02:10:00'),
+  sleep('Watch', '2026-11-03 02:00:00', '2026-11-03 03:00:00', 'AsleepDeep'),
+  sleep('Watch', '2026-11-03 03:00:00', '2026-11-03 03:20:00', 'Awake'),
+  sleep('Watch', '2026-11-03 03:20:00', '2026-11-03 06:20:00', 'AsleepREM'),
+  sleep('iPhone', '2026-11-02 22:30:00', '2026-11-03 07:00:00', 'InBed'),
+  sleep('iPhone', '2026-11-03 00:00:00', '2026-11-03 05:00:00', 'Asleep'),
+  // A nap on the afternoon of the 3rd counts with that day; sleep ending after 6 pm counts to the next.
+  sleep('Watch', '2026-11-03 14:00:00', '2026-11-03 14:30:00'),
+  sleep('Watch', '2026-11-03 21:00:00', '2026-11-03 23:00:00'),
+  NEW,
+  '</HealthData>',
+].join('\n ')
+
+test('sleep and steps: one figure a day, the fuller source wins, overlaps counted once', () => {
+  const acc = healthDays()
+  for (const tag of HEALTH.match(/<Record type="HKQuantityTypeIdentifierStepCount"[^>]*>/g)) acc.steps(tag)
+  for (const tag of HEALTH.match(/<Record type="HKCategoryTypeIdentifierSleepAnalysis"[^>]*>/g)) acc.sleep(tag)
+  assert.deepEqual(acc.days(), [
+    { log_date: '2026-11-02', steps: 4100 },
+    { log_date: '2026-11-03', steps: 500, sleep_min: 7 * 60 + 30 }, // 23:00–03:00 + 03:20–06:20 + 14:00–14:30
+    { log_date: '2026-11-04', sleep_min: 120 },
+  ])
+  const shifted = healthDays({ dayStartHour: 4 })
+  for (const tag of HEALTH.match(/<Record type="HKQuantityTypeIdentifierStepCount"[^>]*>/g)) shifted.steps(tag)
+  assert.deepEqual(shifted.days(), [{ log_date: '2026-11-02', steps: 4100 }]) // 3,500 + 500 from iPhone < 4,100
+})
+
+test('the scanner finds workouts, steps and sleep however the stream is chunked', async () => {
+  for (const size of [7, 64, 100000]) {
+    const chunks = async function* () {
+      for (let i = 0; i < HEALTH.length; i += size) yield HEALTH.slice(i, i + size)
+    }
+    const seen = { workout: 0, steps: 0, sleep: 0 }
+    const n = await scanHealth(chunks(), { workout: () => seen.workout++, steps: () => seen.steps++, sleep: () => seen.sleep++ })
+    assert.deepEqual(seen, { workout: 1, steps: 4, sleep: 8 }, `chunks of ${size}`)
+    assert.equal(n, 13)
+  }
+})
+
+test('readAppleHealth returns the workouts and the days from one pass', async () => {
+  const file = new File([zip('apple_health_export/export.xml', HEALTH, 8)], 'export.zip')
+  const { workouts, days } = await readAppleHealth(file)
+  assert.equal(workouts.length, 1)
+  assert.deepEqual(days.map((d) => d.log_date), ['2026-11-02', '2026-11-03', '2026-11-04'])
+  assert.deepEqual(await readAppleWorkouts(file).then((w) => w.length), 1)
 })

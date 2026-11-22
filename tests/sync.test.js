@@ -569,3 +569,70 @@ test('restoring a backup skips check-ins without a date and saves once', async (
   assert.equal(saves, 1)
   await assert.rejects(engine.saveDailyLog('', { water_ml: 250 }), /date/)
 })
+
+test('sleep and steps from Apple Health: saved per day without touching water or mood, and re-importing changes nothing', async () => {
+  let saves = 0
+  const engine = createEngine({ persist: () => saves++ })
+  await engine.saveDailyLog('2026-11-10', { water_ml: 1500 })
+  await engine.addMood('2026-11-10', { mood: 4 })
+  saves = 0
+  const days = [
+    { log_date: '2026-11-10', sleep_min: 412, steps: 8123 },
+    { log_date: '2026-11-11', steps: 4021 },
+    { log_date: 'bad', steps: 10 },
+    { log_date: '2026-11-12', sleep_min: 9999 }, // clamped to a day
+  ]
+  assert.equal(await engine.saveDailyHealth(days), 3)
+  assert.equal(saves, 1)
+  const logs = await engine.listDailyLogs('2026-11-10', '2026-11-12')
+  assert.deepEqual(logs.map((l) => [l.log_date, l.water_ml, l.mood, l.sleep_min ?? null, l.steps ?? null]), [
+    ['2026-11-10', 1500, 4, 412, 8123],
+    ['2026-11-11', 0, null, null, 4021],
+    ['2026-11-12', 0, null, 1440, null],
+  ])
+  assert.equal(await engine.saveDailyHealth(days), 0)
+})
+
+test('before 0009, sleep and steps stay on the device through a pull instead of being wiped', async () => {
+  const remote = fakeRemote()
+  // A database without the new columns quietly ignores them, as PostgREST's error repair does.
+  const { engine, sync } = setup({ remote })
+  await engine.saveDailyHealth([{ log_date: '2026-11-10', sleep_min: 400, steps: 9000 }])
+  await sync.flush()
+  for (const row of remote.tables.daily_logs) {
+    delete row.sleep_min
+    delete row.steps
+  }
+  await sync.pull({ full: true })
+  const [log] = await engine.listDailyLogs('2026-11-10', '2026-11-10')
+  assert.equal(log.sleep_min, 400)
+  assert.equal(log.steps, 9000)
+  // Once the server has the column, its value wins.
+  remote.tables.daily_logs[0].steps = 9100
+  await sync.pull({ full: true })
+  assert.equal((await engine.listDailyLogs('2026-11-10', '2026-11-10'))[0].steps, 9100)
+})
+
+test('missed searches and AI corrections: logged, a repeat search kept once, synced quietly', async () => {
+  const { engine, sync, remote, events } = setup()
+  await engine.logFoodFeedback({ kind: 'search_miss', query: 'Stew peas ' })
+  await engine.logFoodFeedback({ kind: 'search_miss', query: 'stew  peas', picked: 'Pea soup (USDA)' })
+  await engine.logFoodFeedback({ kind: 'ai_correction', name: 'Cookshop box', serving: '1 box', est_kcal: 700, kcal: 950, protein_g: '40', carbs_g: 'x' })
+  const list = await engine.listFoodFeedback()
+  assert.equal(list.length, 2)
+  const miss = list.find((f) => f.kind === 'search_miss')
+  assert.equal(miss.query, 'Stew peas')
+  assert.equal(miss.picked, 'Pea soup (USDA)')
+  const fix = list.find((f) => f.kind === 'ai_correction')
+  assert.deepEqual([fix.est_kcal, fix.kcal, fix.protein_g, fix.carbs_g], [700, 950, 40, null])
+  await assert.rejects(engine.logFoodFeedback({ kind: 'nope' }))
+  assert.equal(await sync.flush(), true)
+  assert.equal(remote.tables.food_feedback.length, 2)
+
+  // Before 0009 the table is missing: the rows stay on the phone, with no error for the user.
+  remote.reject = (table) => (table === 'food_feedback' ? new RemoteError('relation "public.food_feedback" does not exist', { permanent: true, code: '42P01' }) : null)
+  await engine.logFoodFeedback({ kind: 'search_miss', query: 'gizzada' })
+  assert.equal(await sync.flush(), true)
+  assert.equal(events.filter((e) => e.type === 'error').length, 0)
+  assert.equal((await engine.listFoodFeedback()).length, 3)
+})

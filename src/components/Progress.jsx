@@ -312,6 +312,7 @@ export default function Progress() {
       <>
       <ExerciseSummary workouts={recentWorkouts} today={today} units={units} />
       <Wellbeing today={today} />
+      <SleepSteps />
       <DoseTrend open={open.dose} onToggle={() => toggle('dose')} />
       <Glp1Progress onEditDose={(d) => openSheet('dose', { date: d.log_date, dose: d })} onSetup={() => openSheet('medication')} />
       </>
@@ -1002,6 +1003,76 @@ function WeekdayRhythm({ daily, loaded }) {
           {gap > 0 && target ? ` Planning ${DAY_NAMES[bigWeekend.dow]}’s meals ahead is usually the easiest win.` : ''}
         </p>
       )}
+    </section>
+  )
+}
+
+const STEP_GOAL = 7000 // where the health benefit of more steps starts to level off for most adults
+
+/** Health: sleep and steps from Apple Health, the last 30 days. */
+function SleepSteps() {
+  const { store, today, dataVersion, openSheet } = useApp()
+  const [logs, setLogs] = useState(null)
+  const [pick, setPick] = useState('sleep')
+  useEffect(() => {
+    let cancelled = false
+    store
+      .listDailyLogs(addDays(today, -29), today)
+      .then((rows) => !cancelled && setLogs(rows))
+      .catch(() => !cancelled && setLogs([]))
+    return () => {
+      cancelled = true
+    }
+  }, [store, today, dataVersion])
+  if (!logs) return null
+  const hasSleep = logs.some((l) => l.sleep_min != null)
+  const hasSteps = logs.some((l) => l.steps != null)
+  if (!hasSleep && !hasSteps) {
+    return (
+      <section className="card">
+        <CardHeader title="Sleep and steps" />
+        <p className="small muted">Bring them in from the Health app’s export. Mimi uses them to spot patterns, like eating more after a short night.</p>
+        <button className="btn sm secondary" onClick={() => openSheet('appleImport')}>
+          <Icon name="heart" size={16} strokeWidth={2.4} /> Import from Apple Health
+        </button>
+      </section>
+    )
+  }
+  const metric = !hasSleep ? 'steps' : !hasSteps ? 'sleep' : pick
+  const sleep = metric === 'sleep'
+  const byDate = Object.fromEntries(logs.map((l) => [l.log_date, l]))
+  const buckets = lastNDates(today, 30).map((d) => {
+    const l = byDate[d]
+    const v = sleep ? (l?.sleep_min != null ? Math.round(l.sleep_min / 6) / 10 : null) : l?.steps != null ? Number(l.steps) : null
+    return { key: d, start: d, end: d, value: v }
+  })
+  const vals = buckets.filter((b) => b.value != null)
+  const mean = vals.length ? vals.reduce((t, b) => t + b.value, 0) / vals.length : null
+  const latest = vals[vals.length - 1]?.start
+  const kSteps = (v) => (v >= 1000 ? `${Math.round(v / 100) / 10}k` : String(Math.round(v)))
+  return (
+    <section className="card">
+      <CardHeader
+        title="Sleep and steps"
+        note={mean == null ? null : sleep ? `${mean.toFixed(1)} h avg` : `${fmtN(mean)} a day`}
+        sub={<>Last 30 days, from Apple Health{latest && latest < addDays(today, -2) ? `, up to ${formatShortDate(latest)}. Import again for newer days.` : '.'}</>}
+      />
+      {hasSleep && hasSteps && <Segmented label="Sleep or steps" value={metric} onChange={setPick} options={[['sleep', 'Sleep'], ['steps', 'Steps']]} />}
+      <TrendChart
+        bars
+        buckets={buckets}
+        granularity="day"
+        target={sleep ? 7 : STEP_GOAL}
+        targetLabel={sleep ? '7 h' : '7k'}
+        barColor={(v) => (sleep ? (v < 6 ? 'var(--over)' : 'var(--indigo)') : v >= STEP_GOAL ? 'var(--green)' : 'color-mix(in srgb, var(--green) 45%, var(--card))')}
+        format={sleep ? (v) => v.toFixed(1) : kSteps}
+        tipFormat={sleep ? (v) => v.toFixed(1) : fmtN}
+        unit={sleep ? 'h' : 'steps'}
+        ariaLabel={sleep ? 'Hours asleep each night, last 30 days' : 'Steps each day, last 30 days'}
+      />
+      <p className="tiny muted trend-note">
+        {sleep ? 'Nights under 6 hours are orange. Short sleep tends to raise appetite the next day.' : `Days at ${STEP_GOAL.toLocaleString('en-GB')}+ steps are full green.`}
+      </p>
     </section>
   )
 }

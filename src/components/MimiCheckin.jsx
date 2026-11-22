@@ -3,6 +3,7 @@ import { useApp } from '../appContext.js'
 import { requestCheckin } from '../lib/ai.js'
 import { dailyTotals, latestWeighIn, weeklyRate } from '../lib/calc.js'
 import { buildCheckinContext, checkinDue, checkinFingerprint, MAX_PER_DAY } from '../lib/checkins.js'
+import { computeFindings, recentHealth } from '../lib/findings.js'
 import { addDays } from '../lib/dates.js'
 import { planDoseStatus, doseStatusLabel, glp1Plan } from '../lib/glp1.js'
 import { useDay } from '../lib/useDay.js'
@@ -131,7 +132,16 @@ export function MimiProvider({ children }) {
       try {
         const recent = await store.listInsights(MAX_PER_DAY)
         if (recent.filter((i) => i.log_date === today).length >= MAX_PER_DAY) return
-        const prior = await store.listEntries(addDays(today, -3), addDays(today, -1)).catch(() => [])
+        // Two months of the log, read from the phone: the patterns worth a mention right now.
+        const [history, logs] = await Promise.all([
+          store.listEntries(addDays(today, -59), today).catch(() => []),
+          store.listDailyLogs(addDays(today, -89), today).catch(() => []),
+        ])
+        const prior = history.filter((e) => e.log_date >= addDays(today, -3) && e.log_date < today)
+        const patterns = computeFindings({
+          today, entries: history, dailyLogs: logs, weights, series, doses: day.doses, plan, targets,
+          units: profile.units || 'imperial', dayStartHour: profile.day_start_hour ?? 0,
+        })
         const last = series[series.length - 1]
         const rate = weeklyRate(series)
         const context = buildCheckinContext({
@@ -150,6 +160,8 @@ export function MimiProvider({ children }) {
           weeklyChangeKg: rate == null ? null : Math.round(rate * 100) / 100,
           glp1: plan ? { medicine: plan.name, next_dose: doseStatusLabel(dose) } : null,
           previous: insight?.log_date === today ? insight : null,
+          patterns: patterns.map((f) => f.text),
+          health: recentHealth({ today, dailyLogs: logs }),
         })
         const res = await requestCheckin({ context })
         if (!res.tips?.length) return

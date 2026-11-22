@@ -58,7 +58,7 @@ export const HOME_PRESETS = [
     exercises: [{ name: 'Skip 30s, rest 40s', sets: 10, reps: '30s' }],
   },
   {
-    name: '10-min mobility after shift',
+    name: '10-min evening mobility',
     activity: 'mobility',
     intensity: 'light',
     duration_min: 10,

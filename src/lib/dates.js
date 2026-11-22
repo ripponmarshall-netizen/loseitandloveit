@@ -23,8 +23,8 @@ export function daysBetween(fromIso, toIso) {
   return Math.round((parseISODate(toIso) - parseISODate(fromIso)) / 86400000)
 }
 
-// Shift workers eat across midnight. With dayStartHour = 4, a 2am snack
-// after a night shift still counts toward the previous day's log.
+// Late nights cross midnight. With dayStartHour = 4, a 2am snack still
+// counts toward the previous day's log.
 export function logicalToday(dayStartHour = 0, now = new Date()) {
   const d = new Date(now)
   if (d.getHours() < dayStartHour) d.setDate(d.getDate() - 1)
@@ -97,7 +97,7 @@ export function timeInputValue(iso = new Date().toISOString()) {
 
 /**
  * A logged day plus a local "HH:MM" -> ISO timestamp. With a day start hour
- * (shift workers), times before it belong to the next calendar morning:
+ * (late nights), times before it belong to the next calendar morning:
  * 2:00 am on Tuesday's log is Wednesday 2:00 am.
  */
 export function logTimeToIso(iso, hhmm, dayStartHour = 0) {

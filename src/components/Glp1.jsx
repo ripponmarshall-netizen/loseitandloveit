@@ -176,7 +176,7 @@ export function DoseSheet({ date, dose: existing, preset = {}, onClose }) {
   async function save() {
     if (!(doseNum > 0)) return toast('Enter the dose', 'error')
     setBusy(true)
-    // Before the day-start hour, a time belongs to the next calendar morning (night shifts).
+    // Before the day-start hour, a time belongs to the next calendar morning (late nights).
     const takenAt = logTimeToIso(day, time || '12:00', profile.day_start_hour ?? 0)
     const row = {
       log_date: day,

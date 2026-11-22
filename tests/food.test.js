@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { foodEmoji } from '../src/lib/foodEmoji.js'
-import { buildRefs, dbItemToFood, gramsToServings, isBarcode, rankFoods, words } from '../src/lib/foodSearch.js'
+import { buildRefs, correctionRefs, dbItemToFood, summariseFoodFeedback, gramsToServings, isBarcode, isCorrection, rankFoods, words } from '../src/lib/foodSearch.js'
 import { convertUnits, fromForm, snapPace, toForm, validateProfile } from '../src/lib/profileForm.js'
 import { BUILTIN_FOODS } from '../src/data/foods.js'
 
@@ -126,4 +126,34 @@ test('foodEmoji picks from the name, specific dishes first', () => {
   assert.equal(foodEmoji('Pineapple'), '🍍') // not 'apple'
   assert.equal(foodEmoji('Mystery dish', 'snack'), '🍿')
   assert.equal(foodEmoji('', 'lunch'), '🍽️')
+})
+
+test('corrected AI estimates become references for the next estimate, newest of each name', () => {
+  const refs = correctionRefs([
+    { kind: 'ai_correction', name: 'Cookshop box', serving: '1 box', kcal: 950, protein_g: 40 },
+    { kind: 'search_miss', query: 'stew peas' },
+    { kind: 'ai_correction', name: 'cookshop box ', kcal: 700 },
+    { kind: 'ai_correction', name: 'Sorrel', kcal: null },
+  ])
+  assert.deepEqual(refs, [{ name: 'Cookshop box', serving: '1 box', calories: 950, protein_g: 40, carbs_g: 0, fat_g: 0, tags: 'corrected' }])
+})
+
+test('a correction is a real change, not a rounding nudge', () => {
+  const ai = { name: 'Fried dumpling', calories: 180, protein_g: 3, carbs_g: 24, fat_g: 8 }
+  assert.equal(isCorrection(ai, { ...ai, calories: 190 }), false)
+  assert.equal(isCorrection(ai, { ...ai, name: 'fried  dumpling' }), false)
+  assert.equal(isCorrection(ai, { ...ai, calories: 250 }), true)
+  assert.equal(isCorrection(ai, { ...ai, fat_g: 14 }), true)
+  assert.equal(isCorrection(ai, { ...ai, name: 'Festival' }), true)
+})
+
+test('missed searches are grouped by what was asked, most asked first', () => {
+  const { misses, corrections } = summariseFoodFeedback([
+    { kind: 'search_miss', query: 'Stew peas', created_at: '2026-11-20T10:00:00Z' },
+    { kind: 'search_miss', query: 'gizzada', created_at: '2026-11-19T10:00:00Z' },
+    { kind: 'search_miss', query: 'stew  peas', picked: 'Pea soup (USDA)', created_at: '2026-11-18T10:00:00Z' },
+    { kind: 'ai_correction', name: 'Cookshop box', est_kcal: 700, kcal: 950 },
+  ])
+  assert.deepEqual(misses.map((m) => [m.query, m.times, m.picked]), [['Stew peas', 2, 'Pea soup (USDA)'], ['gizzada', 1, null]])
+  assert.equal(corrections.length, 1)
 })

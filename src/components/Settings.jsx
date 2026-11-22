@@ -17,7 +17,8 @@ import {
   TargetPreview,
   useProfileForm,
 } from './ProfileForm.jsx'
-import { Avatar, Icon, ListRow, ListSection, MenuRow, PageHeader, Segmented, Sheet, ToggleRow, useSheetClose } from './ui.jsx'
+import { Avatar, Icon, ListRow, ListSection, MenuRow, PageHeader, Segmented, Sheet, Spinner, ToggleRow, useSheetClose } from './ui.jsx'
+import { summariseFoodFeedback } from '../lib/foodSearch.js'
 import { photoToAvatar } from '../lib/image.js'
 import { FREQUENCY_LABEL } from '../data/glp1.js'
 import { formatDose, formatWater, glp1Plan, waterTargetMl } from '../lib/glp1.js'
@@ -241,7 +242,7 @@ export default function Settings() {
         />
       </ListSection>
 
-      <ListSection header="Tracking" footer="Night shifts: food eaten before your day starts counts toward the day before. Water goal ≈ 30 ml per kg; drink more in the heat and on shift.">
+      <ListSection header="Tracking" footer="Late nights: food eaten before your day starts counts toward the day before. Water goal ≈ 30 ml per kg; drink more in the heat and when you’re active.">
         <MenuRow
           icon="moon"
           color="var(--indigo)"
@@ -262,8 +263,8 @@ export default function Settings() {
         <ListRow
           icon="heart"
           color="var(--pink)"
-          label="Apple Fitness"
-          sub="Import workouts from a Health export"
+          label="Apple Health"
+          sub="Import workouts, sleep and steps"
           onClick={() => openSheet('appleImport')}
         />
         <MenuRow
@@ -288,6 +289,7 @@ export default function Settings() {
         <ToggleRow icon="db" color="var(--indigo)" label="USDA FoodData Central" sub="Generic foods and dishes" checked={prefs.usda} onChange={(v) => setPrefs({ usda: v })} />
         <ToggleRow icon="barcode" color="var(--orange)" label="Open Food Facts" sub="Packaged products and barcodes" checked={prefs.off} onChange={(v) => setPrefs({ off: v })} />
         <ToggleRow icon="sparkles" color="var(--purple)" label="AI checks databases" sub="Estimates look foods up first" checked={prefs.aiChecks} onChange={(v) => setPrefs({ aiChecks: v })} />
+        <ListRow icon="search" color="var(--teal)" label="Foods the app is missing" sub="Searches that found nothing, and AI estimates you corrected" onClick={() => setSheet('gaps')} />
       </ListSection>
 
       {mode === 'cloud' && (
@@ -304,7 +306,7 @@ export default function Settings() {
             options={[['2', 'Every 2 hours', 'Every 2 h'], ['3', 'Every 3 hours', 'Every 3 h'], ['0', 'Off']]}
             onChange={(v) => setPrefs({ checkinHours: Number(v) })}
           />
-          <ListRow icon="note" color="var(--teal)" label="Notes for Mimi" sub={profile.coach_notes ? profile.coach_notes.slice(0, 60) : 'Shifts, training, injuries, likes'} onClick={() => setSheet('notes')} />
+          <ListRow icon="note" color="var(--teal)" label="Notes for Mimi" sub={profile.coach_notes ? profile.coach_notes.slice(0, 60) : 'Routine, training, injuries, likes'} onClick={() => setSheet('notes')} />
           <ListRow
             icon="chat"
             color="var(--blue)"
@@ -402,6 +404,7 @@ export default function Settings() {
       )}
       {sheet === 'password' && <ChangePassword onClose={() => setSheet(null)} />}
       {sheet === 'photo' && <PhotoSheet name={name} onClose={() => setSheet(null)} />}
+      {sheet === 'gaps' && <FoodGapsSheet onClose={() => setSheet(null)} />}
     </div>
   )
 }
@@ -544,6 +547,78 @@ function PhotoSheet({ name, onClose }) {
         Cropped to a square and shrunk to a small image. It’s stored with your profile{' '}
         {profile.id === 'local' ? 'on this device' : 'in your account'} and only you can see it.
       </p>
+    </Sheet>
+  )
+}
+
+/**
+ * What the built-in food list is missing: searches that found nothing in the
+ * app's own lists, and AI estimates corrected before they were added. Copy it
+ * to whoever looks after the app; corrections already help the next estimate.
+ */
+function FoodGapsSheet({ onClose }) {
+  const { store, toast } = useApp()
+  const [data, setData] = useState(null)
+  useEffect(() => {
+    store
+      .listFoodFeedback()
+      .then((list) => setData(summariseFoodFeedback(list)))
+      .catch(() => setData({ misses: [], corrections: [] }))
+  }, [store])
+  const kcal = (v) => (v == null ? '?' : Math.round(Number(v)).toLocaleString('en-GB'))
+
+  function asText() {
+    const lines = ['Searched, not found:']
+    for (const m of data.misses) lines.push(`- ${m.query}${m.times > 1 ? ` (${m.times} times)` : ''}${m.picked ? `; picked ${m.picked}` : ''}`)
+    lines.push('', 'AI estimates corrected (AI → logged):')
+    for (const c of data.corrections) {
+      lines.push(`- ${c.name}${c.serving ? `, ${c.serving}` : ''}: ${kcal(c.est_kcal)} → ${kcal(c.kcal)} kcal; P ${kcal(c.est_protein_g)} → ${kcal(c.protein_g)} g, C ${kcal(c.est_carbs_g)} → ${kcal(c.carbs_g)} g, F ${kcal(c.est_fat_g)} → ${kcal(c.fat_g)} g`)
+    }
+    return lines.join('\n')
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(asText())
+      toast('Copied')
+    } catch {
+      await shareOrDownload('foods-missing.txt', asText(), 'text/plain').catch((e) => toast(e.message, 'error'))
+    }
+  }
+
+  const empty = data && !data.misses.length && !data.corrections.length
+  return (
+    <Sheet title="Foods the app is missing" onClose={onClose}>
+      {!data ? (
+        <div className="loading-block">
+          <Spinner />
+        </div>
+      ) : empty ? (
+        <p className="list-footer mt-0">
+          Nothing yet. Searches that find nothing in the app’s own lists, and AI estimates you change before adding them, will show up here.
+        </p>
+      ) : (
+        <>
+          {data.misses.length > 0 && (
+            <ListSection header="Searched, not found" footer="Not in your foods, your recent items or the Jamaican list.">
+              {data.misses.slice(0, 40).map((m) => (
+                <ListRow key={m.query} label={m.query} sub={m.picked ? `Picked instead: ${m.picked}` : null} value={m.times > 1 ? `×${m.times}` : null} />
+              ))}
+            </ListSection>
+          )}
+          {data.corrections.length > 0 && (
+            <ListSection header="AI estimates you corrected" footer="Mimi already uses these for your next estimates.">
+              {data.corrections.slice(0, 30).map((c) => (
+                <ListRow key={c.id} label={c.name} sub={c.serving} value={`${kcal(c.est_kcal)} → ${kcal(c.kcal)} kcal`} />
+              ))}
+            </ListSection>
+          )}
+          <button type="button" className="btn secondary block" onClick={copy}>
+            <Icon name="share" size={18} /> Copy the list
+          </button>
+          <p className="list-footer mt-3">Send it to whoever looks after the app, so these foods can be added to the built-in Jamaican list.</p>
+        </>
+      )}
     </Sheet>
   )
 }

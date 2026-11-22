@@ -1,6 +1,6 @@
 # Lose It & Love It
 
-A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered coach. It has Jamaican foods built in and handles shift work.
+A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered coach. It has Jamaican foods built in.
 
 **Stack:** React 19 + Vite 8 (static site on GitHub Pages) · Supabase (Postgres + Auth + one Edge Function) · Claude API (only called from the Edge Function).
 
@@ -8,7 +8,7 @@ A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered co
 
 | Area | Features |
 |---|---|
-| Motivation | The Dashboard opens on your wins: a **days-logged streak** (a day counts once it has 500+ kcal; one missed day in any 7 is forgiven as a rest day, so a night shift doesn't wipe it out), dots for the last 7 days, weight since start, % to goal and the next milestone. Tap it for Milestones and Awards. **Three rings**: food (closes at 90–100% of target), protein (90%+) and water; closing one gets a cheer, closing all three gets Mimi's praise. **This week's calorie balance** (Monday to today, unlogged days left out). On Sundays and Mondays, a **week recap** with a one-tap "ask Mimi for next week's focus". |
+| Motivation | The Dashboard opens on your wins: a **days-logged streak** (a day counts once it has 500+ kcal; one missed day in any 7 is forgiven as a rest day, so a busy day doesn't wipe it out; the streak badges count the same way), dots for the last 7 days, weight since start, % to goal and the next milestone. Tap it for Milestones and Awards. **Three rings**: food (closes at 90–100% of target), protein (90%+) and water; closing one gets a cheer, closing all three gets Mimi's praise. **This week's calorie balance** (Monday to today, unlogged days left out). On Sundays and Mondays, a **week recap** with a one-tap "ask Mimi for next week's focus". |
 | Log | Four meals per day, a servings stepper, edit and delete, "copy the day before" |
 | Nutrition breakdown | Tap a meal (or the macro bars for the whole day) to see its calories, a donut chart of where they come from (protein, carbs, fat), its share of your daily targets and each food's share. Editing a food shows its own split. |
 | Add food | Search 133 built-in Jamaican staples, cookshop meals and basics, your saved foods and recent items, plus **USDA FoodData Central** and **Open Food Facts** (type a barcode number to look up a packaged product). Log database foods by servings or grams. **AI estimate** from a text description and/or a photo. Quick add. |
@@ -23,10 +23,13 @@ A phone-first calorie tracker PWA with **Mimi the Penguin**, a Claude-powered co
 | Mimi (coach) | **Mimi the Penguin**: streaming chat with Claude, one tap from the Mimi tab. Each message carries a compact snapshot: targets, the last 14 days, today's log, workouts, trend, adaptive TDEE, GLP-1 plan and recent doses, check-ins and your coach notes. The system prompt has GLP-1 guidance: protein first, eating enough, hydration, side-effect self-care, strength training, red flags; it never advises on dosing. |
 | Mimi's check-ins | Every 2 or 3 hours while the app is open, Mimi reads a small snapshot of today's log (food, protein, water, workouts, weigh-in, mood, GLP-1 dose) and leaves 1–3 next steps at the top of the Mimi section; a dot on the Mimi tab shows a new one, and its headline pops up above the tab for a few seconds. Tap a step to log it. Only runs when something changed (or it's been twice the interval), at most 6 a day. Change or turn off in Settings → Mimi. |
 | Profile photo | Tap your initial in Settings to add a photo. It's cropped to a 256 px square (about 20–40 KB) and stored on your profile; it shows in Settings, on the Dashboard and beside your messages to Mimi. |
-| Shift work | "My day starts at" setting (default 4 am), so a 2 am meal after a night shift counts toward the previous day |
+| Late nights | "My day starts at" setting (default midnight), so a 2 am snack can count toward the previous day |
+| Patterns for Mimi | The app works out patterns in the log itself (`src/lib/findings.js`), each with a minimum number of days and a minimum size of difference, so noise stays quiet: a jump on the scale explained (the weigh-in's note, salty food, carbs, water and sleep the day before), days that look under-logged, measured maintenance far below the formula, symptoms and low intake 1–2 days after a weekly GLP-1 dose, sleep and the next day's food, skipped breakfasts and late eating, the foods behind most calories, and low steps. The top two go with each check-in and the top five with each chat message; Mimi phrases them but never makes up her own. |
+| Sleep and steps | From the same Apple Health export as workouts: one sleep figure (minutes asleep, the fuller of iPhone and Watch) and one step count per day for the last year. Shown on Progress → Health and used for the patterns above. |
+| Foods the app is missing | Searches the app's own lists can't answer, and AI estimates changed before they're added, are noted (Settings → Food databases → Foods the app is missing, with a Copy button, or the `food_feedback` table in Supabase). Corrected estimates go back to the AI as the user's own foods, so the next estimate starts from them. |
 | Data | Export to JSON (backup) or CSV (Sheets/Excel), import JSON. Local-only mode with no account. |
 | Design | One design system (`src/styles.css`): a 4-point spacing scale, one radius scale (capsule buttons, chips and segmented controls; rounded-rectangle fields; 22 px cards and lists), Apple text styles, and the same header on every tab, card and sheet. System font (SF Pro on iPhone) with SF Pro Rounded numbers, one sea-teal-to-palm-green brand palette with sunshine for wins, a sky tint behind every tab's header that follows the time of day, a picture beside each food, pure black in dark mode, iOS grouped lists. Motion: one press response everywhere, spring physics for sheets, tabs and toggles, cards that arrive in turn, sheet contents that follow the sheet up, rings and charts that draw in. Reduce Motion turns it all off. Appearance: Automatic, Light or Dark. Mimi the Penguin works out while the app loads and thinks while the AI works. Sheets stay above the iPhone keyboard while you type. |
-| Offline and sync | Everything you log is saved on the phone first and sent to your account in the background, so screens open instantly and logging works with no signal (on shift, in a dead spot). Changes wait in an outbox and sync when the connection returns; a small pill says when you're offline or changes are waiting, and Settings → Sync shows the status. Mimi, AI estimates and the online food databases still need a connection. |
+| Offline and sync | Everything you log is saved on the phone first and sent to your account in the background, so screens open instantly and logging works with no signal (in a dead spot, abroad). Changes wait in an outbox and sync when the connection returns; a small pill says when you're offline or changes are waiting, and Settings → Sync shows the status. Mimi, AI estimates and the online food databases still need a connection. |
 | PWA | Installable on iPhone. The whole app is stored on install, so it opens with no signal. |
 
 ## One-time setup (all from an iPhone browser)
@@ -41,6 +44,9 @@ Supabase Dashboard → **SQL Editor** → New query → paste each file in order
 4. [`supabase/migrations/0004_avatar_mimi_checkins.sql`](supabase/migrations/0004_avatar_mimi_checkins.sql): profile photo and Mimi's check-ins. Until it's run, the photo won't save (the app says so) and check-ins stay hidden.
 5. [`supabase/migrations/0005_health_conditions.sql`](supabase/migrations/0005_health_conditions.sql): health conditions (PCOS and others) and weigh-in notes. Until it's run, conditions won't save (the app says so).
 6. [`supabase/migrations/0006_apple_workouts.sql`](supabase/migrations/0006_apple_workouts.sql): workouts imported from Apple Fitness. Until it's run, imports still sync, but types the app has no form for (cycling, swimming, dance…) are saved as at-home workouts and Apple's calories are marked as your own number.
+7. [`supabase/migrations/0007_multiple_checkins.sql`](supabase/migrations/0007_multiple_checkins.sql): several weigh-ins and mood check-ins a day.
+8. [`supabase/migrations/0008_midnight_day_start.sql`](supabase/migrations/0008_midnight_day_start.sql): days start at midnight by default. Run it once only.
+9. [`supabase/migrations/0009_sleep_steps_food_feedback.sql`](supabase/migrations/0009_sleep_steps_food_feedback.sql): sleep and steps on each day, and the `food_feedback` table. Until it's run, both stay on the phone only (nothing is lost, and no errors show).
 
 ### 2. Auth (2 min)
 Dashboard → **Authentication → URL Configuration**:
@@ -50,7 +56,7 @@ Dashboard → **Authentication → URL Configuration**:
 Create your account in the app. Then, under **Authentication → Sign In / Providers**, turn off **Allow new users to sign up** so strangers can't make accounts.
 
 ### 3. AI Edge Function (5 min)
-**Updating:** whenever `supabase/functions/ai/index.ts` changes, open the `ai` function → **Code** → paste the new file → **Deploy**. (v0.2.0 changed it: food databases and the lookup tool.)
+**Updating:** whenever `supabase/functions/ai/index.ts` changes, open the `ai` function → **Code** → paste the new file → **Deploy**. (v0.2.0 changed it: food databases and the lookup tool. v0.9.0 changed it: how Mimi uses the app's patterns, sleep and steps.)
 
 Dashboard → **Edge Functions** → Deploy a new function → **Via Editor** → name it `ai` → paste [`supabase/functions/ai/index.ts`](supabase/functions/ai/index.ts) → Deploy.
 Then, in the function's **Details**, turn **JWT verification OFF** (the toggle name varies a little between dashboard versions). The function checks the user itself, and this avoids issues with the newer JWT signing keys.
@@ -113,7 +119,7 @@ src/
   appContext.js         useApp() hook
   config.js             Supabase URL + publishable key
   lib/calc.js           BMR/TDEE/targets, trend, weekly rate, adaptive TDEE, units
-  lib/dates.js          local dates + shift-aware "logical today"
+  lib/dates.js          local dates + "logical today" (the day-start hour)
   lib/db.js             data layer: wires the engine to localStorage, Supabase and online/foreground events
   lib/engine.js         every store method, on a copy of the data kept on the device (pure, tested)
   lib/sync.js           cloud mode: outbox of unsent writes, pull and merge from Supabase (pure, tested)
@@ -121,6 +127,8 @@ src/
   lib/ai.js             calls the Edge Function (streaming coach, meal estimate, photo resize)
   lib/coachContext.js   the data snapshot sent to the coach
   lib/checkins.js       when Mimi's check-ins are due, and their small data snapshot (pure, tested)
+  lib/findings.js       patterns in the log, worked out with minimum sample sizes for Mimi (pure, tested)
+  lib/appleHealth.js    reads workouts, sleep and steps from the Health export, streaming (pure, tested)
   lib/viewport.js       keeps sheets above the iPhone keyboard (visualViewport)
   lib/image.js          profile photo crop and resize
   lib/foodSearch.js     food ranking, database result → loggable food, AI reference list
