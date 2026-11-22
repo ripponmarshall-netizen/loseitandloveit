@@ -10,7 +10,9 @@
    - Motion: one press response (--press), springs for things that move,
      --ease for fades, durations from --dur-*. Reduce Motion turns it all off.
    - Colour: the brand teal for actions, one colour per metric (--kcal,
-     --protein, --carbs, --fat, --weight), iOS system colours for icons.
+     --protein, --carbs, --fat, --water, --weight), iOS system colours for icons.
+     The metric colours are checked as a set (all pairs, light and dark) for
+     colour-blind and normal-vision separation: change one, re-check them all.
    White/grouped grey in light mode, pure black in dark mode, SF Pro via the
    system font stack (no web fonts: works offline). */
 
@@ -66,12 +68,11 @@
   --kcal-b: var(--ring-b);
   --weight: var(--indigo);
   --protein: var(--pink);
-  --carbs: var(--teal);
+  --carbs: #b07cf0; /* lilac: clear of the calorie teal and the water blue */
   --fat: var(--orange);
+  --water: #2a6fd6;
   --ring-a: #14b8a6;
   --ring-b: #7cc94a;
-  --protein-b: #ff6a88;
-  --water-b: #4f8dff;
   --over: var(--orange);
   /* Penguin */
   --pg-body: #1f2240;
@@ -165,8 +166,8 @@
     --yellow: #ffd60a;
     --ring-a: #2dd4bf;
     --ring-b: #a3e635;
-    --protein-b: #ff7a93;
-    --water-b: #5e9bff;
+    --carbs: #c4a0ff;
+    --water: #4d8dff;
     --brand: #0d9488;
     --sun: #ffc233;
     --sky-mix: 17%;
@@ -218,8 +219,8 @@
   --yellow: #ffd60a;
   --ring-a: #2dd4bf;
   --ring-b: #a3e635;
-  --protein-b: #ff7a93;
-  --water-b: #5e9bff;
+  --carbs: #c4a0ff;
+  --water: #4d8dff;
   --brand: #0d9488;
   --sun: #ffc233;
   --sky-mix: 17%;
@@ -896,9 +897,9 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 }
 .wins-more { flex: none; color: var(--text-3); }
 
-/* Hero: three rings and their key */
+/* Hero, part 1: calories. One ring (eaten against the day's goal) and the numbers beside it. */
 .hero-card { padding: var(--card-pad); }
-.hero { display: flex; align-items: center; gap: 18px; width: 100%; border: 0; background: none; padding: 0; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.hero { display: flex; align-items: center; gap: var(--sp-5); width: 100%; border: 0; background: none; padding: 0; color: inherit; text-align: left; font: inherit; cursor: pointer; }
 .hero-stats { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .hero-left { display: flex; flex-direction: column; margin-bottom: var(--sp-1); }
 .hero-big { font-size: 38px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
@@ -913,17 +914,13 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
   30% { filter: drop-shadow(0 0 6px var(--glow)) drop-shadow(0 0 2px var(--glow)); }
   100% { filter: none; }
 }
-.ring-legend { display: flex; align-items: center; gap: 7px; font-size: 14px; min-width: 0; }
-.ring-legend i {
-  flex: none; width: 14px; height: 14px; border-radius: 50%; display: grid; place-items: center;
-  background: color-mix(in srgb, var(--c) 22%, transparent); box-shadow: inset 0 0 0 2.5px var(--c); color: #fff;
-  transition: background-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
-}
-.ring-legend.done i { background: var(--c); box-shadow: none; }
-.ring-legend.done i svg { animation: pop-in 0.5s var(--spring-bouncy); }
-.rl-label { color: var(--text-2); flex: none; }
-.rl-val { margin-left: auto; font-weight: 600; white-space: nowrap; }
-.rl-val .muted { font-weight: 400; font-size: 13px; }
+.ring-centre { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; pointer-events: none; }
+.ring-pct { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.ring-pct-label { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.ring-done { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--good); color: #fff; animation: pop-in 0.5s var(--spring-bouncy); }
+.kcal-row { display: flex; align-items: baseline; gap: var(--sp-2); font-size: 14px; }
+.kcal-row .k { color: var(--text-2); }
+.kcal-row .v { margin-left: auto; font-weight: 600; white-space: nowrap; }
 .hero-burn { display: inline-flex; align-items: center; gap: var(--sp-1); font-size: 13px; font-weight: 600; color: var(--orange); margin-top: 2px; }
 .hero-card.all-closed {
   box-shadow: var(--shadow-card), 0 0 0 1.5px color-mix(in srgb, var(--sun) 70%, transparent), 0 10px 30px -12px color-mix(in srgb, var(--sun) 60%, transparent);
@@ -934,19 +931,38 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
   animation: rise 0.6s var(--spring-bouncy) both;
 }
 
-/* Macros: three slim bars under the rings */
-.macro-strip {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; width: 100%;
-  margin-top: 18px; padding: var(--sp-4) 0 0; border: 0; border-top: 0.5px solid var(--sep);
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: opacity var(--dur-fast);
+/* Hero, part 2: protein, carbs, fat and water as bars against their goals.
+   Every bar shares one left edge and one scale (0 to 100% of its goal), so
+   they compare at a glance; each metric keeps its own colour app-wide.
+   Name and amount are plain text: the colour only marks the bar. */
+.goal-bars {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto 16px; column-gap: var(--sp-3);
+  margin-top: 18px; padding-top: var(--sp-2); border-top: 0.5px solid var(--sep);
 }
-.macro-strip:active { opacity: 0.6; transition: none; }
-.macro-mini { display: flex; flex-direction: column; min-width: 0; }
-.macro-mini-label { font-size: 13px; font-weight: 600; color: var(--c); }
-.macro-mini-val { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
-.macro-mini-val .muted { font-size: 13px; font-weight: 400; color: var(--text-2); }
-.bar, .macro-mini-bar { height: 5px; border-radius: 3px; background: var(--fill-2); overflow: hidden; margin-top: 6px; }
-.bar > i, .macro-mini-bar i { display: block; height: 100%; border-radius: 3px; background: var(--c); transition: width var(--dur-chart) var(--spring-snappy); }
+/* Each row is a button spanning the card's columns (subgrid), so every bar
+   starts and ends at the same x whatever the label or number. */
+.goal-row {
+  grid-column: 1 / -1; display: grid; grid-template-columns: 4.3em minmax(0, 1fr) 6.6em 16px; grid-template-columns: subgrid; align-items: center;
+  min-height: 36px; padding: 0; border: 0; background: none; color: inherit; font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+  transition: opacity var(--dur-fast);
+}
+.goal-row:active { opacity: 0.6; transition: none; }
+.goal-row.split { margin-top: var(--sp-2); } /* water is not a macro: a little air sets it apart */
+.goal-label { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.goal-bar { height: 8px; border-radius: var(--r-full); background: var(--fill-2); overflow: hidden; }
+.goal-bar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transition: width var(--dur-chart) var(--spring-snappy); }
+.goal-row.cheer .goal-bar i { animation: bar-cheer 1.4s var(--ease) both; }
+@keyframes bar-cheer { 30% { box-shadow: 0 0 10px 1px var(--c); } }
+.goal-val { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; text-align: right; }
+.goal-val .muted { font-size: 13px; font-weight: 400; color: var(--text-2); }
+.goal-tick { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; color: #fff; }
+.goal-row.done .goal-tick { background: var(--good); }
+.goal-row.over .goal-tick { background: var(--over); }
+.goal-row:is(.done, .over) .goal-tick svg { animation: pop-in 0.5s var(--spring-bouncy); }
+/* MacroBar (meal breakdown): coloured name, slim bar, grams */
+.macro-label { font-size: 13px; font-weight: 600; color: var(--c); }
+.bar { height: 5px; border-radius: 3px; background: var(--fill-2); overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; border-radius: 3px; background: var(--c); transition: width var(--dur-chart) var(--spring-snappy); }
 .macro { margin-top: 10px; }
 
 /* This week's calorie balance */
@@ -1688,7 +1704,7 @@ button.mimi-tip { cursor: pointer; }
   .wins-top { flex-wrap: wrap; }
   .wins-dots { order: 3; width: 100%; justify-content: space-between; padding: 0 var(--sp-1); }
   .hero .ring-stack { width: 100px; height: 100px; }
-  .rl-val .muted { display: none; } /* the ring shows how far there is to go */
+  .goal-of { display: none; } /* the bar shows how far there is to go */
   .head-avatar { display: none; } /* Settings is on the tab bar; the date needs the room */
 }
 
@@ -1700,7 +1716,7 @@ button.mimi-tip { cursor: pointer; }
 
 @supports (color: oklch(from red l c h)) {
   .stat .l, .eyebrow { color: oklch(from var(--c, var(--text-2)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
-  .macro-mini-label, .meal-chip, .dock-item.alert .dock-value, .repeat-card .eyebrow, .celebrate-card .eyebrow {
+  .macro-label, .meal-chip, .dock-item.alert .dock-value, .repeat-card .eyebrow, .celebrate-card .eyebrow {
     color: oklch(from var(--c) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
   }
   .chip.tinted, .badge, .list-row.add-row { color: oklch(from var(--c, var(--tint)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
@@ -1726,6 +1742,7 @@ button.mimi-tip { cursor: pointer; }
   /* Fills that carry white text */
   .btn:not(.secondary, .gray, .plain, .destructive), .bubble.user { background: oklch(from var(--tint) min(l, var(--fill-l)) c h); }
   .repeat-go { background: oklch(from var(--c) min(l, var(--fill-l)) c h); }
+  .goal-row.over .goal-tick { background: oklch(from var(--over) min(l, var(--fill-l)) c h); }
   .award.fresh::before { background: oklch(from var(--red) min(l, var(--fill-l)) c h); }
 }
 

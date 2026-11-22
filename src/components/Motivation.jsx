@@ -1,6 +1,6 @@
 // What keeps you going, on the Today screen: the wins strip (streak, the
-// week's dots, weight since start, next milestone), the three rings, the
-// weekly calorie balance, the ring-closed cheer and the Sunday recap.
+// week's dots, weight since start, next milestone), the calorie ring, the
+// weekly calorie balance, the goal-hit cheer and the Sunday recap.
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
 import {
@@ -143,9 +143,10 @@ export function WinsCard({ recent }) {
 
 /**
  * Concentric rings, Apple Activity style. rings: [{ key, value, max, a, b }],
- * outermost first. A ring in `cheer` pulses once (it just closed).
+ * outermost first. A ring in `cheer` pulses once (it just closed). `children`
+ * sit in the middle (e.g. the percentage a single ring stands for).
  */
-export function RingStack({ rings, size = 128, stroke = 12, gap = 3, cheer = [] }) {
+export function RingStack({ rings, size = 128, stroke = 12, gap = 3, cheer = [], children }) {
   const id = useId().replace(/:/g, '')
   const [shown, setShown] = useState(() => rings.map(() => 0))
   const fracs = rings.map((r) => (r.max > 0 ? Math.min(1, Math.max(0, r.value / r.max)) : 0))
@@ -193,19 +194,20 @@ export function RingStack({ rings, size = 128, stroke = 12, gap = 3, cheer = [] 
           )
         })}
       </svg>
+      {children && <div className="ring-centre">{children}</div>}
     </div>
   )
 }
 
 const CHEER = {
   calories: '🎯 Calories on target',
-  protein: '💪 Protein ring closed',
-  water: '💧 Water ring closed',
+  protein: '💪 Protein goal hit',
+  water: '💧 Water goal hit',
 }
 
 /**
- * Cheer once when a ring closes while you watch: a pulse on the ring and a
- * toast. What's already closed when the day first loads is noted quietly, so
+ * Cheer once when a daily goal (calories, protein, water) is hit while you
+ * watch: a pulse on its ring or bar and a toast. What's already closed when the day first loads is noted quietly, so
  * opening the app never replays old cheers.
  * Returns the keys of the rings pulsing right now.
  */
@@ -226,7 +228,7 @@ export function useRingCheer({ date, active, ready, closed }) {
     setCheer(fresh)
     clearTimeout(timer.current)
     timer.current = setTimeout(() => setCheer([]), 1600)
-    toast(now.length === 3 ? '🏆 All three rings closed. Great day!' : CHEER[fresh[fresh.length - 1]])
+    toast(now.length === 3 ? '🏆 Calories, protein and water all on target. Great day!' : CHEER[fresh[fresh.length - 1]])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig, active, ready, key])
   useEffect(() => () => clearTimeout(timer.current), [])
