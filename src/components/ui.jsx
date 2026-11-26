@@ -25,7 +25,13 @@ const PATHS = {
   gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM19.4 13.5l1.6 1.2-2 3.4-1.9-.7a7 7 0 0 1-1.7 1l-.3 2h-4l-.3-2a7 7 0 0 1-1.7-1l-1.9.7-2-3.4 1.6-1.2a7 7 0 0 1 0-3L3 9.3l2-3.4 1.9.7a7 7 0 0 1 1.7-1l.3-2h4l.3 2a7 7 0 0 1 1.7 1l1.9-.7 2 3.4-1.6 1.2a7 7 0 0 1 0 3z',
   scale: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM9 9.5a3 3 0 0 1 6 0M12 9.5l1.5-1.5',
   flame: 'M12 3c3 3.5 6 6.5 6 10.5A6 6 0 0 1 6 13.5c0-2 1-3.5 2.5-5 .3 1.6 1 2.6 2 3 0-3.2.5-5.8 1.5-8.5z',
-  run: 'M13.5 4.5a1.5 1.5 0 1 0 0 .01M9 20l2.5-5 3 2.5V21M7 12l2.5-3.5 4 1 2 3h3M11.5 15l-2-4',
+  run: 'M15 2.75a1.75 1.75 0 1 0 0 3.5 1.75 1.75 0 0 0 0-3.5zM13.2 8L11 13.5M13.2 8l-3.7 1.3L7.5 12M13.2 8l2.3 2.8 3 .2M11 13.5l3 2.7-.7 4.8M11 13.5l-2.4 3.3-3.6.7',
+  // Meals: sunrise, midday sun, moon and a star, an apple
+  sunrise: 'M3 18h18M7 18a5 5 0 0 1 10 0M12 6v3M5.6 9.6l2 2M18.4 9.6l-2 2M8 21h8',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4',
+  moonStar: 'M18.5 14.5A7 7 0 0 1 9.5 5.5a7.5 7.5 0 1 0 9 9zM17 3v4M15 5h4',
+  apple: 'M12 7.6C10.4 6.6 7.6 6.5 6.1 8.4 4.3 10.7 5 14.6 6.8 17.3 8 19.1 9.4 20.2 10.7 19.9c.5-.1.9-.4 1.3-.4s.8.3 1.3.4c1.3.3 2.7-.8 3.9-2.6 1.8-2.7 2.5-6.6.7-8.9-1.5-1.9-4.3-1.8-5.9-.8zM12 7.6c0-1.9.9-3.4 2.7-4.1',
+  alert: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v5M12 16v.5',
   house: 'M4 11l8-6.5 8 6.5M6 9.5V19h12V9.5M10 19v-5h4v5',
   target: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11.5v1',
   person: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM5 20c.8-3.5 3.5-5.5 7-5.5s6.2 2 7 5.5',
@@ -68,7 +74,47 @@ const PATHS = {
   racquet: 'M14.5 3a6 6 0 1 0 .01 0M10.3 13.7L4 20M11.5 6l6 6M9 8.5l6 6',
 }
 
-export function Icon({ name, size, className, style, strokeWidth = 2 }) {
+// The area inside an icon, for two-tone (`duo`) and selected (`solid`) icons.
+// `true` reuses the outline itself (closed shapes); a string is a separate
+// area (e.g. the ground under a trend line). Icons not listed stay line-only.
+const AREAS = {
+  grid: true,
+  gear: true,
+  chat: true,
+  drop: true,
+  flame: true,
+  heart: true,
+  moon: true,
+  pill: 'M9.5 4.5a4.95 4.95 0 0 1 7 7l-5 5a4.95 4.95 0 0 1-7-7z',
+  scale: 'M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z',
+  smile: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z',
+  target: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z',
+  clock: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z',
+  trend: 'M4 17l5-5 4 3 7-8v13H4z',
+  syringe: 'M11 8l5 5-6.5 6.5H5v-4.5z',
+  cup: 'M6.6 9h10.8l-1.1 10a1.5 1.5 0 0 1-1.5 1.4H9.2a1.5 1.5 0 0 1-1.5-1.4z',
+  calendar: 'M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z',
+  sunrise: 'M7 18a5 5 0 0 1 10 0z',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  moonStar: 'M18.5 14.5A7 7 0 0 1 9.5 5.5a7.5 7.5 0 1 0 9 9z',
+  apple: 'M12 7.6C10.4 6.6 7.6 6.5 6.1 8.4 4.3 10.7 5 14.6 6.8 17.3 8 19.1 9.4 20.2 10.7 19.9c.5-.1.9-.4 1.3-.4s.8.3 1.3.4c1.3.3 2.7-.8 3.9-2.6 1.8-2.7 2.5-6.6.7-8.9-1.5-1.9-4.3-1.8-5.9-.8z',
+  person: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+  note: 'M6 4h9l3 3v13H6z',
+  house: 'M6 9.5V19h12V9.5L12 4.5z',
+  cloud: true,
+  leaf: 'M5 19c0-8 5-13 14-14-1 9-6 14-14 14z',
+}
+
+/**
+ * Line icon. `duo` adds a soft fill of the same colour inside the shape (for
+ * tinted tiles); `solid` fills it fully, as iOS does for the selected tab.
+ */
+export function Icon({ name, size, className, style, strokeWidth = 2, duo = false, solid = false }) {
+  const area = (duo || solid) && AREAS[name]
+  const areaPath = area === true ? PATHS[name] : area
+  // Solid fills only whole outlines; a separate area (under a trend line, a
+  // scale's body with its dial on top) gets a strong tint so the lines still show.
+  const opacity = solid ? (area === true ? 1 : 0.34) : 0.22
   return (
     <svg
       viewBox="0 0 24 24"
@@ -83,6 +129,7 @@ export function Icon({ name, size, className, style, strokeWidth = 2 }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
+      {areaPath && <path d={areaPath} fill="currentColor" fillOpacity={opacity} fillRule="evenodd" stroke="none" />}
       <path d={PATHS[name]} />
     </svg>
   )
@@ -103,16 +150,62 @@ export const Chevron = () => (
  * `eyebrow` can be an element (e.g. a "Back to today" link).
  */
 export function PageHeader({ eyebrow, title, lead, children }) {
+  const titleRef = useRef(null)
+  const barRef = useRef(null)
+  const scrolled = useScrolledUnder(titleRef, barRef)
   return (
-    <header className="page-head">
-      {lead && <div className="page-head-lead">{lead}</div>}
-      <div className="page-head-text">
-        {typeof eyebrow === 'string' ? <span className="eyebrow">{eyebrow}</span> : eyebrow}
-        <h1>{title}</h1>
-      </div>
-      {children && <div className="page-head-actions">{children}</div>}
-    </header>
+    <>
+      <header className="page-head">
+        {lead && <div className="page-head-lead">{lead}</div>}
+        <div className="page-head-text">
+          {typeof eyebrow === 'string' ? <span className="eyebrow">{eyebrow}</span> : eyebrow}
+          <h1 ref={titleRef}>{title}</h1>
+        </div>
+        {children && <div className="page-head-actions">{children}</div>}
+      </header>
+      {/* As on iOS: once the large title scrolls away, a small one stays at the
+          top. Tapping it goes back to the top. Portalled so a sliding page
+          can't carry it along. */}
+      {createPortal(
+        <div ref={barRef} className={`top-bar${scrolled ? ' on' : ''}`} aria-hidden="true" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <span className="top-bar-title">{title}</span>
+        </div>,
+        document.body,
+      )}
+    </>
   )
+}
+
+/**
+ * True once the title has scrolled up under the bar. Checked on scroll and
+ * whenever the title's size changes: a tab being hidden measures zero (so its
+ * bar goes) and a tab coming back measures again. An IntersectionObserver
+ * alone would miss the hiding: "out of view" to "hidden" isn't a change to it.
+ */
+function useScrolledUnder(titleRef, barRef) {
+  const [under, setUnder] = useState(false)
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    let raf = 0
+    const check = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const r = el.getBoundingClientRect()
+        setUnder(r.height > 0 && r.bottom <= (barRef.current?.offsetHeight || 44))
+      })
+    }
+    check()
+    window.addEventListener('scroll', check, { passive: true })
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(check)
+    ro?.observe(el)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('scroll', check)
+      ro?.disconnect()
+    }
+  }, [titleRef, barRef])
+  return under
 }
 
 /** A title between cards ("Food"), with an optional quiet figure on the right. */
@@ -444,7 +537,7 @@ function RowIcon({ icon, color }) {
   if (!icon) return null
   return (
     <span className="row-icon" style={{ '--c': color }}>
-      <Icon name={icon} strokeWidth={2.2} />
+      <Icon name={icon} strokeWidth={2.2} duo />
     </span>
   )
 }

@@ -4,7 +4,7 @@ import { MOOD_BY_V } from '../data/glp1.js'
 import { doseStatusLabel, formatWater, glp1Plan, planDoseStatus } from '../lib/glp1.js'
 import { guessMeal, parseQuickLog } from '../lib/quicklog.js'
 import { displayWeight, isValidWeightKg, latestWeighIn, lbToKg, weeklyRate, weightUnit, weightValue } from '../lib/calc.js'
-import { MEAL_LABEL } from '../lib/meals.js'
+import { MEAL_COLOR, MEAL_ICON, MEAL_LABEL } from '../lib/meals.js'
 import { useDay } from '../lib/useDay.js'
 import { useWater, useWaterTarget } from './Checkin.jsx'
 import { Icon } from './ui.jsx'
@@ -146,7 +146,7 @@ function useDockItems(date, q) {
   const nextMeal = date === today ? guessMeal() : 'dinner'
 
   return [
-    { id: 'meal', icon: 'fork', color: 'var(--orange)', label: 'Meal', value: MEAL_LABEL[nextMeal], onClick: () => openAdd({ meal: nextMeal }), aria: `Log ${MEAL_LABEL[nextMeal]}` },
+    { id: 'meal', icon: MEAL_ICON[nextMeal], color: MEAL_COLOR[nextMeal], label: 'Meal', value: MEAL_LABEL[nextMeal], onClick: () => openAdd({ meal: nextMeal }), aria: `Log ${MEAL_LABEL[nextMeal]}` },
     {
       id: 'water', icon: 'drop', color: 'var(--cyan)', label: 'Water', value: formatWater(water.ml), pct: water.ml / waterTarget,
       done: water.ml >= waterTarget, onClick: () => openSheet('water', { date, daily }), aria: `Water: ${formatWater(water.ml)} of ${formatWater(waterTarget)}`,
@@ -188,8 +188,9 @@ export function LogDock({ date, onDone, autoFocus = false, bare = false, classNa
         {items.map((it) => (
           <button key={it.id} type="button" className={`dock-item${it.done ? ' done' : ''}${it.alert ? ' alert' : ''}`} style={{ '--c': it.color }} onClick={it.onClick} aria-label={it.aria}>
             <span className="dock-icon" aria-hidden="true">
-              {it.emoji ? <span className="dock-emoji">{it.emoji}</span> : <Icon name={it.icon} size={18} strokeWidth={2.2} />}
-              {it.pct != null && (
+              {it.emoji ? <span className="dock-emoji">{it.emoji}</span> : <Icon name={it.icon} size={19} strokeWidth={2.1} duo />}
+              {/* Nothing yet: no ring (a zero-length round cap still draws a dot) */}
+              {it.pct > 0 && (
                 <svg className="dock-ring" viewBox="0 0 36 36">
                   <circle cx="18" cy="18" r="16.5" strokeDasharray={`${Math.min(1, it.pct) * RING_C} ${RING_C}`} />
                 </svg>

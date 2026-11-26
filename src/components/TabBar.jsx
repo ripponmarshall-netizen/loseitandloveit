@@ -161,7 +161,7 @@ export default function TabBar({ tab, setTab, onLog, shrink = true }) {
             onClick={() => press(t)}
           >
             <span className="tab-glyph" aria-hidden="true">
-              {t.face ? <PenguinFace size={26} /> : <Icon name={t.icon} strokeWidth={t.action ? 2.8 : on ? 2.3 : 1.9} />}
+              {t.face ? <PenguinFace size={26} /> : <Icon name={t.icon} solid={on && !t.action} strokeWidth={t.action ? 2.8 : on ? 2.1 : 1.9} />}
               {t.face && mimi.busy && <span className="tab-busy" />}
               {t.face && mimi.unseen && !on && <span className="mimi-dot" />}
             </span>
