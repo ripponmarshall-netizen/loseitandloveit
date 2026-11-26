@@ -42,6 +42,15 @@ export default function Coach({ active = true }) {
   const onGlp1 = !!glp1Plan(app.profile)
   const mimi = useMimi()
 
+  // The message box grows with what you type (up to its max-height), and
+  // shrinks back once it's sent.
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [input, active])
+
   // Opening the Mimi section reads the latest check-in (clears the bubble's dot).
   useEffect(() => {
     if (active && mimi.unseen) mimi.markSeen()

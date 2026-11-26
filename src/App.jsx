@@ -417,9 +417,19 @@ export default function App() {
   } else if ((!authReady && !store) || (store && profile === undefined)) {
     body = <PenguinLoader />
   } else if (!store) {
-    body = <Auth onUseLocal={enterLocalMode} />
+    body = (
+      <>
+        <div className="sky" data-sky={skyFor(new Date(clock).getHours())} aria-hidden="true" />
+        <Auth onUseLocal={enterLocalMode} />
+      </>
+    )
   } else if (profile === null) {
-    body = <Onboarding />
+    body = (
+      <>
+        <div className="sky" data-sky={skyFor(new Date(clock).getHours())} aria-hidden="true" />
+        <Onboarding />
+      </>
+    )
   } else {
     const show = (id) => (visited.has(id) || tab === id) && (
       <div key={id} hidden={tab !== id} className={tab === id ? 'page' : undefined} data-tab={id} data-dir={tab === id ? navDir || undefined : undefined}>
@@ -455,6 +465,7 @@ export default function App() {
           className={`toast${toastMsg.kind === 'error' ? ' error' : ''}${toastMsg.leaving ? ' leaving' : ''}`}
           role={toastMsg.kind === 'error' ? 'alert' : 'status'}
         >
+          {toastMsg.kind === 'error' && <Icon name="alert" size={20} strokeWidth={2.2} className="toast-icon" />}
           <span>{toastMsg.msg}</span>
           {toastMsg.action && (
             <button

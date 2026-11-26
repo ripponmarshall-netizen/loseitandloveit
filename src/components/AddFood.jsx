@@ -4,6 +4,7 @@ import { BUILTIN_FOODS } from '../data/foods.js'
 import { estimateMeal, photoToBase64, searchFoodDatabases } from '../lib/ai.js'
 import { buildRefs, correctionRefs, dbItemToFood, gramsToServings, isBarcode, isCorrection, rankFoods } from '../lib/foodSearch.js'
 import { formatDayLabel } from '../lib/dates.js'
+import { foodEmoji } from '../lib/foodEmoji.js'
 import { kcalLooksWrong, validServings } from '../lib/calc.js'
 import { MEALS, MEAL_LABEL } from '../lib/meals.js'
 import { CountUp, Icon, Segmented, Sheet, Spinner, Stepper, Switch, Thinking, useSheetClose } from './ui.jsx'
@@ -94,7 +95,8 @@ function useAdd(onDone) {
 /** One food in a list. `badge`: show where it's from (lists that mix sources; elsewhere the section header says it). */
 function FoodRow({ food, onPick, i = 0, badge = false }) {
   return (
-    <button className="list-row rise" style={{ '--i': Math.min(i, 10) }} onClick={() => onPick(food)}>
+    <button className="list-row entry-row rise" style={{ '--i': Math.min(i, 10) }} onClick={() => onPick(food)}>
+      <span className="entry-emoji" aria-hidden="true">{foodEmoji(food.name)}</span>
       <span className="label">
         <span className="ellipsis d-block">{food.name}</span>
         <span className="sub ellipsis">
@@ -585,7 +587,9 @@ function AiTab({ date, meal, onDone, initialText = '' }) {
               <div className="row wrap tiny muted mb-2">
                 <span>{it.serving}</span>
                 {it.reference && <span className={`badge ${refBadge(it.reference)}`}>{it.reference}</span>}
-                <span className={`badge ${it.confidence === 'high' ? 'jam' : it.confidence === 'low' ? 'off' : 'recent'}`}>{it.confidence} confidence</span>
+                {it.confidence && (
+                  <span className={`badge ${it.confidence === 'high' ? 'jam' : it.confidence === 'low' ? 'off' : 'recent'}`}>{it.confidence} confidence</span>
+                )}
               </div>
               <div className="grid4">
                 <label className="field"><span>kcal</span><input className="input" inputMode="numeric" value={it.calories} onChange={(e) => update(it.key, 'calories', e.target.value)} /></label>

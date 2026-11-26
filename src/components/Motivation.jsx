@@ -94,7 +94,8 @@ export function WinsCard({ recent }) {
     const v = weightValue(Math.abs(lostKg), units).toFixed(1)
     chips.push(lostKg > 0 ? `−${v} ${weightUnit(units)} since start` : `+${v} ${weightUnit(units)} since start`)
   }
-  if (goal && !goal.reached) chips.push(`${Math.round(goal.fraction * 100)}% to goal`)
+  // "0% to goal" on day one reads as a telling-off: it shows from the first 1%.
+  if (goal && !goal.reached && Math.round(goal.fraction * 100) >= 1) chips.push(`${Math.round(goal.fraction * 100)}% to goal`)
   if (goal?.reached) chips.push('Goal reached 🏆')
   if (next && next.kind !== 'goal') chips.push(`Next: ${milestoneText(next, units)}`)
   if (!newest) chips.push('Weigh in to track your progress')

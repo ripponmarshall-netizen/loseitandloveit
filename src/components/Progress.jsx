@@ -339,7 +339,7 @@ function TrendCard({ id, open, onToggle, icon, color, title, value, sub, spark, 
   return (
     <section className={`card trend-card${open ? ' open' : ''}`} id={`trend-${id}`} style={{ '--c': color }}>
       <button className="trend-head" onClick={onToggle} aria-expanded={open} aria-controls={`trend-body-${id}`}>
-        <span className="tile-icon" aria-hidden="true"><Icon name={icon} strokeWidth={2.2} /></span>
+        <span className="tile-icon" aria-hidden="true"><Icon name={icon} strokeWidth={2.2} duo /></span>
         <span className="grow trend-text">
           <span className="trend-title">{title}</span>
           <span className="trend-value num">{value}</span>

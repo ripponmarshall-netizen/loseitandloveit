@@ -40,6 +40,9 @@
   --ink-lo: 0;
   --ink-hi: 0.5;
   --fill-l: 0.55;
+  /* The same for coloured icons on a tint of their colour (3:1 for graphics) */
+  --glyph-lo: 0;
+  --glyph-hi: 0.64;
   /* Selected segment, and how strongly tinted backgrounds show */
   --seg-thumb: #ffffff;
   --mix: 15%;
@@ -151,6 +154,8 @@
     --text-3: rgb(235 235 245 / 0.44);
     --ink-lo: 0.74;
     --ink-hi: 1;
+    --glyph-lo: 0.7;
+    --glyph-hi: 1;
     --seg-thumb: #636366;
     --mix: 26%;
     --blue: #0a84ff;
@@ -204,6 +209,8 @@
   --text-3: rgb(235 235 245 / 0.44);
   --ink-lo: 0.74;
   --ink-hi: 1;
+  --glyph-lo: 0.7;
+  --glyph-hi: 1;
   --seg-thumb: #636366;
   --mix: 26%;
   --blue: #0a84ff;
@@ -341,6 +348,27 @@ p { margin: 0 0 var(--sp-3); }
 .page-head-actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
 .eyebrow-link { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; cursor: pointer; color: var(--tint); }
 
+/* Compact title bar (as on iOS): fades in once the large title has scrolled
+   under it, and tapping it goes back to the top. Always in the page (see
+   PageHeader), so it can fade out as well as in. */
+.top-bar {
+  position: fixed; z-index: 20; top: 0; left: 0; right: 0;
+  height: calc(env(safe-area-inset-top) + 44px); padding-top: env(safe-area-inset-top);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  -webkit-backdrop-filter: var(--frost); backdrop-filter: var(--frost);
+  box-shadow: 0 0.5px 0 var(--sep);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.top-bar.on { opacity: 1; pointer-events: auto; }
+.top-bar-title {
+  max-width: 70%; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transform: translateY(6px); transition: transform var(--dur-base) var(--spring);
+}
+.top-bar.on .top-bar-title { transform: none; }
+
 /* Section title between cards, e.g. "Food" on the Dashboard */
 .section-title {
   display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2);
@@ -452,11 +480,16 @@ button.list-row:active, label.list-row:active, a.list-row:active, .list-row.tap:
 /* Colourful rounded-square icon, as in iOS Settings */
 .row-icon {
   flex: none; width: 29px; height: 29px; border-radius: 7px; display: grid; place-items: center;
-  background: var(--c, var(--tint)); color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c, var(--tint)) 86%, #fff), var(--c, var(--tint))); color: #fff;
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.06);
 }
 .row-icon svg { width: 18px; height: 18px; }
 /* The same idea, a size up, for cards and tiles */
-.tile-icon { flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--c); color: #fff; }
+.tile-icon {
+  flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 86%, #fff), var(--c));
+  box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.06), 0 4px 10px -6px var(--c);
+}
 .tile-icon svg { width: 18px; height: 18px; }
 .tile-bar { align-self: stretch; height: 5px; border-radius: 3px; background: var(--fill); margin-top: auto; overflow: hidden; }
 .tile-bar i { display: block; height: 100%; border-radius: 3px; background: var(--c); transition: width var(--dur-slow) var(--spring-snappy); }
@@ -531,6 +564,9 @@ button.list-row:active, label.list-row:active, a.list-row:active, .list-row.tap:
   background: var(--tint); color: var(--on-tint);
   font-size: 17px; font-weight: 600; letter-spacing: -0.01em; text-decoration: none;
 }
+.btn:not(.secondary, .gray, .plain, .destructive) {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.16), 0 8px 18px -10px color-mix(in srgb, var(--tint) 85%, transparent);
+}
 .btn:disabled { opacity: 0.4; cursor: default; }
 .btn.block { width: 100%; }
 .btn.secondary { background: color-mix(in srgb, var(--tint) var(--mix), transparent); color: var(--tint); }
@@ -567,16 +603,21 @@ button.list-row:active, label.list-row:active, a.list-row:active, .list-row.tap:
 .input {
   width: 100%; min-height: 46px; padding: 11px 14px;
   border: 0; border-radius: var(--r-sm); outline: none;
-  background: var(--card-2); color: var(--text);
+  background-color: var(--card-2); color: var(--text);
   box-shadow: inset 0 0 0 0.5px var(--sep);
   transition: box-shadow var(--dur-fast) var(--ease);
 }
-.page > .input, .sheet .input, .list .input { background: var(--field); box-shadow: var(--field-ring); }
-.sheet .card .input { background: var(--fill-2); box-shadow: none; }
+.page > .input, .sheet .input, .list .input { background-color: var(--field); box-shadow: var(--field-ring); }
+.sheet .card .input { background-color: var(--fill-2); box-shadow: none; }
 .input:focus { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tint) 60%, transparent); }
 .input::placeholder { color: var(--text-3); }
 textarea.input { resize: vertical; min-height: 96px; line-height: 1.4; }
-select.input { appearance: none; -webkit-appearance: none; background-image: none; }
+/* A menu, not a text box: the iOS up-and-down chevron on the right */
+select.input {
+  appearance: none; -webkit-appearance: none; padding-right: 38px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 9.5l4-4 4 4M8 14.5l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+}
 .input.readonly { display: flex; align-items: center; color: var(--text-2); }
 .input.narrow { width: 56px; flex: none; }
 .input.medium { width: 84px; flex: none; }
@@ -701,7 +742,7 @@ details[open] > summary { margin-bottom: var(--sp-3); }
    One response to a finger everywhere: in fast, back out on a spring.
    --press sets how far each kind of thing gives. */
 
-.btn, .chip, .meal-chip, .icon-btn, .meal-add, .send-btn, .avatar-btn, .head-avatar, .tab-item,
+.btn, .chip, .meal-slot, .icon-btn, .meal-add, .send-btn, .avatar-btn, .head-avatar, .tab-item,
 .dock-item, .mood-btn, .hero, .wins, button.card, .repeat-card, button.mimi-tip, .award-medal,
 .chart-style button, .profile-card-btn {
   transition-property: transform, opacity, background-color, box-shadow, color;
@@ -710,9 +751,9 @@ details[open] > summary { margin-bottom: var(--sp-3); }
 }
 /* Large surfaces barely give; controls give a little; small round buttons give most. */
 .hero, .wins, button.card, .repeat-card, button.mimi-tip, .profile-card-btn { --press: 0.98; }
-.btn, .chip, .meal-chip, .dock-item, .mood-btn, .award-medal { --press: 0.95; }
+.btn, .chip, .meal-slot, .dock-item, .mood-btn, .award-medal { --press: 0.95; }
 .icon-btn, .meal-add, .send-btn, .avatar-btn, .head-avatar, .tab-item, .chart-style button { --press: 0.9; }
-.btn:active:not(:disabled), .chip:active, .meal-chip:active, .icon-btn:active:not(:disabled), .meal-add:active,
+.btn:active:not(:disabled), .chip:active, .meal-slot:active, .icon-btn:active:not(:disabled), .meal-add:active,
 .send-btn:active:not(:disabled), .avatar-btn:active, .head-avatar:active, .tab-item:active, .dock-item:active,
 .mood-btn:active, .hero:active, .wins:active, button.card:active, .repeat-card:active:not(:disabled),
 button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, .profile-card-btn:active {
@@ -811,8 +852,13 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
   animation: toast-in 0.7s var(--spring-bouncy) both;
   transform: translateX(-50%);
 }
-.toast::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--good); }
-.toast.error::before { background: var(--danger); }
+.toast::before {
+  content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--good);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 20%, transparent);
+  animation: pop-in 0.5s var(--spring-bouncy) 0.12s backwards;
+}
+.toast.error::before { display: none; }
+.toast-icon { flex: none; margin: -2px 0 -2px -4px; color: var(--danger); animation: pop-in 0.5s var(--spring-bouncy) 0.12s backwards; }
 .toast.leaving { animation: toast-out 0.26s var(--ease) both; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -24px) scale(0.9); } 40% { opacity: 1; } to { opacity: 1; transform: translate(-50%, 0); } }
 @keyframes toast-out { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -16px) scale(0.95); } }
@@ -898,7 +944,10 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 .wins-more { flex: none; color: var(--text-3); }
 
 /* Hero, part 1: calories. One ring (eaten against the day's goal) and the numbers beside it. */
-.hero-card { padding: var(--card-pad); }
+.hero-card {
+  padding: var(--card-pad);
+  background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--ring-a) 8%, var(--card)), var(--card) 62%);
+}
 .hero { display: flex; align-items: center; gap: var(--sp-5); width: 100%; border: 0; background: none; padding: 0; color: inherit; text-align: left; font: inherit; cursor: pointer; }
 .hero-stats { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .hero-left { display: flex; flex-direction: column; margin-bottom: var(--sp-1); }
@@ -1015,13 +1064,19 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
 /* Food list: meals as header rows, a picture for each entry */
 .food-list .meal-group + .meal-group { border-top: 0.5px solid var(--sep); }
 .meal-row { min-height: 56px; padding: 0 var(--sp-3) 0 0; gap: var(--sp-1); }
-.meal-row .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+/* A meal's icon on a tint of its colour (header rows, empty meals) */
+.meal-icon {
+  flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+  color: var(--c); background: color-mix(in srgb, var(--c) var(--mix), transparent);
+}
+.meal-icon svg { width: 18px; height: 18px; }
 .meal-row .value { font-weight: 600; }
 .meal-open {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--sp-3); align-self: stretch;
-  padding: 13px var(--sp-1) 13px 18px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit;
+  padding: 13px var(--sp-1) 13px 15px; border: 0; background: none; color: inherit; text-align: left; cursor: pointer; font: inherit;
   transition: opacity var(--dur-fast);
 }
+.meal-open > .meal-icon { margin-right: -1px; } /* label lines up with the food names below */
 .meal-open:active { opacity: 0.6; transition: none; }
 .meal-open .label { flex: 1; min-width: 0; }
 .meal-chart { color: var(--text-3); flex: none; }
@@ -1037,14 +1092,26 @@ button.mimi-tip:active, .award:active .award-medal, .chart-style button:active, 
   font-size: 18px; line-height: 1; background: var(--fill-2);
 }
 .entry-kcal { font-family: var(--font-round); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Empty meals collapse into chips */
-.meal-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin: var(--sp-3) var(--sp-1) 0; }
-.meal-chips.alone { margin-top: 2px; }
-.meal-chips-label { font-size: 15px; color: var(--text-2); margin-right: 2px; }
-.meal-chip {
-  display: inline-flex; align-items: center; gap: 5px; border: 0; cursor: pointer; font: inherit; font-size: 15px; font-weight: 600;
-  padding: var(--sp-2) 13px var(--sp-2) 10px; border-radius: var(--r-full); color: var(--c); background: color-mix(in srgb, var(--c) var(--mix), var(--card));
+/* Just added (or brought back by Undo): a brief glow, the picture pops in */
+.entry-row.fresh { animation: entry-flash 1.6s var(--ease); }
+.entry-row.fresh .entry-emoji { animation: pop-in 0.5s var(--spring-bouncy) backwards; }
+@keyframes entry-flash { from { background-color: color-mix(in srgb, var(--tint) 18%, transparent); } to { background-color: transparent; } }
+/* Meals with nothing yet: a tile each, two to a row (a lone last one spans both) */
+.meal-empty-note { margin: 0 var(--sp-1) var(--sp-3); }
+.meal-slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); margin-top: var(--sp-3); }
+.meal-slots.alone { margin-top: 0; }
+.meal-slot {
+  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 54px; padding: var(--sp-2) 10px var(--sp-2) var(--sp-2);
+  border: 0; border-radius: var(--r-lg); background: var(--card); box-shadow: var(--shadow-card); cursor: pointer;
+  color: var(--text); font: inherit; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; text-align: left;
 }
+.meal-slot:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.meal-slot-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meal-slot-plus {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  color: var(--c); background: color-mix(in srgb, var(--c) var(--mix), transparent);
+}
+.meal-slot-plus svg { width: 14px; height: 14px; }
 .copy-day { display: flex; justify-content: center; margin-top: var(--sp-4); }
 
 /* Week recap (Sundays and Mondays) */
@@ -1398,6 +1465,10 @@ button.mimi-tip { cursor: pointer; }
   border-radius: 10px 10px 20px 20px; background: var(--fill-2);
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--cyan) 40%, transparent);
 }
+.water-glass::after {
+  content: ''; position: absolute; z-index: 1; left: 9px; top: 10px; bottom: 14px; width: 5px; border-radius: 3px;
+  background: rgb(255 255 255 / 0.3); pointer-events: none;
+}
 .water-glass i {
   position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--p) * 100%);
   background: linear-gradient(180deg, var(--cyan), var(--blue)); transition: height var(--dur-chart) var(--spring-snappy);
@@ -1671,9 +1742,11 @@ button.mimi-tip { cursor: pointer; }
 /* No backdrop blur (or reduced transparency): solid enough to read */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .tab-bar { background: var(--card); }
+  .top-bar { background: var(--bg); }
 }
 @media (prefers-reduced-transparency: reduce) {
   .tab-bar { background: var(--card); --sheen: 0; }
+  .top-bar { background: var(--bg); }
 }
 
 /* ============================================================ small phones */
@@ -1716,7 +1789,7 @@ button.mimi-tip { cursor: pointer; }
 
 @supports (color: oklch(from red l c h)) {
   .stat .l, .eyebrow { color: oklch(from var(--c, var(--text-2)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
-  .macro-label, .meal-chip, .dock-item.alert .dock-value, .repeat-card .eyebrow, .celebrate-card .eyebrow {
+  .macro-label, .dock-item.alert .dock-value, .repeat-card .eyebrow, .celebrate-card .eyebrow {
     color: oklch(from var(--c) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
   }
   .chip.tinted, .badge, .list-row.add-row { color: oklch(from var(--c, var(--tint)) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
@@ -1730,7 +1803,7 @@ button.mimi-tip { cursor: pointer; }
   .hero-unit.over, .hero-burn, .week-balance.over strong, .week-balance.over svg, .mini-stat.bad .v, .warn-text, .sync-pill.offline {
     color: oklch(from var(--orange) clamp(var(--ink-lo), l, var(--ink-hi)) c h);
   }
-  .danger-text, .list-row.destructive, .btn.destructive { color: oklch(from var(--danger) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  .danger-text, .list-row.destructive, .btn.destructive, .toast-icon { color: oklch(from var(--danger) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
   .profile-card-target { color: oklch(from var(--kcal) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
   .ok-text { color: oklch(from var(--green) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
   .fitness-link { color: oklch(from var(--pink) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
@@ -1739,6 +1812,8 @@ button.mimi-tip { cursor: pointer; }
   .macro-line .c { color: oklch(from var(--carbs) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
   .macro-line .f { color: oklch(from var(--fat) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
   .bm-legend b { color: oklch(from var(--purple) clamp(var(--ink-lo), l, var(--ink-hi)) c h); }
+  /* Coloured icons on a tint of their own colour */
+  .meal-icon, .meal-slot-plus, .meal-add, .dock-icon { color: oklch(from var(--c, var(--tint)) clamp(var(--glyph-lo), l, var(--glyph-hi)) c h); }
   /* Fills that carry white text */
   .btn:not(.secondary, .gray, .plain, .destructive), .bubble.user { background: oklch(from var(--tint) min(l, var(--fill-l)) c h); }
   .repeat-go { background: oklch(from var(--c) min(l, var(--fill-l)) c h); }

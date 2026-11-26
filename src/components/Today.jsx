@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appContext.js'
-import { MEALS, MEAL_COLOR, MEAL_LABEL } from '../lib/meals.js'
+import { MEALS, MEAL_COLOR, MEAL_ICON, MEAL_LABEL } from '../lib/meals.js'
 import { entryTotals, exerciseAllowance, kcalLooksWrong, ringsClosed, sumEntries, validServings } from '../lib/calc.js'
 import { addDays, formatDayLabel, formatLongDate } from '../lib/dates.js'
 import { dailyNudge, glp1Plan } from '../lib/glp1.js'
@@ -80,13 +80,14 @@ export default function Today() {
   const allClosed = closed.calories && closed.protein && closed.water
   const cheer = useRingCheer({ date, active: isToday, ready: entries !== null && day?.daily !== undefined, closed })
   const over = left < 0
-  // One ring, calories only, in one colour (orange once over). Protein, carbs,
-  // fat and water are bars underneath, each in its own colour.
-  const kcalColor = over ? 'var(--over)' : 'var(--ring-a)'
-  const kcalRing = [{ key: 'calories', value: totals.calories, max: target, a: kcalColor, b: kcalColor }]
+  // One ring, calories only: sea teal deepening as it goes round (sunshine
+  // into orange once over). Protein, carbs, fat and water are bars underneath,
+  // each in its own colour.
+  const kcalRing = [{ key: 'calories', value: totals.calories, max: target, a: over ? 'var(--sun)' : 'var(--ring-a)', b: over ? 'var(--over)' : 'var(--brand)' }]
   const kcalPct = target > 0 ? Math.round((totals.calories / target) * 100) : 0
   const openMacros = () => openProgress('macros')
   const emptyMeals = entries ? MEALS.filter((m) => !entries.some((e) => e.meal === m)) : []
+  const fresh = useFreshIds(entries, date)
 
   // Stepping between days slides the day in from the side you moved towards.
   const shownDate = useRef(date)
@@ -209,7 +210,7 @@ export default function Today() {
                         onClick={() => openSheet('meal', { date, meal, onEdit: setEditing })}
                         aria-label={`${MEAL_LABEL[meal]} nutrition: ${fmt(kcal)} kcal`}
                       >
-                        <span className="dot" />
+                        <span className="meal-icon" aria-hidden="true"><Icon name={MEAL_ICON[meal]} duo strokeWidth={2.1} /></span>
                         <span className="label headline">{MEAL_LABEL[meal]}</span>
                         <Icon name="chart" size={16} className="meal-chart" />
                         <span className="value num">{kcal > 0 ? fmt(kcal) : ''}</span>
@@ -219,7 +220,7 @@ export default function Today() {
                       </button>
                     </div>
                     {list.map((e) => (
-                      <button key={e.id} className="list-row entry-row" onClick={() => setEditing(e)}>
+                      <button key={e.id} className={`list-row entry-row${fresh.has(e.id) ? ' fresh' : ''}`} onClick={() => setEditing(e)}>
                         <span className="entry-emoji" aria-hidden="true">{foodEmoji(e.name, e.meal)}</span>
                         <span className="label">
                           <span className="ellipsis d-block">{e.name}</span>
@@ -242,13 +243,21 @@ export default function Today() {
               })}
             </div>
           )}
+          {entries.length === 0 && <p className="meal-empty-note small muted">Nothing logged yet. Pick a meal, or type what you ate above.</p>}
           {emptyMeals.length > 0 && (
-            <div className={`meal-chips${entries.length ? '' : ' alone'}`}>
-              <span className="meal-chips-label">{entries.length ? 'Add' : 'Nothing logged yet. Add'}</span>
-              {emptyMeals.map((meal) => (
-                <button key={meal} type="button" className="meal-chip" style={{ '--c': MEAL_COLOR[meal] }} onClick={() => openAdd({ meal })}>
-                  <Icon name="plus" size={14} strokeWidth={2.8} />
-                  {MEAL_LABEL[meal]}
+            <div className={`meal-slots${entries.length ? '' : ' alone'}`}>
+              {emptyMeals.map((meal, i) => (
+                <button
+                  key={meal}
+                  type="button"
+                  className="meal-slot rise"
+                  style={{ '--c': MEAL_COLOR[meal], '--i': i }}
+                  onClick={() => openAdd({ meal })}
+                  aria-label={`Add ${MEAL_LABEL[meal]}`}
+                >
+                  <span className="meal-icon" aria-hidden="true"><Icon name={MEAL_ICON[meal]} duo strokeWidth={2.1} /></span>
+                  <span className="meal-slot-label">{MEAL_LABEL[meal]}</span>
+                  <span className="meal-slot-plus" aria-hidden="true"><Icon name="plus" strokeWidth={2.8} /></span>
                 </button>
               ))}
             </div>
@@ -268,6 +277,29 @@ export default function Today() {
       {editing && <EditEntry entry={editing} onClose={() => setEditing(null)} />}
     </div>
   )
+}
+
+/**
+ * Entries that just appeared on the day being shown (added, copied or brought
+ * back by Undo), so they can flash once. Opening a day never counts as new.
+ */
+function useFreshIds(entries, date) {
+  const [fresh, setFresh] = useState(() => new Set())
+  const prev = useRef(null)
+  const timer = useRef()
+  useEffect(() => {
+    if (!entries) return
+    const before = prev.current
+    prev.current = { date, ids: new Set(entries.map((e) => e.id)) }
+    if (!before || before.date !== date) return
+    const added = entries.filter((e) => !before.ids.has(e.id)).map((e) => e.id)
+    if (!added.length) return
+    setFresh(new Set(added))
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setFresh(new Set()), 1800)
+  }, [entries, date])
+  useEffect(() => () => clearTimeout(timer.current), [])
+  return fresh
 }
 
 const formatLitres = (ml) => {
